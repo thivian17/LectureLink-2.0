@@ -1,0 +1,63 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]
+   /Contents 4 0 R
+   /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 800 >>
+stream
+BT
+/F1 10 Tf
+72 750 Td
+12 TL
+(CS 101 - Introduction to Computer Science) '
+(Fall 2025 Syllabus) '
+() '
+(Instructor: Dr. Jane Smith) '
+(Email: jsmith@university.edu) '
+(Office Hours: Mon/Wed 2-3pm, Room 301) '
+() '
+(Grade Breakdown:) '
+(  Midterm Exams: 30%) '
+(  Final Exam: 35%) '
+(  Homework: 25% - lowest score dropped) '
+(  Participation: 10%) '
+() '
+(Course Schedule:) '
+(  Week 1 - Aug 25-29: Course overview, Intro to Python) '
+(  Week 2 - Sep 1-5: Variables and Data Types) '
+(  Week 3 - Sep 8-12: Control Flow) '
+() '
+(Assessments:) '
+(  Midterm 1 - October 10 - Chapters 1-5 - 15%) '
+(  Final Exam - December 15 - Chapters 1-12 - 35%) '
+(  Homework 1 - Sep 10 - Chapter 1 - 5%) '
+() '
+(Late Policy: 10% penalty per day, max 3 days) '
+(Academic Integrity: Zero tolerance for plagiarism) '
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000247 00000 n 
+0000001098 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1168
+%%EOF

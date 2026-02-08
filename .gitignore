@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
+
+# Build output
+.next/
+dist/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+nul
+
+# Test artifacts
+test_metrics_report.json
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Python
+*.pyo
+*.pyd
+.uv/
+
+# Claude
+.claude/
