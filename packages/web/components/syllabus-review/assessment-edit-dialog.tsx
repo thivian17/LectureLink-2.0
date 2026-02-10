@@ -37,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { ASSESSMENT_TYPES } from "@/types/extraction";
 import type { UpdateAssessmentInput } from "@/lib/api";
@@ -46,11 +47,17 @@ const assessmentSchema = z.object({
   title: z.string().min(1, "Title is required"),
   type: z.string().min(1, "Type is required"),
   due_date: z.date().nullable(),
+  is_ongoing: z.boolean(),
   weight_percent: z.number().min(0).max(100).nullable(),
   topics: z.string(),
 });
 
 type FormValues = z.infer<typeof assessmentSchema>;
+
+const ONGOING_PATTERNS = new Set([
+  "ongoing", "throughout semester", "continuous", "weekly", "every class",
+  "every week", "all semester", "throughout the semester",
+]);
 
 interface AssessmentEditDialogProps {
   open: boolean;
@@ -70,12 +77,19 @@ export function AssessmentEditDialog({
   assessment,
   onSave,
 }: AssessmentEditDialogProps) {
+  const defaultOngoing =
+    !assessment.due_date &&
+    !assessment.is_date_ambiguous &&
+    !!assessment.due_date_raw &&
+    ONGOING_PATTERNS.has(assessment.due_date_raw.trim().toLowerCase());
+
   const form = useForm<FormValues>({
     resolver: zodResolver(assessmentSchema),
     defaultValues: {
       title: assessment.title,
       type: assessment.type,
       due_date: assessment.due_date ? parseLocalDate(assessment.due_date) : null,
+      is_ongoing: defaultOngoing,
       weight_percent: assessment.weight_percent,
       topics: assessment.topics?.join(", ") ?? "",
     },
@@ -85,15 +99,19 @@ export function AssessmentEditDialog({
     const updates: UpdateAssessmentInput = {
       title: values.title,
       type: values.type,
-      due_date: values.due_date
-        ? format(values.due_date, "yyyy-MM-dd")
-        : null,
+      due_date: values.is_ongoing
+        ? null
+        : values.due_date
+          ? format(values.due_date, "yyyy-MM-dd")
+          : null,
+      due_date_raw: values.is_ongoing ? "Ongoing" : undefined,
+      is_date_ambiguous: values.is_ongoing ? false : undefined,
       weight_percent: values.weight_percent,
       topics: values.topics
         ? values.topics.split(",").map((t) => t.trim()).filter(Boolean)
         : null,
     };
-    if (assessment.is_date_ambiguous && values.due_date) {
+    if (!values.is_ongoing && assessment.is_date_ambiguous && values.due_date) {
       updates.is_date_ambiguous = false;
     }
     onSave(updates);
@@ -163,45 +181,68 @@ export function AssessmentEditDialog({
 
             <FormField
               control={form.control}
-              name="due_date"
+              name="is_ongoing"
               render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Due Date</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground",
-                          )}
-                        >
-                          {field.value
-                            ? format(field.value, "PPP")
-                            : "Pick a date"}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value ?? undefined}
-                        onSelect={field.onChange}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  {assessment.due_date_raw && (
-                    <FormDescription>
-                      Original: &ldquo;{assessment.due_date_raw}&rdquo;
-                    </FormDescription>
-                  )}
-                  <FormMessage />
+                <FormItem className="flex items-center gap-2">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={(checked) => {
+                        field.onChange(checked);
+                        if (checked) form.setValue("due_date", null);
+                      }}
+                    />
+                  </FormControl>
+                  <FormLabel className="!mt-0">
+                    Ongoing (no specific due date)
+                  </FormLabel>
                 </FormItem>
               )}
             />
+
+            {!form.watch("is_ongoing") && (
+              <FormField
+                control={form.control}
+                name="due_date"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Due Date</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground",
+                            )}
+                          >
+                            {field.value
+                              ? format(field.value, "PPP")
+                              : "Pick a date"}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value ?? undefined}
+                          onSelect={field.onChange}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    {assessment.due_date_raw && (
+                      <FormDescription>
+                        Original: &ldquo;{assessment.due_date_raw}&rdquo;
+                      </FormDescription>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}

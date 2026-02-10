@@ -221,7 +221,7 @@ class TestUploadAndReviewFlow:
             sb = MagicMock()
             mc.return_value = sb
 
-            course_chain = mock_chain({"id": course_id})
+            course_chain = mock_chain([{"id": course_id}])
             insert_chain = mock_chain(
                 [{"id": syllabus_id, "status": "processing"}]
             )
@@ -298,9 +298,9 @@ class TestUploadAndReviewFlow:
             mc.return_value = sb
 
             existing_chain = mock_chain(
-                {"id": assessment_id, "course_id": course_id}
+                [{"id": assessment_id, "course_id": course_id}]
             )
-            course_chain = mock_chain({"id": course_id})
+            course_chain = mock_chain([{"id": course_id}])
             update_chain = mock_chain([updated])
 
             call_count = {"n": 0}

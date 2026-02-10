@@ -17,7 +17,10 @@ class ExtractedField(BaseModel):
     """A wrapper that attaches confidence and provenance to any extracted value."""
 
     value: str | float | None = Field(
-        description="The extracted value. Use a string for text, a float for numbers, or null if not found."
+        description=(
+            "The extracted value. Use a string for text,"
+            " a float for numbers, or null if not found."
+        )
     )
     confidence: float = Field(
         ge=0.0,
@@ -130,7 +133,10 @@ class SyllabusExtraction(BaseModel):
     )
     policies: dict[str, str] = Field(
         default_factory=dict,
-        description="Course policies keyed by category (e.g. 'late_policy', 'attendance', 'academic_integrity').",
+        description=(
+            "Course policies keyed by category"
+            " (e.g. 'late_policy', 'attendance', 'academic_integrity')."
+        ),
     )
     extraction_confidence: float = Field(
         ge=0.0,
@@ -158,8 +164,15 @@ def extraction_to_db_assessments(
         resolved = a.due_date_resolved.value if a.due_date_resolved.value else None
         raw = a.due_date_raw.value if a.due_date_raw.value else None
 
-        # A date is ambiguous when raw text exists but couldn't be resolved to a date
-        is_ambiguous = raw is not None and resolved is None
+        # Detect "ongoing" assessments (participation, attendance, etc.)
+        is_ongoing = raw is not None and str(raw).strip().lower() in (
+            "ongoing", "throughout semester", "continuous", "weekly", "every class",
+            "every week", "all semester", "throughout the semester",
+        )
+
+        # A date is ambiguous when raw text exists but couldn't be resolved,
+        # UNLESS it's an ongoing assessment (intentionally no specific date)
+        is_ambiguous = raw is not None and resolved is None and not is_ongoing
 
         weight = a.weight_percent.value
         if isinstance(weight, str):

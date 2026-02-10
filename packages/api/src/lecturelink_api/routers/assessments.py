@@ -24,10 +24,9 @@ def _verify_course_ownership(sb, course_id: str, user_id: str):
         .select("id")
         .eq("id", course_id)
         .eq("user_id", user_id)
-        .maybe_single()
         .execute()
     )
-    if result.data is None:
+    if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
 
@@ -77,14 +76,13 @@ async def update_assessment(
         sb.table("assessments")
         .select("id, course_id")
         .eq("id", assessment_id)
-        .maybe_single()
         .execute()
     )
-    if existing.data is None:
+    if not existing.data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Assessment not found"
         )
-    _verify_course_ownership(sb, existing.data["course_id"], user["id"])
+    _verify_course_ownership(sb, existing.data[0]["course_id"], user["id"])
 
     payload = body.model_dump(mode="json", exclude_none=True)
     if not payload:
@@ -111,12 +109,11 @@ async def delete_assessment(
         sb.table("assessments")
         .select("id, course_id")
         .eq("id", assessment_id)
-        .maybe_single()
         .execute()
     )
-    if existing.data is None:
+    if not existing.data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Assessment not found"
         )
-    _verify_course_ownership(sb, existing.data["course_id"], user["id"])
+    _verify_course_ownership(sb, existing.data[0]["course_id"], user["id"])
     sb.table("assessments").delete().eq("id", assessment_id).execute()

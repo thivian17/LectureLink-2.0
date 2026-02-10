@@ -12,8 +12,6 @@ from lecturelink_api.agents.syllabus_processor import (
     validate_date_boundaries,
     validate_grade_weights,
     validate_no_duplicates,
-    validation_loop,
-    validator,
 )
 from lecturelink_api.models.syllabus_models import SyllabusExtraction
 
@@ -440,21 +438,3 @@ class TestPostProcessExtraction:
         assert len(low_conf_entries) >= 2  # title + weight_percent
 
 
-# ---------------------------------------------------------------------------
-# Pipeline structure (ValidationLoop)
-# ---------------------------------------------------------------------------
-
-
-class TestValidationLoopStructure:
-    def test_loop_agent_name(self):
-        assert validation_loop.name == "ValidationLoop"
-
-    def test_loop_max_iterations(self):
-        assert validation_loop.max_iterations == 3
-
-    def test_loop_contains_validator(self):
-        assert len(validation_loop.sub_agents) == 1
-        assert validation_loop.sub_agents[0].name == "Validator"
-
-    def test_validator_output_key(self):
-        assert validator.output_key == "validated_syllabus"

@@ -6,7 +6,6 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
-
 # ---------------------------------------------------------------------------
 # Courses
 # ---------------------------------------------------------------------------
@@ -119,3 +118,134 @@ class PriorityResponse(BaseModel):
     due_date: date | None = None
     weight_percent: float | None = None
     priority_score: float
+
+
+# ---------------------------------------------------------------------------
+# Lectures
+# ---------------------------------------------------------------------------
+
+
+class LectureResponse(BaseModel):
+    id: str
+    course_id: str
+    title: str
+    lecture_number: int | None = None
+    lecture_date: str | None = None
+    processing_status: str
+    processing_stage: str | None = None
+    processing_progress: float
+    summary: str | None = None
+    duration_seconds: int | None = None
+    created_at: datetime
+
+class LectureStatusResponse(BaseModel):
+    processing_status: str
+    processing_stage: str | None = None
+    processing_progress: float
+    processing_error: str | None = None
+
+class SearchResult(BaseModel):
+    chunk_id: str
+    lecture_id: str
+    lecture_title: str
+    content: str
+    start_time: float | None = None
+    end_time: float | None = None
+    slide_number: int | None = None
+    score: float
+    highlight: str | None = None  # Content with search terms highlighted
+
+class QAResponse(BaseModel):
+    answer: str
+    confidence: float
+    source_chunks: list[dict]  # [{chunk_id, content, lecture_title, timestamp}]
+    follow_up_suggestions: list[str]
+
+class QuizResponse(BaseModel):
+    id: str
+    title: str
+    status: str
+    question_count: int
+    difficulty: str
+    best_score: float | None = None
+    attempt_count: int
+
+class QuizQuestionResponse(BaseModel):
+    id: str
+    question_index: int
+    question_type: str
+    question_text: str
+    options: list[dict] | None = None
+    # Note: correct_answer NOT included until after submission
+
+class QuizSubmissionResult(BaseModel):
+    score: float
+    total_questions: int
+    correct_count: int
+    results: list[dict]  # [{question_id, is_correct, correct_answer, explanation, source_chunks}]
+
+class LectureDetailResponse(BaseModel):
+    id: str
+    course_id: str
+    title: str
+    lecture_number: int | None = None
+    lecture_date: str | None = None
+    processing_status: str
+    processing_stage: str | None = None
+    processing_progress: float
+    summary: str | None = None
+    duration_seconds: int | None = None
+    transcript: str | None = None
+    concepts: list[dict] = Field(default_factory=list)
+    slide_count: int | None = None
+    created_at: datetime
+
+
+class ConceptResponse(BaseModel):
+    id: str
+    title: str
+    description: str | None = None
+    category: str | None = None
+    difficulty_estimate: float
+    linked_assessments: list[dict]  # [{assessment_id, title, relevance_score}]
+    lecture_title: str
+
+
+# ---------------------------------------------------------------------------
+# Search / Q&A
+# ---------------------------------------------------------------------------
+
+
+class SearchRequest(BaseModel):
+    course_id: str
+    query: str = Field(..., min_length=1)
+    lecture_ids: list[str] | None = None
+    limit: int = Field(default=10, ge=1, le=50)
+
+
+class QARequest(BaseModel):
+    course_id: str
+    question: str = Field(..., min_length=1)
+    lecture_ids: list[str] | None = None
+
+
+# ---------------------------------------------------------------------------
+# Quizzes
+# ---------------------------------------------------------------------------
+
+
+class QuizGenerateRequest(BaseModel):
+    course_id: str
+    target_assessment_id: str | None = None
+    num_questions: int = Field(default=10, ge=1, le=30)
+    difficulty: str = "mixed"
+
+
+class QuizAnswer(BaseModel):
+    question_id: str
+    student_answer: str
+    time_spent_seconds: int | None = None
+
+
+class QuizSubmitRequest(BaseModel):
+    answers: list[QuizAnswer]

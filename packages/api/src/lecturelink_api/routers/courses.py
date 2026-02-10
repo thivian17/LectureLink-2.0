@@ -60,12 +60,11 @@ async def get_course(
         .select("*")
         .eq("id", course_id)
         .eq("user_id", user["id"])
-        .maybe_single()
         .execute()
     )
-    if result.data is None:
+    if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
-    return result.data
+    return result.data[0]
 
 
 @router.patch("/{course_id}", response_model=CourseResponse)

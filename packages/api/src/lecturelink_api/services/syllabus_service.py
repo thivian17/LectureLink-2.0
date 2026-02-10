@@ -6,7 +6,10 @@ the result, and persists extraction data to Supabase.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
 from google.adk.runners import Runner
@@ -17,9 +20,9 @@ from supabase import Client as SupabaseClient
 
 from lecturelink_api.agents.syllabus_processor import (
     extraction_pipeline,
+    merge_extraction_outputs,
     post_process_extraction,
 )
-from lecturelink_api.tools.document_tools import extract_document_text
 from lecturelink_api.models.syllabus_models import (
     SyllabusExtraction,
     extraction_to_db_assessments,
@@ -28,6 +31,7 @@ from lecturelink_api.tools.date_resolver import (
     SemesterContext,
     resolve_all_dates,
 )
+from lecturelink_api.tools.document_tools import extract_document_text
 
 
 def _build_semester_context(ctx: dict) -> SemesterContext | None:
@@ -73,6 +77,78 @@ async def _fetch_semester_context(
     return result.data or {}
 
 
+_pipeline_executor = ThreadPoolExecutor(max_workers=2)
+
+
+def _run_adk_pipeline_sync(raw_text: str, semester_context: dict, file_name: str) -> dict:
+    """Run the ADK pipeline synchronously in a thread with a clean event loop.
+
+    On Windows, uvicorn uses SelectorEventLoop which doesn't support SSL/TLS
+    properly for async httpx connections. This creates a fresh ProactorEventLoop
+    (on Windows) to run the ADK pipeline reliably.
+    """
+    if sys.platform == "win32":
+        loop = asyncio.ProactorEventLoop()
+    else:
+        loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(
+            _run_adk_pipeline_async(raw_text, semester_context, file_name)
+        )
+    finally:
+        loop.close()
+
+
+async def _run_adk_pipeline_async(
+    raw_text: str, semester_context: dict, file_name: str
+) -> dict:
+    """The actual async ADK pipeline execution."""
+    session_service = InMemorySessionService()
+    runner = Runner(
+        agent=extraction_pipeline,
+        app_name="lecturelink_syllabus",
+        session_service=session_service,
+    )
+
+    session = await session_service.create_session(
+        app_name="lecturelink_syllabus",
+        user_id="system",
+        state={
+            "raw_text": raw_text,
+            "semester_context": json.dumps(semester_context),
+        },
+    )
+
+    user_message = genai_types.Content(
+        role="user",
+        parts=[
+            genai_types.Part(
+                text=f"Extract structured data from this syllabus: {file_name}"
+            ),
+        ],
+    )
+
+    # Run the pipeline to completion
+    async for _event in runner.run_async(
+        session_id=session.id,
+        user_id="system",
+        new_message=user_message,
+    ):
+        pass
+
+    # Retrieve individual extractor outputs from session state and merge
+    final_session = await session_service.get_session(
+        app_name="lecturelink_syllabus",
+        user_id="system",
+        session_id=session.id,
+    )
+    schedule_data = final_session.state.get("schedule_data")
+    grading_data = final_session.state.get("grading_data")
+    info_data = final_session.state.get("info_data")
+
+    return merge_extraction_outputs(schedule_data, grading_data, info_data)
+
+
 async def _run_agent_pipeline(
     file_bytes: bytes,
     file_name: str,
@@ -99,54 +175,18 @@ async def _run_agent_pipeline(
         len(raw_text), extraction_result.get("method"), file_name,
     )
 
-    # Step 2: Run the LLM extraction pipeline with pre-extracted text
-    session_service = InMemorySessionService()
-    runner = Runner(
-        agent=extraction_pipeline,
-        app_name="lecturelink_syllabus",
-        session_service=session_service,
+    # Step 2: Run the LLM extraction pipeline with pre-extracted text.
+    # On Windows, uvicorn uses SelectorEventLoop which has broken SSL/TLS
+    # for async connections. Run the ADK pipeline in a thread with its own
+    # ProactorEventLoop to avoid this issue.
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        _pipeline_executor,
+        _run_adk_pipeline_sync,
+        raw_text,
+        semester_context,
+        file_name,
     )
-
-    session = await session_service.create_session(
-        app_name="lecturelink_syllabus",
-        user_id="system",
-        state={
-            "raw_text": raw_text,
-            "semester_context": json.dumps(semester_context),
-            "semester_start": semester_context.get("semester_start", ""),
-            "semester_end": semester_context.get("semester_end", ""),
-            "validation_errors": "",
-        },
-    )
-
-    user_message = genai_types.Content(
-        role="user",
-        parts=[
-            genai_types.Part(
-                text=f"Extract structured data from this syllabus: {file_name}"
-            ),
-        ],
-    )
-
-    # Run the pipeline to completion
-    final_state = None
-    async for event in runner.run_async(
-        session_id=session.id,
-        user_id="system",
-        new_message=user_message,
-    ):
-        final_state = event
-
-    # Retrieve validated_syllabus from the session service (not the local copy)
-    final_session = await session_service.get_session(
-        app_name="lecturelink_syllabus",
-        user_id="system",
-        session_id=session.id,
-    )
-    raw_output = final_session.state.get("validated_syllabus", "{}")
-    if isinstance(raw_output, str):
-        return json.loads(raw_output)
-    return raw_output
 
 
 async def process_syllabus(

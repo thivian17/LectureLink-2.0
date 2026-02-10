@@ -30,6 +30,11 @@ def _sb(user: dict, settings: Settings):
     return client
 
 
+def _sb_admin(settings: Settings):
+    """Service-role client for storage operations (bypasses RLS)."""
+    return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
+
+
 @router.post("/upload", response_model=SyllabusUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_syllabus(
     background_tasks: BackgroundTasks,
@@ -52,19 +57,27 @@ async def upload_syllabus(
         .select("id")
         .eq("id", course_id)
         .eq("user_id", user["id"])
-        .maybe_single()
         .execute()
     )
-    if course.data is None:
+    if not course.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
     file_bytes = await file.read()
     file_name = file.filename or "syllabus"
     storage_path = f"{user['id']}/{course_id}/{file_name}"
 
-    # Upload to Supabase Storage
-    sb.storage.from_("syllabi").upload(storage_path, file_bytes)
-    file_url = f"{settings.SUPABASE_URL}/storage/v1/object/public/syllabi/{storage_path}"
+    # Clean up old data for this course before re-upload
+    sb.table("assessments").delete().eq("course_id", course_id).execute()
+    sb.table("syllabi").delete().eq("course_id", course_id).execute()
+
+    # Upload to Supabase Storage (service role bypasses storage RLS)
+    sb_admin = _sb_admin(settings)
+    sb_admin.storage.from_("syllabi").upload(
+        storage_path,
+        file_bytes,
+        {"upsert": "true", "content-type": file.content_type or "application/pdf"},
+    )
+    file_url = storage_path  # Store the path; frontend creates signed URLs
 
     # Create syllabi record
     result = (
@@ -107,12 +120,11 @@ async def get_syllabus(
         .select("*")
         .eq("id", syllabus_id)
         .eq("user_id", user["id"])
-        .maybe_single()
         .execute()
     )
-    if result.data is None:
+    if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Syllabus not found")
-    return result.data
+    return result.data[0]
 
 
 @router.get("/{syllabus_id}/status", response_model=SyllabusStatusResponse)
@@ -127,14 +139,14 @@ async def get_syllabus_status(
         .select("id, status, needs_review")
         .eq("id", syllabus_id)
         .eq("user_id", user["id"])
-        .maybe_single()
         .execute()
     )
-    if result.data is None:
+    if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Syllabus not found")
 
-    db_status = result.data.get("status", "pending")
-    needs_review = result.data.get("needs_review", True)
+    row = result.data[0]
+    db_status = row.get("status", "pending")
+    needs_review = row.get("needs_review", True)
 
     # Map DB status to API status
     status_map = {"processed": "complete", "error": "error"}

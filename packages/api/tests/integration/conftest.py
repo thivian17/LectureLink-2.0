@@ -5,20 +5,37 @@ Provides:
 - Supabase mock factory for chainable query builders
 - AsyncClient for making API requests via ASGI transport
 - Pre-computed pipeline outputs (so tests run without Gemini)
-- Test syllabus fixtures with ground truths
+- Phase 2 factories: lectures, chunks, concepts, quizzes, quiz questions
 """
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from lecturelink_api.main import app
+
+
+# ---------------------------------------------------------------------------
+# Env-var gating — skip all integration tests unless opted in
+# ---------------------------------------------------------------------------
+
+_SKIP_MSG = "Set LECTURELINK_RUN_INTEGRATION=1 to run integration tests"
+
+
+def pytest_collection_modifyitems(config, items):  # noqa: ARG001
+    if os.getenv("LECTURELINK_RUN_INTEGRATION"):
+        return
+    skip = pytest.mark.skip(reason=_SKIP_MSG)
+    for item in items:
+        if "integration" in str(item.fspath):
+            item.add_marker(skip)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -71,6 +88,14 @@ async def client(override_auth, override_settings):
         yield ac
 
 
+@pytest_asyncio.fixture()
+async def unauthenticated_client(override_settings):
+    """Client WITHOUT auth override — requests will hit real auth checks."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+
 # ---------------------------------------------------------------------------
 # Supabase mock helpers (same pattern as test_api.py)
 # ---------------------------------------------------------------------------
@@ -83,14 +108,39 @@ def mock_execute(data):
     return resp
 
 
-def mock_chain(final_data):
+def mock_chain(final_data, *, count=None):
     """Build a chainable mock that returns final_data on .execute()."""
     chain = MagicMock()
-    chain.execute.return_value = mock_execute(final_data)
+    result = mock_execute(final_data)
+    result.count = count if count is not None else (
+        len(final_data) if isinstance(final_data, list) else 0
+    )
+    chain.execute.return_value = result
     for method in (
         "select", "insert", "update", "delete",
         "eq", "order", "single", "maybe_single",
-        "limit", "not_",
+        "limit", "not_", "gte", "in_",
+    ):
+        getattr(chain, method).return_value = chain
+    return chain
+
+
+def mock_chain_async(final_data, *, count=None):
+    """Build a chainable mock where .execute() is an AsyncMock.
+
+    Required for code paths that ``await supabase.table(...).execute()``
+    such as the rate-limit middleware.
+    """
+    chain = MagicMock()
+    result = mock_execute(final_data)
+    result.count = count if count is not None else (
+        len(final_data) if isinstance(final_data, list) else 0
+    )
+    chain.execute = AsyncMock(return_value=result)
+    for method in (
+        "select", "insert", "update", "delete",
+        "eq", "order", "single", "maybe_single",
+        "limit", "not_", "gte", "in_",
     ):
         getattr(chain, method).return_value = chain
     return chain
@@ -263,3 +313,158 @@ def make_pipeline_output() -> dict:
         "extraction_confidence": 0.88,
         "missing_sections": [],
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 data factories
+# ---------------------------------------------------------------------------
+
+
+def make_lecture(
+    course_id: str,
+    lecture_id: str | None = None,
+    **overrides,
+) -> dict:
+    lid = lecture_id or str(uuid.uuid4())
+    base = {
+        "id": lid,
+        "course_id": course_id,
+        "user_id": FAKE_USER_ID,
+        "title": "Lecture 1: Intro to Thermodynamics",
+        "lecture_number": 1,
+        "lecture_date": "2026-01-14",
+        "processing_status": "completed",
+        "processing_stage": "completed",
+        "processing_progress": 1.0,
+        "processing_error": None,
+        "summary": "Introduction to thermodynamic systems and energy transfer.",
+        "duration_seconds": 3000,
+        "transcript": '[{"start":0.0,"end":30.0,"text":"Welcome to thermodynamics.","speaker":"professor"}]',
+        "retry_count": 0,
+        "created_at": _now_str(),
+        "updated_at": _now_str(),
+    }
+    base.update(overrides)
+    return base
+
+
+def make_chunk(
+    lecture_id: str,
+    chunk_index: int = 0,
+    chunk_id: str | None = None,
+    **overrides,
+) -> dict:
+    cid = chunk_id or str(uuid.uuid4())
+    base = {
+        "id": cid,
+        "lecture_id": lecture_id,
+        "user_id": FAKE_USER_ID,
+        "chunk_index": chunk_index,
+        "content": f"Chunk {chunk_index}: heat transfer via conduction, convection, radiation.",
+        "start_time": chunk_index * 150.0,
+        "end_time": (chunk_index + 1) * 150.0,
+        "slide_number": (chunk_index // 4) + 1,
+        "embedding": [0.1] * 768,
+        "metadata": {"source": "aligned"},
+        "created_at": _now_str(),
+    }
+    base.update(overrides)
+    return base
+
+
+def make_concept(
+    course_id: str,
+    lecture_id: str,
+    concept_id: str | None = None,
+    **overrides,
+) -> dict:
+    coid = concept_id or str(uuid.uuid4())
+    base = {
+        "id": coid,
+        "course_id": course_id,
+        "lecture_id": lecture_id,
+        "user_id": FAKE_USER_ID,
+        "title": "Thermodynamic System",
+        "description": "A region of space defined by boundaries.",
+        "category": "definition",
+        "difficulty_estimate": 0.3,
+        "source_chunk_ids": [],
+        "embedding": [0.1] * 768,
+        "created_at": _now_str(),
+    }
+    base.update(overrides)
+    return base
+
+
+def make_quiz(
+    course_id: str,
+    quiz_id: str | None = None,
+    **overrides,
+) -> dict:
+    qid = quiz_id or str(uuid.uuid4())
+    base = {
+        "id": qid,
+        "course_id": course_id,
+        "user_id": FAKE_USER_ID,
+        "title": "Practice Quiz - PHYS 201",
+        "status": "ready",
+        "question_count": 5,
+        "difficulty": "medium",
+        "best_score": None,
+        "attempt_count": 0,
+        "target_assessment_id": None,
+        "created_at": _now_str(),
+    }
+    base.update(overrides)
+    return base
+
+
+def make_quiz_question(
+    quiz_id: str,
+    question_index: int = 0,
+    question_id: str | None = None,
+    **overrides,
+) -> dict:
+    qid = question_id or str(uuid.uuid4())
+    base = {
+        "id": qid,
+        "quiz_id": quiz_id,
+        "question_index": question_index,
+        "question_type": "mcq",
+        "question_text": "Which describes a thermodynamic system?",
+        "options": [
+            {"label": "A", "text": "A region defined by boundaries", "is_correct": True},
+            {"label": "B", "text": "Any object that produces heat", "is_correct": False},
+            {"label": "C", "text": "A machine that converts energy", "is_correct": False},
+            {"label": "D", "text": "A chemical reaction", "is_correct": False},
+        ],
+        "correct_answer": "A",
+        "explanation": "A thermodynamic system is a region defined by boundaries.",
+        "source_chunk_ids": [],
+        "concept_id": None,
+        "difficulty": 0.3,
+        "created_at": _now_str(),
+    }
+    base.update(overrides)
+    return base
+
+
+def make_search_result(
+    lecture_id: str,
+    chunk_id: str | None = None,
+    **overrides,
+) -> dict:
+    """Factory for a hybrid_search service result."""
+    cid = chunk_id or str(uuid.uuid4())
+    base = {
+        "chunk_id": cid,
+        "lecture_id": lecture_id,
+        "lecture_title": "Lecture 1: Intro to Thermodynamics",
+        "content": "Heat transfer occurs through conduction, convection, and radiation.",
+        "start_time": 110.0,
+        "end_time": 135.5,
+        "slide_number": 4,
+        "score": 0.85,
+    }
+    base.update(overrides)
+    return base

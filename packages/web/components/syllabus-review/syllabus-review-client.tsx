@@ -28,6 +28,7 @@ interface SyllabusReviewClientProps {
   syllabus: Syllabus;
   extraction: SyllabusExtraction;
   assessments: Assessment[];
+  pdfUrl: string | null;
 }
 
 export function SyllabusReviewClient({
@@ -35,6 +36,7 @@ export function SyllabusReviewClient({
   syllabus,
   extraction: initialExtraction,
   assessments: initialAssessments,
+  pdfUrl,
 }: SyllabusReviewClientProps) {
   const router = useRouter();
   const [extraction, setExtraction] =
@@ -313,9 +315,9 @@ export function SyllabusReviewClient({
         {/* RIGHT: PDF viewer (desktop only) */}
         <div className="hidden lg:block lg:w-[45%] lg:shrink-0">
           <div className="sticky top-4">
-            {syllabus.file_url && isPdf ? (
+            {pdfUrl && isPdf ? (
               <iframe
-                src={syllabus.file_url}
+                src={pdfUrl}
                 className="w-full h-[calc(100vh-8rem)] rounded-lg border"
                 title="Syllabus PDF"
               />
@@ -324,7 +326,7 @@ export function SyllabusReviewClient({
                 <CardContent className="flex flex-col items-center justify-center py-16 text-center">
                   <FileText className="h-12 w-12 text-muted-foreground mb-3" />
                   <p className="text-sm font-medium">
-                    {!syllabus.file_url
+                    {!pdfUrl
                       ? "No file preview available"
                       : "Preview not available for DOCX files"}
                   </p>

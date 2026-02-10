@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Popover,
@@ -55,6 +56,20 @@ interface AssessmentTableProps {
 function parseLocalDate(dateStr: string): Date {
   const [year, month, day] = dateStr.split("-").map(Number);
   return new Date(year, month - 1, day);
+}
+
+const ONGOING_PATTERNS = new Set([
+  "ongoing", "throughout semester", "continuous", "weekly", "every class",
+  "every week", "all semester", "throughout the semester",
+]);
+
+function isOngoing(db: Assessment): boolean {
+  return (
+    !db.due_date &&
+    !db.is_date_ambiguous &&
+    !!db.due_date_raw &&
+    ONGOING_PATTERNS.has(db.due_date_raw.trim().toLowerCase())
+  );
 }
 
 function getRowMinConfidence(a: AssessmentExtraction): number {
@@ -150,6 +165,7 @@ export function AssessmentTable({
               const level = getConfidenceLevel(minConf);
               const rowColor = getConfidenceColor(level);
               const isAmbiguous = db.is_date_ambiguous;
+              const ongoing = isOngoing(db);
 
               return (
                 <TableRow key={db.id} className={cn("border-l-4", rowColor)}>
@@ -208,57 +224,66 @@ export function AssessmentTable({
 
                   {/* Due Date */}
                   <TableCell>
-                    <div className="flex flex-col gap-1">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className={cn(
-                              "h-7 text-xs justify-start font-normal",
-                              isAmbiguous &&
-                                "border-amber-400 text-amber-700",
-                              !db.due_date && "text-muted-foreground",
-                            )}
+                    {ongoing ? (
+                      <Badge
+                        variant="outline"
+                        className="text-xs text-blue-700 border-blue-300 bg-blue-50"
+                      >
+                        Ongoing
+                      </Badge>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className={cn(
+                                "h-7 text-xs justify-start font-normal",
+                                isAmbiguous &&
+                                  "border-amber-400 text-amber-700",
+                                !db.due_date && "text-muted-foreground",
+                              )}
+                            >
+                              {isAmbiguous && (
+                                <AlertTriangle className="mr-1 h-3 w-3 text-amber-500" />
+                              )}
+                              {db.due_date ? (
+                                <>
+                                  <CalendarIcon className="mr-1 h-3 w-3" />
+                                  {format(
+                                    parseLocalDate(db.due_date),
+                                    "MMM d, yyyy",
+                                  )}
+                                </>
+                              ) : (
+                                "Pick date"
+                              )}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            className="w-auto p-0"
+                            align="start"
                           >
-                            {isAmbiguous && (
-                              <AlertTriangle className="mr-1 h-3 w-3 text-amber-500" />
-                            )}
-                            {db.due_date ? (
-                              <>
-                                <CalendarIcon className="mr-1 h-3 w-3" />
-                                {format(
-                                  parseLocalDate(db.due_date),
-                                  "MMM d, yyyy",
-                                )}
-                              </>
-                            ) : (
-                              "Pick date"
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          className="w-auto p-0"
-                          align="start"
-                        >
-                          <Calendar
-                            mode="single"
-                            selected={
-                              db.due_date
-                                ? parseLocalDate(db.due_date)
-                                : undefined
-                            }
-                            onSelect={(d) => handleDateSelect(i, d)}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                      {isAmbiguous && db.due_date_raw && (
-                        <span className="text-[10px] text-amber-600 leading-tight">
-                          Original: &ldquo;{db.due_date_raw}&rdquo;
-                        </span>
-                      )}
-                    </div>
+                            <Calendar
+                              mode="single"
+                              selected={
+                                db.due_date
+                                  ? parseLocalDate(db.due_date)
+                                  : undefined
+                              }
+                              onSelect={(d) => handleDateSelect(i, d)}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        {isAmbiguous && db.due_date_raw && (
+                          <span className="text-[10px] text-amber-600 leading-tight">
+                            Original: &ldquo;{db.due_date_raw}&rdquo;
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </TableCell>
 
                   {/* Weight */}

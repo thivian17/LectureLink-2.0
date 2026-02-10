@@ -170,7 +170,7 @@ class TestCourses:
         with patch("lecturelink_api.routers.courses.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
-            sb.table.return_value = _mock_chain(course)
+            sb.table.return_value = _mock_chain([course])
 
             resp = await client.get("/api/courses/abc-123")
 
@@ -301,7 +301,7 @@ class TestSyllabi:
         with patch("lecturelink_api.routers.syllabi.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
-            sb.table.return_value = _mock_chain(syllabus_data)
+            sb.table.return_value = _mock_chain([syllabus_data])
 
             resp = await client.get(f"/api/syllabi/{sid}")
 
@@ -315,7 +315,7 @@ class TestSyllabi:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain(
-                {"id": sid, "status": "processed", "needs_review": True}
+                [{"id": sid, "status": "processed", "needs_review": True}]
             )
 
             resp = await client.get(f"/api/syllabi/{sid}/status")
@@ -332,7 +332,7 @@ class TestSyllabi:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain(
-                {"id": sid, "status": "processing", "needs_review": False}
+                [{"id": sid, "status": "processing", "needs_review": False}]
             )
 
             resp = await client.get(f"/api/syllabi/{sid}/status")
@@ -348,7 +348,7 @@ class TestSyllabi:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain(
-                {"id": sid, "status": "error", "needs_review": True}
+                [{"id": sid, "status": "error", "needs_review": True}]
             )
 
             resp = await client.get(f"/api/syllabi/{sid}/status")
@@ -454,7 +454,7 @@ class TestAssessments:
             mock_create.return_value = sb
 
             # First call: select existing assessment; second call: verify course; third: update
-            existing_chain = _mock_chain({"id": assessment_id, "course_id": course_id})
+            existing_chain = _mock_chain([{"id": assessment_id, "course_id": course_id}])
             course_chain = _mock_chain({"id": course_id})
             update_chain = _mock_chain([updated])
 
@@ -485,7 +485,7 @@ class TestAssessments:
             sb = MagicMock()
             mock_create.return_value = sb
 
-            existing_chain = _mock_chain({"id": assessment_id, "course_id": course_id})
+            existing_chain = _mock_chain([{"id": assessment_id, "course_id": course_id}])
             course_chain = _mock_chain({"id": course_id})
             delete_chain = _mock_chain([{"id": assessment_id}])
 

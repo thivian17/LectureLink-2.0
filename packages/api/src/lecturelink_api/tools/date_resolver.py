@@ -10,6 +10,7 @@ spring break" into specific calendar dates using three layers:
 
 from __future__ import annotations
 
+import contextlib
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -84,7 +85,8 @@ class SemesterContext:
     start: date
     end: date
     meeting_days: list[str]  # ['monday', 'wednesday']
-    holidays: list[dict] = field(default_factory=list)  # [{'name': str, 'start': date, 'end': date}]
+    # [{'name': str, 'start': date, 'end': date}]
+    holidays: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -334,10 +336,8 @@ def resolve_all_dates(
         # Parse LLM-resolved date from the existing field (may be a YYYY-MM-DD string)
         llm_resolved: date | None = None
         if a.due_date_resolved.value:
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 llm_resolved = date.fromisoformat(str(a.due_date_resolved.value))
-            except (ValueError, TypeError):
-                pass
 
         resolved = resolve_date(raw_text, semester, llm_resolved)
 

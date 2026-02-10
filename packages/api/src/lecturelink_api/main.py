@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from lecturelink_api.routers import assessments, courses, syllabi
+from lecturelink_api.config import get_settings
+from lecturelink_api.routers import assessments, courses, lectures, quizzes, search, syllabi
+
+# Configure Google GenAI to use Vertex AI (ADC) when no API key is set.
+# Must happen before any ADK/genai imports that initialize clients.
+_settings = get_settings()
+if not _settings.GOOGLE_API_KEY:
+    os.environ.setdefault("GOOGLE_GENAI_USE_VERTEXAI", "TRUE")
+    if _settings.GOOGLE_CLOUD_PROJECT:
+        os.environ.setdefault("GOOGLE_CLOUD_PROJECT", _settings.GOOGLE_CLOUD_PROJECT)
+    os.environ.setdefault("GOOGLE_CLOUD_LOCATION", "us-central1")
 
 
 @asynccontextmanager
@@ -44,6 +55,9 @@ app.add_middleware(
 app.include_router(courses.router)
 app.include_router(syllabi.router)
 app.include_router(assessments.router)
+app.include_router(lectures.router)
+app.include_router(search.router)
+app.include_router(quizzes.router)
 
 
 @app.get("/health")

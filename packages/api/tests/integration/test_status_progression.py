@@ -27,7 +27,7 @@ class TestSyllabusStatusProgression:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(
-                {"id": sid, "status": "pending", "needs_review": True}
+                [{"id": sid, "status": "pending", "needs_review": True}]
             )
 
             resp = await client.get(f"/api/syllabi/{sid}/status")
@@ -46,7 +46,7 @@ class TestSyllabusStatusProgression:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(
-                {"id": sid, "status": "processing", "needs_review": False}
+                [{"id": sid, "status": "processing", "needs_review": False}]
             )
 
             resp = await client.get(f"/api/syllabi/{sid}/status")
@@ -67,7 +67,7 @@ class TestSyllabusStatusProgression:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(
-                {"id": sid, "status": "processed", "needs_review": True}
+                [{"id": sid, "status": "processed", "needs_review": True}]
             )
 
             resp = await client.get(f"/api/syllabi/{sid}/status")
@@ -86,7 +86,7 @@ class TestSyllabusStatusProgression:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(
-                {"id": sid, "status": "processed", "needs_review": False}
+                [{"id": sid, "status": "processed", "needs_review": False}]
             )
 
             resp = await client.get(f"/api/syllabi/{sid}/status")
@@ -105,7 +105,7 @@ class TestSyllabusStatusProgression:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(
-                {"id": sid, "status": "error", "needs_review": True}
+                [{"id": sid, "status": "error", "needs_review": True}]
             )
 
             resp = await client.get(f"/api/syllabi/{sid}/status")

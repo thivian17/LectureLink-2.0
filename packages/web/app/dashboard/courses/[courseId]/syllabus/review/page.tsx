@@ -41,12 +41,31 @@ export default async function SyllabusReviewPage({
 
   const extraction = typedSyllabus.raw_extraction as unknown as SyllabusExtraction;
 
+  // Generate a signed URL for the PDF preview (valid for 1 hour)
+  let pdfUrl: string | null = null;
+  if (typedSyllabus.file_url) {
+    // file_url is stored as a storage path (e.g. "user_id/course_id/file.pdf")
+    // or as a full URL from older uploads — extract the path either way
+    let storagePath = typedSyllabus.file_url;
+    const publicPrefix = "/storage/v1/object/public/syllabi/";
+    const idx = storagePath.indexOf(publicPrefix);
+    if (idx !== -1) {
+      storagePath = storagePath.slice(idx + publicPrefix.length);
+    }
+
+    const { data: signedData } = await supabase.storage
+      .from("syllabi")
+      .createSignedUrl(storagePath, 3600);
+    pdfUrl = signedData?.signedUrl ?? null;
+  }
+
   return (
     <SyllabusReviewClient
       courseId={courseId}
       syllabus={typedSyllabus}
       extraction={extraction}
       assessments={(assessments ?? []) as Assessment[]}
+      pdfUrl={pdfUrl}
     />
   );
 }

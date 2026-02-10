@@ -16,6 +16,7 @@ from google import genai
 from google.genai import types
 from loguru import logger
 
+from lecturelink_api.config import get_settings
 
 # ---------------------------------------------------------------------------
 # PDF extraction via Gemini 2.5 Flash
@@ -24,7 +25,15 @@ from loguru import logger
 async def _extract_pdf_with_gemini(file_bytes: bytes) -> dict[str, Any]:
     """Send raw PDF bytes to Gemini 2.5 Flash and ask for structured text extraction."""
     try:
-        client = genai.Client()
+        settings = get_settings()
+        if settings.GOOGLE_API_KEY:
+            client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+        else:
+            client = genai.Client(
+                vertexai=True,
+                project=settings.GOOGLE_CLOUD_PROJECT,
+                location="us-central1",
+            )
 
         pdf_part = types.Part.from_bytes(data=file_bytes, mime_type="application/pdf")
 

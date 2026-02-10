@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import Link from "next/link";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, UploadCloud } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +34,11 @@ import { CourseForm } from "@/components/course-form";
 import { SyllabusUpload } from "@/components/syllabus-upload";
 import { AssessmentCalendar } from "@/components/assessment-calendar";
 import type { CalendarAssessment } from "@/components/assessment-calendar";
+import { Skeleton } from "@/components/ui/skeleton";
+import { LectureList } from "@/components/lectures/lecture-list";
+import { QuizList } from "@/components/quiz/QuizList";
+import { SearchPageClient } from "@/components/search/search-page-client";
+import { FloatingQAButton } from "@/components/chat/floating-qa-button";
 import { deleteCourse, getAssessments } from "@/lib/api";
 import type { Course, Syllabus } from "@/types/database";
 
@@ -69,9 +74,11 @@ export function CourseDetail({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [syllabus, setSyllabus] = useState<Syllabus | null>(initialSyllabus);
+  const [reuploadOpen, setReuploadOpen] = useState(false);
 
   function handleUploadComplete(newSyllabus: Syllabus) {
     setSyllabus(newSyllabus);
+    setReuploadOpen(false);
     router.refresh();
   }
 
@@ -189,14 +196,19 @@ export function CourseDetail({
 
       {/* Tabs */}
       <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="syllabus">Syllabus</TabsTrigger>
-          <TabsTrigger value="assessments">
-            Assessments ({assessmentCount})
-          </TabsTrigger>
-          <TabsTrigger value="calendar">Calendar</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-1 px-1">
+          <TabsList className="inline-flex w-max">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="syllabus">Syllabus</TabsTrigger>
+            <TabsTrigger value="lectures">Lectures</TabsTrigger>
+            <TabsTrigger value="assessments">
+              Assessments ({assessmentCount})
+            </TabsTrigger>
+            <TabsTrigger value="calendar">Calendar</TabsTrigger>
+            <TabsTrigger value="search">Search</TabsTrigger>
+            <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="overview" className="mt-6 space-y-6">
           <Card>
@@ -258,7 +270,7 @@ export function CourseDetail({
             </Card>
           )}
 
-          {!syllabus ? (
+          {!syllabus || reuploadOpen ? (
             <SyllabusUpload
               courseId={course.id}
               compact
@@ -267,16 +279,26 @@ export function CourseDetail({
           ) : (
             <Card>
               <CardHeader>
-                <div className="flex items-center gap-2">
-                  <CardTitle>Syllabus</CardTitle>
-                  {syllabus.needs_review && !syllabus.reviewed_at && (
-                    <Badge
-                      variant="outline"
-                      className="text-amber-600 border-amber-300"
-                    >
-                      Needs Review
-                    </Badge>
-                  )}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CardTitle>Syllabus</CardTitle>
+                    {syllabus.needs_review && !syllabus.reviewed_at && (
+                      <Badge
+                        variant="outline"
+                        className="text-amber-600 border-amber-300"
+                      >
+                        Needs Review
+                      </Badge>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setReuploadOpen(true)}
+                  >
+                    <UploadCloud className="mr-2 h-4 w-4" />
+                    Re-upload
+                  </Button>
                 </div>
                 <CardDescription>
                   {syllabus.file_name ?? "Uploaded syllabus"}
@@ -295,7 +317,7 @@ export function CourseDetail({
         </TabsContent>
 
         <TabsContent value="syllabus" className="mt-6 space-y-6">
-          {!syllabus ? (
+          {!syllabus || reuploadOpen ? (
             <SyllabusUpload
               courseId={course.id}
               onUploadComplete={handleUploadComplete}
@@ -303,11 +325,23 @@ export function CourseDetail({
           ) : syllabus.needs_review && !syllabus.reviewed_at ? (
             <Card>
               <CardHeader>
-                <CardTitle>Review Extraction</CardTitle>
-                <CardDescription>
-                  AI has extracted the following from your syllabus. Please
-                  review for accuracy.
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Review Extraction</CardTitle>
+                    <CardDescription>
+                      AI has extracted the following from your syllabus. Please
+                      review for accuracy.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setReuploadOpen(true)}
+                  >
+                    <UploadCloud className="mr-2 h-4 w-4" />
+                    Re-upload
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 {syllabus.grade_breakdown.length > 0 && (
@@ -347,12 +381,24 @@ export function CourseDetail({
           ) : (
             <Card>
               <CardHeader>
-                <CardTitle>Syllabus Extraction</CardTitle>
-                <CardDescription>
-                  {syllabus.reviewed_at
-                    ? `Reviewed on ${format(new Date(syllabus.reviewed_at), "MMMM d, yyyy")}`
-                    : "Extraction complete"}
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Syllabus Extraction</CardTitle>
+                    <CardDescription>
+                      {syllabus.reviewed_at
+                        ? `Reviewed on ${format(new Date(syllabus.reviewed_at), "MMMM d, yyyy")}`
+                        : "Extraction complete"}
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setReuploadOpen(true)}
+                  >
+                    <UploadCloud className="mr-2 h-4 w-4" />
+                    Re-upload
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 {syllabus.grade_breakdown.length > 0 && (
@@ -393,10 +439,24 @@ export function CourseDetail({
           </Card>
         </TabsContent>
 
+        <TabsContent value="lectures" className="mt-6">
+          <LectureList courseId={course.id} courseName={course.name} />
+        </TabsContent>
+
         <TabsContent value="calendar" className="mt-6">
           <CourseCalendarTab course={course} />
         </TabsContent>
+
+        <TabsContent value="search" className="mt-6">
+          <SearchPageClient courseId={course.id} />
+        </TabsContent>
+
+        <TabsContent value="quizzes" className="mt-6">
+          <QuizList courseId={course.id} courseName={course.name} />
+        </TabsContent>
       </Tabs>
+
+      <FloatingQAButton courseId={course.id} />
     </div>
   );
 }
@@ -436,10 +496,15 @@ function CourseCalendarTab({ course }: { course: Course }) {
 
   if (loading) {
     return (
-      <Card className="flex flex-col items-center justify-center py-16">
-        <CardHeader className="items-center text-center">
-          <CardTitle className="text-base">Loading calendar...</CardTitle>
-        </CardHeader>
+      <Card>
+        <CardContent className="pt-6 space-y-3">
+          <Skeleton className="h-6 w-1/3" />
+          <div className="grid grid-cols-7 gap-2">
+            {Array.from({ length: 35 }, (_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
+        </CardContent>
       </Card>
     );
   }

@@ -1,18 +1,20 @@
 """Multi-agent syllabus extraction pipeline using Google ADK.
 
 Pipeline stages:
-  1. IngestionAgent     – extracts raw text from the uploaded document
-  2. ParallelExtraction – three agents run concurrently to extract
+  1. ParallelExtraction – three agents run concurrently to extract
      schedule, grading, and course-info data
-  3. ValidationLoop     – LoopAgent that merges parallel outputs,
-     validates, and iterates up to 3 times to fix issues
+
+After the pipeline runs, merge_extraction_outputs() combines the three
+structured outputs into a SyllabusExtraction dict, and post_process_extraction()
+applies deterministic validation — no extra LLM call needed.
 """
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
 
-from google.adk.agents import LlmAgent, LoopAgent, ParallelAgent, SequentialAgent
+from google.adk.agents import LlmAgent, ParallelAgent
 from google.adk.tools import FunctionTool
 from google.genai import types
 from pydantic import BaseModel, Field
@@ -25,7 +27,6 @@ from lecturelink_api.models.syllabus_models import (
     WeeklyScheduleEntry,
 )
 from lecturelink_api.tools.document_tools import extract_document_text
-
 
 # ---------------------------------------------------------------------------
 # Intermediate output schemas (for Gemini constrained JSON decoding)
@@ -48,6 +49,28 @@ class GradingOutput(BaseModel):
     )
     assessments: list[AssessmentExtraction] = Field(
         description="All individual assessments found in the syllabus."
+    )
+
+
+class InfoOutput(BaseModel):
+    """Schema for the course info extractor's constrained JSON output."""
+
+    course_name: ExtractedField = Field(description="Full name of the course.")
+    course_code: ExtractedField | None = Field(
+        default=None, description="Course code (e.g. 'CS 101')."
+    )
+    instructor_name: ExtractedField | None = Field(
+        default=None, description="Primary instructor's name."
+    )
+    instructor_email: ExtractedField | None = Field(
+        default=None, description="Primary instructor's email address."
+    )
+    office_hours: ExtractedField | None = Field(
+        default=None, description="Office hours schedule."
+    )
+    policies: dict[str, str] = Field(
+        default_factory=dict,
+        description="Course policies keyed by category.",
     )
 
 
@@ -104,8 +127,9 @@ Grade breakdown — for each component extract:
 Individual assessments — for each one extract:
 - title: Assessment name (e.g. "Midterm 1", "HW 3").
 - type: One of: exam, quiz, homework, project, lab, paper, presentation, participation, other.
-- due_date_raw: The original date text as written in the syllabus.
-- due_date_resolved: Resolved calendar date in YYYY-MM-DD format, or null if ambiguous.
+- due_date_raw: The original date text as written in the syllabus. For assessments that \
+are ongoing throughout the semester (e.g. class participation, attendance), set this to "Ongoing".
+- due_date_resolved: Resolved calendar date in YYYY-MM-DD format, or null if ambiguous or ongoing.
 - weight_percent: Grade weight as a percentage.
 - topics: Related topics or chapters.
 
@@ -164,6 +188,7 @@ info_extractor = LlmAgent(
     model="gemini-2.5-flash",
     instruction=_INFO_INSTRUCTION,
     output_key="info_data",
+    output_schema=InfoOutput,
     generate_content_config=types.GenerateContentConfig(
         temperature=0.1,
     ),
@@ -176,86 +201,94 @@ parallel_extraction = ParallelAgent(
 
 
 # ---------------------------------------------------------------------------
-# Stage 3 — Validation via LoopAgent
-# ---------------------------------------------------------------------------
-
-_VALIDATOR_INSTRUCTION = """\
-You are a syllabus extraction validator. Your job is to merge extraction outputs \
-and validate the result.
-
-Schedule data:
-{schedule_data}
-
-Grading data:
-{grading_data}
-
-Course info:
-{info_data}
-
-Previous validation errors (if any — empty on first run):
-{validation_errors}
-
-Semester boundaries:
-- semester_start: {semester_start}
-- semester_end: {semester_end}
-
-MERGE all data into a single SyllabusExtraction JSON object, then VALIDATE:
-
-1. **Grade weights**: The sum of all grade_breakdown weight_percent values must be \
-between 98% and 102% (inclusive). If not, adjust weights proportionally or flag the issue.
-
-2. **Date boundaries**: Every assessment due_date_resolved (when not null) must fall \
-between {semester_start} and {semester_end}. Flag any dates outside this range.
-
-3. **No duplicate assessments**: No two assessments should have the same title AND \
-the same due_date_resolved. Remove exact duplicates.
-
-4. **Assessment completeness**: Every assessment must have a non-null title and type. \
-Set missing types to "other".
-
-5. **extraction_confidence**: Compute as the average of all ExtractedField confidence \
-values across the entire extraction.
-
-6. **missing_sections**: List any expected sections not found. Expected sections: \
-course_name, course_code, instructor_name, instructor_email, office_hours, \
-grade_breakdown, assessments, weekly_schedule, policies.
-
-If ALL validations pass, output the final SyllabusExtraction JSON with \
-validation_passed set to true in the output.
-
-If ANY validation fails, output the SyllabusExtraction JSON with your best-effort \
-fixes applied. The LoopAgent will re-run if issues remain.
-
-Output ONLY valid JSON matching the SyllabusExtraction schema."""
-
-validator = LlmAgent(
-    name="Validator",
-    model="gemini-2.5-flash",
-    instruction=_VALIDATOR_INSTRUCTION,
-    output_key="validated_syllabus",
-    output_schema=SyllabusExtraction,
-    generate_content_config=types.GenerateContentConfig(
-        temperature=0.1,
-    ),
-)
-
-validation_loop = LoopAgent(
-    name="ValidationLoop",
-    sub_agents=[validator],
-    max_iterations=3,
-)
-
-
-# ---------------------------------------------------------------------------
 # Full Pipeline
 # ---------------------------------------------------------------------------
 
 # Text extraction is handled externally by the service layer (deterministic,
 # no LLM needed). The pipeline expects raw_text pre-populated in session state.
-extraction_pipeline = SequentialAgent(
-    name="ExtractionPipeline",
-    sub_agents=[parallel_extraction, validation_loop],
-)
+# After the pipeline runs, the service layer calls merge_extraction_outputs()
+# to combine the three outputs, then post_process_extraction() for validation.
+extraction_pipeline = parallel_extraction
+
+
+# ---------------------------------------------------------------------------
+# Merge parallel outputs (pure Python, no LLM)
+# ---------------------------------------------------------------------------
+
+
+def _parse_json(raw: str | dict | None) -> dict:
+    """Parse a JSON string or pass through a dict; return empty dict on failure."""
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    try:
+        parsed = json.loads(raw)
+        return parsed if isinstance(parsed, dict) else {}
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def merge_extraction_outputs(
+    schedule_data: str | dict | None,
+    grading_data: str | dict | None,
+    info_data: str | dict | None,
+) -> dict:
+    """Merge the three parallel extractor outputs into a SyllabusExtraction-shaped dict.
+
+    This replaces the former Validator LLM agent — a pure Python merge that
+    takes milliseconds instead of an extra LLM round-trip.
+
+    Args:
+        schedule_data: ScheduleOutput JSON (has 'weekly_schedule').
+        grading_data: GradingOutput JSON (has 'grade_breakdown', 'assessments').
+        info_data: InfoOutput JSON (has course_name, course_code, etc.).
+
+    Returns:
+        A dict compatible with SyllabusExtraction(**result).
+    """
+    schedule = _parse_json(schedule_data)
+    grading = _parse_json(grading_data)
+    info = _parse_json(info_data)
+
+    # Detect missing sections
+    missing: list[str] = []
+    if not info.get("course_name"):
+        missing.append("course_name")
+    if not info.get("course_code"):
+        missing.append("course_code")
+    if not info.get("instructor_name"):
+        missing.append("instructor_name")
+    if not info.get("instructor_email"):
+        missing.append("instructor_email")
+    if not info.get("office_hours"):
+        missing.append("office_hours")
+    if not grading.get("grade_breakdown"):
+        missing.append("grade_breakdown")
+    if not grading.get("assessments"):
+        missing.append("assessments")
+    if not schedule.get("weekly_schedule"):
+        missing.append("weekly_schedule")
+    if not info.get("policies"):
+        missing.append("policies")
+
+    return {
+        # Course info
+        "course_name": info.get("course_name", {"value": None, "confidence": 0.0}),
+        "course_code": info.get("course_code"),
+        "instructor_name": info.get("instructor_name"),
+        "instructor_email": info.get("instructor_email"),
+        "office_hours": info.get("office_hours"),
+        "policies": info.get("policies", {}),
+        # Grading
+        "grade_breakdown": grading.get("grade_breakdown", []),
+        "assessments": grading.get("assessments", []),
+        # Schedule
+        "weekly_schedule": schedule.get("weekly_schedule", []),
+        # Metadata (recomputed by post_process_extraction)
+        "extraction_confidence": 0.0,
+        "missing_sections": missing,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -426,8 +459,7 @@ def post_process_extraction(
         "instructor_email", "office_hours",
     ):
         field = getattr(extraction, attr, None)
-        if field is not None and isinstance(field, ExtractedField):
-            if field.confidence < 0.7:
+        if field is not None and isinstance(field, ExtractedField) and field.confidence < 0.7:
                 low_confidence_fields.append(f"low_confidence:{attr}")
 
     for i, a in enumerate(extraction.assessments):

@@ -9,15 +9,15 @@ import pytest
 
 from lecturelink_api.agents.syllabus_processor import (
     GradingOutput,
+    InfoOutput,
     ScheduleOutput,
     extraction_pipeline,
     grading_extractor,
     info_extractor,
     ingestion_agent,
+    merge_extraction_outputs,
     parallel_extraction,
     schedule_extractor,
-    validation_loop,
-    validator,
 )
 from lecturelink_api.models.syllabus_models import SyllabusExtraction
 
@@ -158,27 +158,17 @@ _SAMPLE_EXTRACTION = {
 class TestPipelineStructure:
     """Verify the agent graph is wired correctly."""
 
-    def test_pipeline_name(self):
-        assert extraction_pipeline.name == "ExtractionPipeline"
+    def test_pipeline_is_parallel_extraction(self):
+        assert extraction_pipeline is parallel_extraction
+        assert extraction_pipeline.name == "ParallelExtraction"
 
-    def test_pipeline_has_two_stages(self):
-        assert len(extraction_pipeline.sub_agents) == 2
+    def test_pipeline_has_three_extractors(self):
+        names = {a.name for a in extraction_pipeline.sub_agents}
+        assert names == {"ScheduleExtractor", "GradingExtractor", "InfoExtractor"}
 
     def test_ingestion_agent_exists(self):
         assert ingestion_agent.name == "IngestionAgent"
         assert ingestion_agent.output_key == "raw_text"
-
-    def test_stage_1_is_parallel_extraction(self):
-        agent = extraction_pipeline.sub_agents[0]
-        assert agent.name == "ParallelExtraction"
-        names = {a.name for a in agent.sub_agents}
-        assert names == {"ScheduleExtractor", "GradingExtractor", "InfoExtractor"}
-
-    def test_stage_2_is_validation_loop(self):
-        agent = extraction_pipeline.sub_agents[1]
-        assert agent.name == "ValidationLoop"
-        assert agent is validation_loop
-        assert validator.output_key == "validated_syllabus"
 
     def test_all_extractors_use_gemini_flash(self):
         for agent in [schedule_extractor, grading_extractor, info_extractor]:
@@ -215,8 +205,14 @@ class TestIntermediateSchemas:
         assert "grade_breakdown" in schema["properties"]
         assert "assessments" in schema["properties"]
 
+    def test_info_output_schema(self):
+        schema = InfoOutput.model_json_schema()
+        assert schema["type"] == "object"
+        assert "course_name" in schema["properties"]
+        assert "policies" in schema["properties"]
+
     def test_schemas_are_json_serializable(self):
-        for model_cls in (ScheduleOutput, GradingOutput):
+        for model_cls in (ScheduleOutput, GradingOutput, InfoOutput):
             schema = model_cls.model_json_schema()
             roundtripped = json.loads(json.dumps(schema))
             assert roundtripped == schema
@@ -285,6 +281,68 @@ class TestFixtures:
 # ---------------------------------------------------------------------------
 
 
+class TestMergeExtractionOutputs:
+    """Verify merge_extraction_outputs combines parallel outputs correctly."""
+
+    def test_merges_all_sections(self):
+        schedule = {"weekly_schedule": [{"week_number": 1, "topics": ["Intro"]}]}
+        grading = {
+            "grade_breakdown": [
+                {"name": {"value": "Exams", "confidence": 0.9},
+                 "weight_percent": {"value": 50.0, "confidence": 0.9},
+                 "drop_policy": None}
+            ],
+            "assessments": [
+                {"title": {"value": "Midterm", "confidence": 0.9},
+                 "type": {"value": "exam", "confidence": 0.9},
+                 "due_date_raw": {"value": "Oct 10", "confidence": 0.9},
+                 "due_date_resolved": {"value": "2025-10-10", "confidence": 0.85},
+                 "weight_percent": {"value": 25.0, "confidence": 0.9},
+                 "topics": []}
+            ],
+        }
+        info = {
+            "course_name": {"value": "CS 101", "confidence": 0.95},
+            "instructor_name": {"value": "Dr. Smith", "confidence": 0.9},
+            "policies": {"late_policy": "10% per day"},
+        }
+        result = merge_extraction_outputs(schedule, grading, info)
+        assert result["course_name"]["value"] == "CS 101"
+        assert len(result["grade_breakdown"]) == 1
+        assert len(result["assessments"]) == 1
+        assert len(result["weekly_schedule"]) == 1
+        assert result["policies"]["late_policy"] == "10% per day"
+
+    def test_handles_json_strings(self):
+        schedule = json.dumps({"weekly_schedule": []})
+        grading = json.dumps({"grade_breakdown": [], "assessments": []})
+        info = json.dumps({
+            "course_name": {"value": "Bio 200", "confidence": 0.9},
+            "policies": {},
+        })
+        result = merge_extraction_outputs(schedule, grading, info)
+        assert result["course_name"]["value"] == "Bio 200"
+
+    def test_handles_none_inputs(self):
+        result = merge_extraction_outputs(None, None, None)
+        assert result["grade_breakdown"] == []
+        assert result["assessments"] == []
+        assert result["weekly_schedule"] == []
+        assert "course_name" in result["missing_sections"]
+        assert "grade_breakdown" in result["missing_sections"]
+
+    def test_detects_missing_sections(self):
+        result = merge_extraction_outputs(
+            {"weekly_schedule": [{"week_number": 1, "topics": ["x"]}]},
+            {"grade_breakdown": [], "assessments": []},
+            {"course_name": {"value": "CS 101", "confidence": 0.9}},
+        )
+        assert "grade_breakdown" in result["missing_sections"]
+        assert "assessments" in result["missing_sections"]
+        assert "course_name" not in result["missing_sections"]
+        assert "weekly_schedule" not in result["missing_sections"]
+
+
 class TestRunnerIntegration:
     """Verify the pipeline can be loaded into an ADK Runner."""
 
@@ -298,4 +356,4 @@ class TestRunnerIntegration:
             app_name="test_syllabus",
             session_service=InMemorySessionService(),
         )
-        assert runner.agent.name == "ExtractionPipeline"
+        assert runner.agent.name == "ParallelExtraction"

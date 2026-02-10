@@ -79,6 +79,7 @@ export function SyllabusUpload({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCountRef = useRef(0);
+  const completedRef = useRef(false);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -142,6 +143,7 @@ export function SyllabusUpload({
     setProcessingStep("upload");
     setErrorMessage(null);
     pollCountRef.current = 0;
+    completedRef.current = false;
 
     try {
       const result = await uploadSyllabus(courseId, file);
@@ -149,16 +151,22 @@ export function SyllabusUpload({
       setProcessingStep("extract");
 
       pollingRef.current = setInterval(async () => {
+        if (completedRef.current) return;
         try {
           pollCountRef.current += 1;
           const statusResult = await getSyllabusStatus(result.syllabus_id);
+          if (completedRef.current) return;
 
           if (statusResult.status === "processing") {
             if (pollCountRef.current >= 2) {
               setProcessingStep("validate");
             }
           } else if (statusResult.status === "complete") {
-            if (pollingRef.current) clearInterval(pollingRef.current);
+            completedRef.current = true;
+            if (pollingRef.current) {
+              clearInterval(pollingRef.current);
+              pollingRef.current = null;
+            }
             setProcessingStep("review");
             setPhase("complete");
 
@@ -166,7 +174,11 @@ export function SyllabusUpload({
             onUploadComplete?.(syllabus);
             toast.success("Syllabus processed successfully!");
           } else if (statusResult.status === "error") {
-            if (pollingRef.current) clearInterval(pollingRef.current);
+            completedRef.current = true;
+            if (pollingRef.current) {
+              clearInterval(pollingRef.current);
+              pollingRef.current = null;
+            }
             setPhase("error");
             setErrorMessage(
               statusResult.error_message ??
@@ -174,7 +186,12 @@ export function SyllabusUpload({
             );
           }
         } catch {
-          if (pollingRef.current) clearInterval(pollingRef.current);
+          if (completedRef.current) return;
+          completedRef.current = true;
+          if (pollingRef.current) {
+            clearInterval(pollingRef.current);
+            pollingRef.current = null;
+          }
           setPhase("error");
           setErrorMessage("Failed to check processing status.");
         }
