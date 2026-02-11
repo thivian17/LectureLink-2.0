@@ -45,7 +45,7 @@ _SLIDE_TYPES = {
 }
 _ALL_ALLOWED = _AUDIO_TYPES | _SLIDE_TYPES
 
-_MAX_AUDIO_BYTES = 200 * 1024 * 1024   # 200 MB
+_MAX_AUDIO_BYTES = 500 * 1024 * 1024   # 500 MB
 _MAX_SLIDE_BYTES = 50 * 1024 * 1024    # 50 MB
 
 
@@ -179,10 +179,12 @@ async def upload_lecture(
     result = sb.table("lectures").insert(insert_data).execute()
     lecture_id = result.data[0]["id"]
 
-    # Trigger background processing
+    # Trigger background processing (sync task → runs in thread pool)
     background_tasks.add_task(
         run_lecture_processing,
-        supabase=sb,
+        supabase_url=settings.SUPABASE_URL,
+        supabase_key=settings.SUPABASE_ANON_KEY,
+        user_token=user["token"],
         lecture_id=lecture_id,
         course_id=course_id,
         user_id=user["id"],
@@ -217,16 +219,82 @@ async def get_lecture(
 
     lecture = result.data[0]
 
-    # Fetch concepts with linked assessments
+    # ── Transcript segments from chunks ──
+    chunks_result = (
+        sb.table("lecture_chunks")
+        .select("id, chunk_index, content, start_time, end_time, slide_number, metadata")
+        .eq("lecture_id", lecture_id)
+        .order("chunk_index")
+        .execute()
+    )
+    chunks = chunks_result.data or []
+
+    # Build a chunk-id → index map for concept segment_indices later
+    chunk_id_to_index: dict[str, int] = {}
+    transcript_segments = []
+    for i, chunk in enumerate(chunks):
+        chunk_id_to_index[chunk["id"]] = i
+        meta = chunk.get("metadata") or {}
+        transcript_segments.append({
+            "start": chunk.get("start_time"),
+            "end": chunk.get("end_time"),
+            "text": chunk["content"],
+            "speaker": "Speaker",
+            "slide_number": chunk.get("slide_number"),
+            "source": meta.get("source", "chunk"),
+        })
+
+    # ── Signed URLs for audio/slides ──
+    audio_url = None
+    slides_url = None
+    sb_admin = _sb_admin(settings)
+    if lecture.get("audio_url"):
+        try:
+            signed = sb_admin.storage.from_("lectures").create_signed_url(
+                lecture["audio_url"], 21600,
+            )
+            audio_url = signed["signedURL"]
+        except Exception:
+            pass
+    if lecture.get("slides_url"):
+        try:
+            signed = sb_admin.storage.from_("lectures").create_signed_url(
+                lecture["slides_url"], 21600,
+            )
+            slides_url = signed["signedURL"]
+        except Exception:
+            pass
+
+    # ── Processing path ──
+    has_audio = lecture.get("audio_url") is not None
+    has_slides = lecture.get("slides_url") is not None
+    if has_audio and has_slides:
+        processing_path = "audio+slides"
+    elif has_slides:
+        processing_path = "slides_only"
+    else:
+        processing_path = "audio_only"
+
+    # ── Concepts with linked assessments + segment indices ──
     concepts_result = (
         sb.table("concepts")
-        .select("id, title, description, category, difficulty_estimate")
+        .select(
+            "id, title, description, category, "
+            "difficulty_estimate, source_chunk_ids"
+        )
         .eq("lecture_id", lecture_id)
         .execute()
     )
     concepts = []
     for c in concepts_result.data or []:
-        # Get linked assessments for each concept
+        # Map source_chunk_ids → segment indices
+        segment_indices = [
+            chunk_id_to_index[cid]
+            for cid in (c.get("source_chunk_ids") or [])
+            if cid in chunk_id_to_index
+        ]
+
+        # Get linked assessments
         links_result = (
             sb.table("concept_assessment_links")
             .select("assessment_id, relevance_score")
@@ -237,28 +305,32 @@ async def get_lecture(
         for link in links_result.data or []:
             a_result = (
                 sb.table("assessments")
-                .select("title")
+                .select("title, due_date")
                 .eq("id", link["assessment_id"])
                 .execute()
             )
+            a_data = a_result.data[0] if a_result.data else {}
             linked.append({
-                "assessment_id": link["assessment_id"],
-                "title": a_result.data[0]["title"] if a_result.data else "Unknown",
+                "id": link["assessment_id"],
+                "title": a_data.get("title", "Unknown"),
+                "due_date": a_data.get("due_date"),
                 "relevance_score": link.get("relevance_score", 0),
             })
-        concepts.append({**c, "linked_assessments": linked})
+        concepts.append({
+            "id": c["id"],
+            "title": c["title"],
+            "description": c.get("description"),
+            "category": c.get("category", "concept"),
+            "difficulty_estimate": c.get("difficulty_estimate", 0.5),
+            "linked_assessments": linked,
+            "segment_indices": segment_indices,
+        })
 
-    # Get slide count from chunks
-    slide_result = (
-        sb.table("lecture_chunks")
-        .select("slide_number")
-        .eq("lecture_id", lecture_id)
-        .execute()
-    )
+    # ── Slide count ──
     slide_numbers = {
-        c["slide_number"]
-        for c in slide_result.data or []
-        if c.get("slide_number") is not None
+        ch.get("slide_number")
+        for ch in chunks
+        if ch.get("slide_number") is not None
     }
     slide_count = len(slide_numbers) if slide_numbers else None
 
@@ -272,8 +344,11 @@ async def get_lecture(
             )
             if k in lecture
         },
-        transcript=lecture.get("transcript"),
+        audio_url=audio_url,
+        slides_url=slides_url,
+        transcript_segments=transcript_segments,
         concepts=concepts,
+        processing_path=processing_path,
         slide_count=slide_count,
     )
 
@@ -388,10 +463,12 @@ async def retry_lecture(
     sb_admin = _sb_admin(settings)
     file_urls = _signed_urls_from_lecture(sb_admin, lecture)
 
-    # Re-trigger processing
+    # Re-trigger processing (sync task → runs in thread pool)
     background_tasks.add_task(
         run_lecture_processing,
-        supabase=sb,
+        supabase_url=settings.SUPABASE_URL,
+        supabase_key=settings.SUPABASE_ANON_KEY,
+        user_token=user["token"],
         lecture_id=lecture_id,
         course_id=lecture["course_id"],
         user_id=user["id"],
@@ -441,10 +518,12 @@ async def reprocess_lecture(
     sb_admin = _sb_admin(settings)
     file_urls = _signed_urls_from_lecture(sb_admin, lecture)
 
-    # Re-trigger full pipeline
+    # Re-trigger full pipeline (sync task → runs in thread pool)
     background_tasks.add_task(
         run_lecture_processing,
-        supabase=sb,
+        supabase_url=settings.SUPABASE_URL,
+        supabase_key=settings.SUPABASE_ANON_KEY,
+        user_token=user["token"],
         lecture_id=lecture_id,
         course_id=lecture["course_id"],
         user_id=user["id"],

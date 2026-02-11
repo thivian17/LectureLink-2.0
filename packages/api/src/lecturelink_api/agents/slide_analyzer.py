@@ -112,7 +112,7 @@ async def _call_gemini(slides_url: str) -> list[dict]:
         parts = [_file_part(slides_url, mime_type)]
 
     parts.append(types.Part(text=SLIDE_ANALYSIS_PROMPT))
-    content = types.Content(parts=parts)
+    content = types.Content(role="user", parts=parts)
 
     client = genai.Client()
     response = await client.aio.models.generate_content(

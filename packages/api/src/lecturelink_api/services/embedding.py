@@ -9,7 +9,7 @@ from google import genai
 logger = logging.getLogger(__name__)
 
 EMBEDDING_MODEL = "gemini-embedding-001"
-EMBEDDING_DIMENSIONS = 768
+EMBEDDING_DIMENSIONS = 2000
 
 _client = None
 
@@ -30,7 +30,7 @@ async def embed_query(query: str) -> list[float]:
     The model optimizes the embedding based on the task type.
 
     Returns:
-        768-dimensional embedding vector
+        2000-dimensional embedding vector
     """
     try:
         result = await _get_client().aio.models.embed_content(
@@ -58,7 +58,7 @@ async def embed_texts(
                    SEMANTIC_SIMILARITY for comparison
 
     Returns:
-        list of 768-dimensional embedding vectors
+        list of 2000-dimensional embedding vectors
     """
     if not texts:
         return []

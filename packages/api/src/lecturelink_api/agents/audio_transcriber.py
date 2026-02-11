@@ -28,7 +28,7 @@ MIME_MAP: dict[str, str] = {
     ".flac": "audio/flac",
 }
 
-INLINE_SIZE_LIMIT = 20 * 1024 * 1024  # 20 MB — inline Part threshold
+INLINE_SIZE_LIMIT = 100 * 1024 * 1024  # 100 MB — inline Part threshold
 
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 2.0  # seconds
@@ -90,6 +90,17 @@ def _strip_markdown_fences(text: str) -> str:
         if text.rstrip().endswith("```"):
             text = text.rstrip()[: -len("```")]
     return text.strip()
+
+
+def _repair_json(text: str) -> str:
+    """Attempt to fix common JSON issues from Gemini output."""
+    import re
+
+    # Remove trailing commas before ] or }
+    text = re.sub(r",\s*([}\]])", r"\1", text)
+    # Fix unescaped newlines inside string values
+    text = re.sub(r'(?<=": ")(.*?)(?=")', lambda m: m.group(0).replace("\n", "\\n"), text)
+    return text
 
 
 def validate_transcript(segments: list[dict]) -> list[dict]:
@@ -156,7 +167,7 @@ class TranscriptionError(Exception):
 
 async def _download_to_tempfile(url: str, suffix: str) -> Path:
     """Download a remote URL to a temporary file and return the path."""
-    async with httpx.AsyncClient() as http:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(300.0)) as http:
         resp = await http.get(url, follow_redirects=True)
         resp.raise_for_status()
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)  # noqa: SIM115
@@ -222,16 +233,22 @@ async def transcribe_audio(
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=[
-                    types.Content(parts=[audio_part, prompt_part])
+                    types.Content(role="user", parts=[audio_part, prompt_part])
                 ],
                 config=types.GenerateContentConfig(
                     temperature=0.1,
                     max_output_tokens=65536,
+                    response_mime_type="application/json",
                 ),
             )
 
             transcript_text = _strip_markdown_fences(response.text)
-            segments = json.loads(transcript_text)
+            try:
+                segments = json.loads(transcript_text)
+            except json.JSONDecodeError:
+                logger.warning("JSON parse failed, attempting repair…")
+                repaired = _repair_json(transcript_text)
+                segments = json.loads(repaired)
             validated = validate_transcript(segments)
             logger.info(
                 "Transcription complete: %d segments (attempt %d)",
@@ -241,7 +258,10 @@ async def transcribe_audio(
             return validated
 
         except json.JSONDecodeError as exc:
-            raise TranscriptionError(f"Failed to parse transcript JSON: {exc}") from exc
+            last_error = exc
+            logger.warning(
+                "Transcript JSON invalid on attempt %d: %s", attempt, exc,
+            )
         except TranscriptionError:
             raise
         except Exception as exc:  # noqa: BLE001

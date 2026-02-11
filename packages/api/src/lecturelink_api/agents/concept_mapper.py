@@ -146,7 +146,7 @@ async def map_concepts_to_assessments(
     try:
         response = await client.aio.models.generate_content(
             model="gemini-2.5-flash",
-            contents=[types.Content(parts=[types.Part(text=prompt)])],
+            contents=[types.Content(role="user", parts=[types.Part(text=prompt)])],
             config=types.GenerateContentConfig(
                 temperature=0.1,
                 max_output_tokens=16384,

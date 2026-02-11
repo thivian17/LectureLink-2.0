@@ -15,18 +15,21 @@ const ACCEPTED_AUDIO_TYPES = [
   "audio/mp4",
   "audio/x-m4a",
   "audio/ogg",
+  "audio/webm",
+  "audio/flac",
+  "audio/x-flac",
 ];
 const ACCEPTED_SLIDE_TYPES = [
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ];
-const ACCEPTED_AUDIO_EXTENSIONS = [".mp3", ".wav", ".m4a", ".ogg"];
+const ACCEPTED_AUDIO_EXTENSIONS = [".mp3", ".wav", ".m4a", ".ogg", ".webm", ".flac"];
 const ACCEPTED_SLIDE_EXTENSIONS = [".pdf", ".pptx"];
 const ALL_ACCEPTED_EXTENSIONS = [
   ...ACCEPTED_AUDIO_EXTENSIONS,
   ...ACCEPTED_SLIDE_EXTENSIONS,
 ];
-const MAX_SIZE_BYTES = 200 * 1024 * 1024; // 200MB
+const MAX_SIZE_BYTES = 500 * 1024 * 1024; // 500MB
 
 function validateFile(f: File): string | null {
   const ext = "." + f.name.split(".").pop()?.toLowerCase();
@@ -36,7 +39,7 @@ function validateFile(f: File): string | null {
     return `Unsupported file type. Accepted: ${ALL_ACCEPTED_EXTENSIONS.join(", ")}`;
   }
   if (f.size > MAX_SIZE_BYTES) {
-    return `File too large. Maximum size is 200MB. This file is ${(f.size / (1024 * 1024)).toFixed(1)}MB.`;
+    return `File too large. Maximum size is 500MB. This file is ${(f.size / (1024 * 1024)).toFixed(1)}MB.`;
   }
   return null;
 }
@@ -164,7 +167,7 @@ export function UploadDropzone({ files, onFilesChange }: UploadDropzoneProps) {
             Slides: .pdf, .pptx
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Max file size: 200MB
+            Max file size: 500MB
           </p>
         </div>
         <Button

@@ -1,9 +1,21 @@
-"""Background task runner for lecture processing with retry logic."""
+"""Background task runner for lecture processing with retry logic.
+
+IMPORTANT: ``run_lecture_processing`` is a **sync** function so that
+FastAPI's ``BackgroundTasks`` runs it in a thread-pool instead of the
+main async event loop.  The processing pipeline mixes truly-async calls
+(Gemini API, httpx downloads) with sync calls (supabase-py DB/storage),
+and the sync calls would block the event loop and freeze the entire
+server if run on it directly.  By running in a thread with its own
+event loop we keep the main loop free to serve HTTP requests.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import time
+
+from supabase import create_client
 
 from .lecture_processor import LectureProcessingError, process_lecture
 
@@ -12,8 +24,10 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3
 
 
-async def run_lecture_processing(
-    supabase,
+def run_lecture_processing(
+    supabase_url: str,
+    supabase_key: str,
+    user_token: str,
     lecture_id: str,
     course_id: str,
     user_id: str,
@@ -22,10 +36,14 @@ async def run_lecture_processing(
 ) -> dict | None:
     """Background task for lecture processing with exponential backoff retries.
 
-    Called by FastAPI's BackgroundTasks or an async task queue.
+    This is a **sync** function on purpose — FastAPI will run it in a
+    thread-pool worker, keeping the main event loop responsive.  A
+    private event loop is created for the async pipeline stages.
 
     Args:
-        supabase: Supabase client.
+        supabase_url: Supabase project URL.
+        supabase_key: Supabase anon key.
+        user_token: JWT access token for the requesting user.
         lecture_id: The lecture UUID.
         course_id: The course UUID.
         user_id: The owner user UUID.
@@ -35,6 +53,31 @@ async def run_lecture_processing(
     Returns:
         Result dict on success, None if all retries exhausted.
     """
+    # Create a fresh Supabase client for this thread
+    sb = create_client(supabase_url, supabase_key)
+    sb.auth.set_session(user_token, "")
+
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(
+            _processing_loop(
+                sb, lecture_id, course_id, user_id,
+                file_urls, is_reprocess,
+            )
+        )
+    finally:
+        loop.close()
+
+
+async def _processing_loop(
+    supabase,
+    lecture_id: str,
+    course_id: str,
+    user_id: str,
+    file_urls: list[str],
+    is_reprocess: bool,
+) -> dict | None:
+    """Async retry loop executed inside the background thread's event loop."""
     retry_count = 0
 
     while retry_count <= MAX_RETRIES:

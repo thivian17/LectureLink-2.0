@@ -156,7 +156,10 @@ async def embed_chunks(chunks: list[dict]) -> list[dict]:
             response = await client.aio.models.embed_content(
                 model="gemini-embedding-001",
                 contents=batch_texts,
-                config={"task_type": "RETRIEVAL_DOCUMENT"},
+                config={
+                    "task_type": "RETRIEVAL_DOCUMENT",
+                    "output_dimensionality": 2000,
+                },
             )
 
             for emb in response.embeddings:
@@ -198,7 +201,10 @@ async def embed_concepts(concepts: list[dict]) -> list[dict]:
         response = await client.aio.models.embed_content(
             model="gemini-embedding-001",
             contents=texts,
-            config={"task_type": "RETRIEVAL_DOCUMENT"},
+            config={
+                "task_type": "RETRIEVAL_DOCUMENT",
+                "output_dimensionality": 2000,
+            },
         )
 
         for concept, emb in zip(concepts, response.embeddings, strict=False):

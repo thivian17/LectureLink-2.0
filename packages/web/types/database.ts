@@ -100,6 +100,7 @@ export interface LectureDetail extends Lecture {
   concepts: LectureConcept[];
   slides: SlideInfo[];
   processing_path: string;
+  slide_count: number | null;
 }
 
 // ---------------------------------------------------------------------------

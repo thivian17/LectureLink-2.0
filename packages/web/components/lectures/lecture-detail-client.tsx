@@ -136,7 +136,7 @@ export function LectureDetailClient({
   const hasAudio =
     lecture.processing_path !== "slides_only" && lecture.audio_url;
   const hasSlides =
-    lecture.processing_path !== "audio_only" && lecture.slides.length > 0;
+    lecture.processing_path !== "audio_only" && (lecture.slides?.length ?? 0) > 0;
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
@@ -147,9 +147,9 @@ export function LectureDetailClient({
         lectureDate={lecture.lecture_date}
         lectureNumber={lecture.lecture_number}
         durationSeconds={lecture.duration_seconds}
-        conceptCount={lecture.concepts.length}
-        slideCount={lecture.slides.length}
-        segmentCount={lecture.transcript_segments.length}
+        conceptCount={lecture.concepts?.length ?? 0}
+        slideCount={lecture.slide_count ?? lecture.slides?.length ?? 0}
+        segmentCount={lecture.transcript_segments?.length ?? 0}
         courseId={courseId}
       />
 

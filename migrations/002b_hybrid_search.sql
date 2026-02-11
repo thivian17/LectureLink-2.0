@@ -1,5 +1,5 @@
 CREATE OR REPLACE FUNCTION hybrid_search(
-    p_query_embedding vector(768),
+    p_query_embedding vector(2000),
     p_query_text TEXT,
     p_course_id UUID,
     p_lecture_ids UUID[] DEFAULT NULL,

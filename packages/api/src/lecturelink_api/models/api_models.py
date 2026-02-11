@@ -184,6 +184,25 @@ class QuizSubmissionResult(BaseModel):
     correct_count: int
     results: list[dict]  # [{question_id, is_correct, correct_answer, explanation, source_chunks}]
 
+class TranscriptSegmentResponse(BaseModel):
+    start: float | None = None
+    end: float | None = None
+    text: str
+    speaker: str = "Speaker"
+    slide_number: int | None = None
+    source: str = "chunk"
+
+
+class ConceptDetailResponse(BaseModel):
+    id: str
+    title: str
+    description: str | None = None
+    category: str = "concept"
+    difficulty_estimate: float = 0.5
+    linked_assessments: list[dict] = Field(default_factory=list)
+    segment_indices: list[int] = Field(default_factory=list)
+
+
 class LectureDetailResponse(BaseModel):
     id: str
     course_id: str
@@ -195,8 +214,12 @@ class LectureDetailResponse(BaseModel):
     processing_progress: float
     summary: str | None = None
     duration_seconds: int | None = None
-    transcript: str | None = None
-    concepts: list[dict] = Field(default_factory=list)
+    audio_url: str | None = None
+    slides_url: str | None = None
+    transcript_segments: list[TranscriptSegmentResponse] = Field(default_factory=list)
+    concepts: list[ConceptDetailResponse] = Field(default_factory=list)
+    slides: list[dict] = Field(default_factory=list)
+    processing_path: str = "audio_only"
     slide_count: int | None = None
     created_at: datetime
 

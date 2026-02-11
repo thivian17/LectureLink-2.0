@@ -68,7 +68,7 @@ async def extract_concepts(aligned_segments: list[dict]) -> list[dict]:
     try:
         response = await client.aio.models.generate_content(
             model="gemini-2.5-pro",
-            contents=[types.Content(parts=[types.Part(text=prompt)])],
+            contents=[types.Content(role="user", parts=[types.Part(text=prompt)])],
             config=types.GenerateContentConfig(
                 temperature=0.2,
                 max_output_tokens=16384,

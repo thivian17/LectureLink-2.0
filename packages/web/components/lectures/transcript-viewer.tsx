@@ -59,7 +59,7 @@ export function TranscriptViewer({
   const conceptsBySegment = useMemo(() => {
     const map = new Map<number, LectureConcept[]>();
     for (const concept of concepts) {
-      for (const idx of concept.segment_indices) {
+      for (const idx of concept.segment_indices ?? []) {
         const existing = map.get(idx) ?? [];
         existing.push(concept);
         map.set(idx, existing);

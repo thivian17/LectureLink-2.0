@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS lecture_chunks (
     start_time FLOAT,
     end_time FLOAT,
     slide_number INT,
-    embedding vector(768),
+    embedding vector(2000),
     metadata JSONB DEFAULT '{}',
     fts tsvector GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,
     created_at TIMESTAMPTZ DEFAULT now()
@@ -73,7 +73,7 @@ ALTER TABLE concepts ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users
 ALTER TABLE concepts ADD COLUMN IF NOT EXISTS category TEXT;
 ALTER TABLE concepts ADD COLUMN IF NOT EXISTS difficulty_estimate FLOAT DEFAULT 0.5;
 ALTER TABLE concepts ADD COLUMN IF NOT EXISTS source_chunk_ids UUID[];
-ALTER TABLE concepts ADD COLUMN IF NOT EXISTS embedding vector(768);
+ALTER TABLE concepts ADD COLUMN IF NOT EXISTS embedding vector(2000);
 
 CREATE INDEX IF NOT EXISTS idx_concepts_course ON concepts(course_id);
 CREATE INDEX IF NOT EXISTS idx_concepts_lecture ON concepts(lecture_id);
