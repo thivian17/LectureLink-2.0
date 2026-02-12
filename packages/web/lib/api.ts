@@ -457,6 +457,7 @@ export async function generateQuiz(
   courseId: string,
   options: {
     target_assessment_id?: string | null;
+    lecture_ids?: string[] | null;
     question_count: number;
     difficulty: QuizDifficulty;
   },

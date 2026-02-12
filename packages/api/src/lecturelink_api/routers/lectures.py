@@ -219,6 +219,10 @@ async def get_lecture(
 
     lecture = result.data[0]
 
+    # Sanitize nullable DB fields that Pydantic expects as non-null
+    if lecture.get("processing_progress") is None:
+        lecture["processing_progress"] = 0.0
+
     # ── Transcript segments from chunks ──
     chunks_result = (
         sb.table("lecture_chunks")
@@ -379,7 +383,10 @@ async def get_lecture_status(
             status_code=status.HTTP_404_NOT_FOUND, detail="Lecture not found"
         )
 
-    return LectureStatusResponse(**result.data[0])
+    row = result.data[0]
+    if row.get("processing_progress") is None:
+        row["processing_progress"] = 0.0
+    return LectureStatusResponse(**row)
 
 
 @router.get("/courses/{course_id}/lectures", response_model=list[LectureResponse])
@@ -412,6 +419,12 @@ async def list_course_lectures(
         .order("lecture_number", desc=True)
         .execute()
     )
+
+    # Sanitize nullable DB fields that Pydantic expects as non-null
+    for row in result.data or []:
+        if row.get("processing_progress") is None:
+            row["processing_progress"] = 0.0
+
     return result.data or []
 
 

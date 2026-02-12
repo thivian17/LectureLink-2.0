@@ -17,9 +17,134 @@ from lecturelink_api.models.api_models import (
     QuizSubmissionResult,
     QuizSubmitRequest,
 )
-from lecturelink_api.services.quiz import generate_quiz_background, score_quiz
+from lecturelink_api.services.quiz import run_quiz_generation, score_quiz
 
 router = APIRouter(prefix="/api", tags=["quizzes"])
+
+LABELS = ["A", "B", "C", "D"]
+
+
+def _resolve_correct_answer(raw_options: list | None, correct_answer: str | None) -> str | None:
+    """Resolve correct_answer to the option text the frontend displays.
+
+    The LLM may store correct_answer as a label ("A"), the full text, or
+    "A. text".  The frontend compares selectedAnswer (option text) against
+    correct_answer, so we must return the option text.
+    """
+    if not correct_answer or not raw_options:
+        return correct_answer
+
+    # Build text list and find the is_correct option
+    texts: list[str] = []
+    is_correct_text: str | None = None
+    for opt in raw_options:
+        if isinstance(opt, dict):
+            text = opt.get("text", "")
+            texts.append(text)
+            if opt.get("is_correct"):
+                is_correct_text = text
+        else:
+            texts.append(str(opt))
+
+    # If correct_answer already matches an option text, use it
+    for t in texts:
+        if correct_answer == t:
+            return correct_answer
+
+    # If correct_answer is a label (A/B/C/D), return corresponding text
+    label = correct_answer.strip().upper()
+    if label in LABELS:
+        idx = LABELS.index(label)
+        if idx < len(texts):
+            return texts[idx]
+
+    # If correct_answer is "A. Some text" format, strip the label prefix
+    if len(correct_answer) > 2 and correct_answer[1] in ".)" and correct_answer[0].upper() in LABELS:
+        stripped = correct_answer[2:].strip()
+        for t in texts:
+            if stripped == t:
+                return t
+
+    # Fall back to the is_correct flagged option
+    if is_correct_text:
+        return is_correct_text
+
+    return correct_answer
+
+
+def _resolve_correct_option_index(
+    raw_options: list | None,
+    correct_answer: str | None,
+    question_type: str | None = None,
+) -> int | None:
+    """Compute the 0-based index of the correct option.
+
+    For MCQ: checks is_correct flag first, then falls back to matching
+    correct_answer against labels/text.
+    For true_false: normalizes common variants to find the index.
+    For short_answer or missing options: returns None.
+    """
+    if not raw_options:
+        return None
+
+    # Strategy 1: Find the option with is_correct=True (most reliable)
+    for i, opt in enumerate(raw_options):
+        if isinstance(opt, dict) and opt.get("is_correct"):
+            return i
+
+    # No is_correct flags — fall back to matching correct_answer
+    if not correct_answer:
+        return None
+
+    # Build text list
+    texts: list[str] = []
+    for opt in raw_options:
+        if isinstance(opt, dict):
+            texts.append(opt.get("text", ""))
+        else:
+            texts.append(str(opt))
+
+    # Strategy 2a: Exact text match
+    for i, t in enumerate(texts):
+        if correct_answer == t:
+            return i
+
+    # Strategy 2b: Case-insensitive text match
+    ca_lower = correct_answer.strip().lower()
+    for i, t in enumerate(texts):
+        if ca_lower == t.strip().lower():
+            return i
+
+    # Strategy 3: Label match (A/B/C/D)
+    label = correct_answer.strip().upper()
+    if label in LABELS:
+        idx = LABELS.index(label)
+        if idx < len(texts):
+            return idx
+
+    # Strategy 4: "A. Some text" or "A) Some text" format
+    if (
+        len(correct_answer) > 2
+        and correct_answer[1] in ".)"
+        and correct_answer[0].upper() in LABELS
+    ):
+        stripped = correct_answer[2:].strip()
+        for i, t in enumerate(texts):
+            if stripped == t:
+                return i
+
+    # Strategy 5: true_false normalization
+    if question_type == "true_false":
+        if ca_lower in ("true", "t", "yes"):
+            for i, t in enumerate(texts):
+                if t.strip().lower() == "true":
+                    return i
+        elif ca_lower in ("false", "f", "no"):
+            for i, t in enumerate(texts):
+                if t.strip().lower() == "false":
+                    return i
+
+    return None
 
 
 def _sb(user: dict, settings: Settings):
@@ -64,6 +189,17 @@ async def generate_quiz(
         )
         if assessment.data:
             title = f"Quiz: {assessment.data[0]['title']}"
+    elif body.lecture_ids:
+        lectures = (
+            sb.table("lectures")
+            .select("title")
+            .in_("id", body.lecture_ids)
+            .execute()
+        )
+        if lectures.data:
+            names = [lec["title"] for lec in lectures.data[:2]]
+            suffix = f" +{len(lectures.data) - 2}" if len(lectures.data) > 2 else ""
+            title = f"Quiz: {', '.join(names)}{suffix}"
 
     # Create quiz record
     result = (
@@ -82,15 +218,18 @@ async def generate_quiz(
     )
     quiz_id = result.data[0]["id"]
 
-    # Trigger background generation
+    # Trigger background generation (sync function → runs in thread pool)
     background_tasks.add_task(
-        generate_quiz_background,
-        supabase=sb,
+        run_quiz_generation,
+        supabase_url=settings.SUPABASE_URL,
+        supabase_key=settings.SUPABASE_ANON_KEY,
+        user_token=user["token"],
         quiz_id=quiz_id,
         course_id=body.course_id,
         user_id=user["id"],
         target_assessment_id=body.target_assessment_id,
-        num_questions=body.num_questions,
+        lecture_ids=body.lecture_ids,
+        num_questions=body.question_count,
         difficulty=body.difficulty,
     )
 
@@ -132,20 +271,24 @@ async def get_quiz(
     if quiz["status"] == "ready":
         questions_result = (
             sb.table("quiz_questions")
-            .select("id, question_index, question_type, question_text, options")
+            .select(
+                "id, question_index, question_type, question_text, options,"
+                " correct_answer, explanation"
+            )
             .eq("quiz_id", quiz_id)
             .order("question_index")
             .execute()
         )
 
-        # CRITICAL: Strip is_correct from options — do NOT expose correct_answer
+        # Strip is_correct from options; resolve correct_answer to option text
         safe_questions = []
         for q in questions_result.data or []:
+            raw_options = q.get("options")
             safe_options = None
-            if q.get("options"):
+            if raw_options:
                 safe_options = [
-                    {"label": opt["label"], "text": opt["text"]}
-                    for opt in q["options"]
+                    opt.get("text", "") if isinstance(opt, dict) else str(opt)
+                    for opt in raw_options
                 ]
             safe_questions.append(
                 QuizQuestionResponse(
@@ -154,12 +297,127 @@ async def get_quiz(
                     question_type=q["question_type"],
                     question_text=q["question_text"],
                     options=safe_options,
+                    correct_answer=_resolve_correct_answer(
+                        raw_options, q.get("correct_answer")
+                    ),
+                    correct_option_index=_resolve_correct_option_index(
+                        raw_options, q.get("correct_answer"), q.get("question_type")
+                    ),
+                    explanation=q.get("explanation"),
                 ).model_dump()
             )
 
         response["questions"] = safe_questions
 
     return response
+
+
+@router.get("/quizzes/{quiz_id}/status")
+async def get_quiz_status(
+    quiz_id: str,
+    user: dict = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    sb = _sb(user, settings)
+
+    result = (
+        sb.table("quizzes")
+        .select("id, status, question_count")
+        .eq("id", quiz_id)
+        .eq("user_id", user["id"])
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Quiz not found"
+        )
+
+    quiz = result.data[0]
+    quiz_status = quiz["status"]
+
+    # Map status to a generation stage for the frontend progress UI
+    if quiz_status == "generating":
+        stage = "planning"
+    elif quiz_status == "ready":
+        stage = "ready"
+    elif quiz_status == "failed":
+        stage = "planning"
+    else:
+        stage = None
+
+    return {
+        "quiz_id": quiz["id"],
+        "status": quiz_status,
+        "stage": stage,
+        "error_message": "Quiz generation failed. Please try again." if quiz_status == "failed" else None,
+    }
+
+
+@router.get("/quizzes/{quiz_id}/questions", response_model=list[QuizQuestionResponse])
+async def get_quiz_questions(
+    quiz_id: str,
+    user: dict = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    sb = _sb(user, settings)
+
+    # Verify quiz belongs to user and is ready
+    quiz_result = (
+        sb.table("quizzes")
+        .select("id, status")
+        .eq("id", quiz_id)
+        .eq("user_id", user["id"])
+        .execute()
+    )
+    if not quiz_result.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Quiz not found"
+        )
+    if quiz_result.data[0]["status"] != "ready":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Quiz is not ready",
+        )
+
+    questions_result = (
+        sb.table("quiz_questions")
+        .select(
+            "id, question_index, question_type, question_text, options,"
+            " correct_answer, explanation"
+        )
+        .eq("quiz_id", quiz_id)
+        .order("question_index")
+        .execute()
+    )
+
+    # Strip is_correct from options; resolve correct_answer to option text
+    safe_questions = []
+    for q in questions_result.data or []:
+        raw_options = q.get("options")
+        safe_options = None
+        if raw_options:
+            safe_options = [
+                opt.get("text", "") if isinstance(opt, dict) else str(opt)
+                for opt in raw_options
+            ]
+        safe_questions.append(
+            QuizQuestionResponse(
+                id=q["id"],
+                question_index=q["question_index"],
+                question_type=q["question_type"],
+                question_text=q["question_text"],
+                options=safe_options,
+                correct_answer=_resolve_correct_answer(
+                    raw_options, q.get("correct_answer")
+                ),
+                correct_option_index=_resolve_correct_option_index(
+                    raw_options, q.get("correct_answer"), q.get("question_type")
+                ),
+                explanation=q.get("explanation"),
+            )
+        )
+
+    return safe_questions
 
 
 @router.post("/quizzes/{quiz_id}/submit", response_model=QuizSubmissionResult)
@@ -231,10 +489,11 @@ async def list_course_quizzes(
             id=q["id"],
             title=q["title"],
             status=q["status"],
-            question_count=q.get("question_count", 0),
-            difficulty=q.get("difficulty", "mixed"),
+            question_count=q.get("question_count") or 0,
+            difficulty=q.get("difficulty") or "mixed",
             best_score=q.get("best_score"),
-            attempt_count=q.get("attempt_count", 0),
+            attempt_count=q.get("attempt_count") or 0,
+            created_at=q["created_at"],
         )
         for q in result.data or []
     ]

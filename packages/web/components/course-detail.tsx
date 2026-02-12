@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import Link from "next/link";
-import { Pencil, Trash2, UploadCloud } from "lucide-react";
+import { CalendarDays, Pencil, Scale, Trash2, UploadCloud } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -40,7 +40,7 @@ import { QuizList } from "@/components/quiz/QuizList";
 import { SearchPageClient } from "@/components/search/search-page-client";
 import { FloatingQAButton } from "@/components/chat/floating-qa-button";
 import { deleteCourse, getAssessments } from "@/lib/api";
-import type { Course, Syllabus } from "@/types/database";
+import type { Assessment, Course, Syllabus } from "@/types/database";
 
 const GRADE_MAP: Record<string, string> = {
   "0.97": "A+ (97%)",
@@ -428,15 +428,7 @@ export function CourseDetail({
         </TabsContent>
 
         <TabsContent value="assessments" className="mt-6">
-          <Card className="flex flex-col items-center justify-center py-16">
-            <CardHeader className="items-center text-center">
-              <CardTitle>No assessments yet</CardTitle>
-              <CardDescription>
-                Assessments will appear here once you upload and process a
-                syllabus.
-              </CardDescription>
-            </CardHeader>
-          </Card>
+          <CourseAssessmentsTab courseId={course.id} />
         </TabsContent>
 
         <TabsContent value="lectures" className="mt-6">
@@ -523,4 +515,108 @@ function CourseCalendarTab({ course }: { course: Course }) {
   }
 
   return <AssessmentCalendar assessments={assessments} />;
+}
+
+// ---------------------------------------------------------------------------
+// CourseAssessmentsTab — lazy-loads and displays assessments for a course
+// ---------------------------------------------------------------------------
+
+function CourseAssessmentsTab({ courseId }: { courseId: string }) {
+  const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const data = await getAssessments(courseId);
+        if (cancelled) return;
+        setAssessments(data);
+      } catch {
+        toast.error("Failed to load assessments");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        {Array.from({ length: 4 }, (_, i) => (
+          <Card key={i}>
+            <CardContent className="pt-6 flex items-center gap-4">
+              <Skeleton className="h-5 w-1/3" />
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-24 ml-auto" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
+  if (assessments.length === 0) {
+    return (
+      <Card className="flex flex-col items-center justify-center py-16">
+        <CardHeader className="items-center text-center">
+          <CardTitle>No assessments yet</CardTitle>
+          <CardDescription>
+            Assessments will appear here once you upload and process a syllabus.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {assessments.map((a) => (
+        <Card key={a.id}>
+          <CardContent className="pt-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1 min-w-0">
+                <p className="font-medium leading-tight">{a.title}</p>
+                <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                  <Badge variant="outline" className="text-xs capitalize">
+                    {a.type}
+                  </Badge>
+                  {a.weight_percent != null && (
+                    <span className="flex items-center gap-1">
+                      <Scale className="h-3 w-3" />
+                      {a.weight_percent}%
+                    </span>
+                  )}
+                  {a.due_date && (
+                    <span className="flex items-center gap-1">
+                      <CalendarDays className="h-3 w-3" />
+                      {format(parseLocalDate(a.due_date), "MMM d, yyyy")}
+                      {a.is_date_ambiguous && (
+                        <span className="text-yellow-600" title="Date may be ambiguous">
+                          ?
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
+                {a.topics && a.topics.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {a.topics.map((topic) => (
+                      <Badge key={topic} variant="secondary" className="text-xs">
+                        {topic}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
 }

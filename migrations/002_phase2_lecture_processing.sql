@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS quizzes (
         CHECK (difficulty IN ('easy', 'medium', 'hard', 'adaptive')),
     status TEXT DEFAULT 'pending'
         CHECK (status IN ('pending', 'generating', 'ready', 'failed')),
+    question_count INT DEFAULT 0,
     best_score FLOAT,
     attempt_count INT DEFAULT 0,
     last_attempted_at TIMESTAMPTZ,
@@ -118,6 +119,9 @@ CREATE TABLE IF NOT EXISTS quizzes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_quizzes_course ON quizzes(course_id, user_id);
+
+-- Backfill for existing deployments
+ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS question_count INT DEFAULT 0;
 
 -- ============================================================
 -- Table 6: quiz_questions

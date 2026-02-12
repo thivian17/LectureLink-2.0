@@ -176,7 +176,7 @@ export function QuizTakingClient({
     try {
       const quizAnswers: QuizAnswer[] = questions.map((q) => ({
         question_id: q.id,
-        selected_answer: answers.get(q.id) ?? null,
+        student_answer: answers.get(q.id) ?? "",
         time_spent_seconds: timers.get(q.id) ?? 0,
       }));
       const result = await submitQuiz(quizId, quizAnswers);

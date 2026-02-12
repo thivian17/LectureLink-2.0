@@ -149,7 +149,7 @@ class TestQuizGenerate:
             patch(
                 "lecturelink_api.routers.quizzes.check_rate_limit",
             ),
-            patch("lecturelink_api.routers.quizzes.generate_quiz_background"),
+            patch("lecturelink_api.routers.quizzes.run_quiz_generation"),
         ):
             sb = MagicMock()
             mock_create.return_value = sb
@@ -204,7 +204,7 @@ class TestQuizGenerate:
 
 class TestQuizGet:
     @pytest.mark.asyncio
-    async def test_get_ready_quiz_strips_answers(self, client):
+    async def test_get_ready_quiz_includes_answers(self, client):
         quiz = _sample_quiz()
         questions = _sample_questions(quiz["id"])
 
@@ -233,13 +233,24 @@ class TestQuizGet:
         assert "questions" in data
         assert len(data["questions"]) == 2
 
-        # CRITICAL: Verify answers are stripped
+        # Verify correct_answer, correct_option_index, and explanation are included
         for q in data["questions"]:
-            assert "correct_answer" not in q
-            assert "explanation" not in q
+            assert "correct_answer" in q
+            assert "correct_option_index" in q
+            assert "explanation" in q
+            # is_correct should still be stripped from options
             if q.get("options"):
                 for opt in q["options"]:
                     assert "is_correct" not in opt
+
+        # MCQ: correct_answer="A" with option A is_correct → index 0
+        mcq = [q for q in data["questions"] if q["question_type"] == "mcq"][0]
+        assert mcq["correct_option_index"] == 0
+        assert mcq["correct_answer"] == "A region of space"
+
+        # True/false: correct_answer="False" with False is_correct → index 1
+        tf = [q for q in data["questions"] if q["question_type"] == "true_false"][0]
+        assert tf["correct_option_index"] == 1
 
     @pytest.mark.asyncio
     async def test_get_generating_quiz_no_questions(self, client):

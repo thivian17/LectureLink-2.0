@@ -11,6 +11,7 @@ interface MCQOptionsProps {
   onSelect: (answer: string) => void;
   disabled?: boolean;
   correctAnswer?: string;
+  correctOptionIndex?: number | null;
   showFeedback?: boolean;
 }
 
@@ -20,14 +21,19 @@ export function MCQOptions({
   onSelect,
   disabled,
   correctAnswer,
+  correctOptionIndex,
   showFeedback,
 }: MCQOptionsProps) {
   return (
     <div className="space-y-3">
       {options.map((option, i) => {
         const isSelected = selectedAnswer === option;
-        const isCorrect = showFeedback && option === correctAnswer;
-        const isWrong = showFeedback && isSelected && option !== correctAnswer;
+        const isCorrectOption =
+          correctOptionIndex != null
+            ? i === correctOptionIndex
+            : option === correctAnswer;
+        const isCorrect = showFeedback && isCorrectOption;
+        const isWrong = showFeedback && isSelected && !isCorrectOption;
 
         return (
           <button

@@ -138,6 +138,7 @@ class TestQuizResponse:
             question_count=5,
             difficulty="medium",
             attempt_count=0,
+            created_at="2026-01-15T10:00:00Z",
         )
         assert qr.best_score is None
 
@@ -150,6 +151,7 @@ class TestQuizResponse:
             difficulty="hard",
             best_score=0.8,
             attempt_count=3,
+            created_at="2026-01-15T10:00:00Z",
         )
         assert qr.best_score == 0.8
 
@@ -164,9 +166,39 @@ class TestQuizQuestionResponse:
         )
         assert qqr.options is None
 
-    def test_excludes_correct_answer(self):
-        """QuizQuestionResponse must NOT expose correct_answer to the client."""
-        assert "correct_answer" not in QuizQuestionResponse.model_fields
+    def test_includes_correct_answer_and_explanation(self):
+        """QuizQuestionResponse includes correct_answer and explanation for feedback."""
+        qqr = QuizQuestionResponse(
+            id="qq1",
+            question_index=0,
+            question_type="mcq",
+            question_text="What is 2+2?",
+            correct_answer="4",
+            explanation="Basic arithmetic.",
+        )
+        assert qqr.correct_answer == "4"
+        assert qqr.explanation == "Basic arithmetic."
+
+    def test_correct_option_index(self):
+        qqr = QuizQuestionResponse(
+            id="qq1",
+            question_index=0,
+            question_type="mcq",
+            question_text="What is 2+2?",
+            options=["3", "4", "5", "6"],
+            correct_answer="4",
+            correct_option_index=1,
+        )
+        assert qqr.correct_option_index == 1
+
+    def test_correct_option_index_defaults_none(self):
+        qqr = QuizQuestionResponse(
+            id="qq1",
+            question_index=0,
+            question_type="short_answer",
+            question_text="What is 2+2?",
+        )
+        assert qqr.correct_option_index is None
 
     def test_with_options(self):
         qqr = QuizQuestionResponse(
@@ -174,9 +206,9 @@ class TestQuizQuestionResponse:
             question_index=0,
             question_type="mcq",
             question_text="What is 2+2?",
-            options=[{"label": "A", "text": "4"}, {"label": "B", "text": "5"}],
+            options=["4", "5", "3", "6"],
         )
-        assert len(qqr.options) == 2
+        assert len(qqr.options) == 4
 
 
 class TestQuizSubmissionResult:

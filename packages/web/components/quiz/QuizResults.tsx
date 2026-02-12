@@ -4,34 +4,23 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Trophy,
-  Clock,
   ChevronDown,
   ChevronUp,
   Check,
   X,
-  BookOpen,
   RotateCcw,
   Plus,
   ArrowLeft,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
-import { ConceptPerformance } from "@/components/quiz/ConceptPerformance";
 import { cn } from "@/lib/utils";
 import type { QuizSubmissionResult, QuestionResult } from "@/types/database";
-
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
-}
 
 type Filter = "all" | "incorrect" | "correct";
 
@@ -46,7 +35,7 @@ export function QuizResults({ result, courseId, quizId }: QuizResultsProps) {
   const [filter, setFilter] = useState<Filter>("all");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-  const filtered = result.per_question.filter((q) => {
+  const filtered = result.results.filter((q) => {
     if (filter === "incorrect") return !q.is_correct;
     if (filter === "correct") return q.is_correct;
     return true;
@@ -69,25 +58,11 @@ export function QuizResults({ result, courseId, quizId }: QuizResultsProps) {
           <div className="flex flex-col items-center text-center space-y-2">
             <Trophy className="h-8 w-8 text-yellow-500" />
             <p className="text-sm text-muted-foreground">Your Score</p>
-            <p className="text-5xl font-bold">{result.score}%</p>
+            <p className="text-5xl font-bold">{Math.round(result.score)}%</p>
             <p className="text-sm text-muted-foreground">
               {result.correct_count} of {result.total_questions} correct
             </p>
-            <div className="flex gap-6 pt-2 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Clock className="h-4 w-4" />
-                {formatTime(result.time_total_seconds)}
-              </span>
-              <span>Attempt #{result.attempt_number}</span>
-            </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Concept performance */}
-      <Card>
-        <CardContent className="pt-6">
-          <ConceptPerformance concepts={result.concept_performance} />
         </CardContent>
       </Card>
 
@@ -111,13 +86,13 @@ export function QuizResults({ result, courseId, quizId }: QuizResultsProps) {
 
       {/* Per-question review */}
       <div className="space-y-2">
-        {filtered.map((q) => (
+        {filtered.map((q, idx) => (
           <QuestionReviewItem
             key={q.question_id}
             question={q}
+            questionNumber={idx + 1}
             expanded={expandedIds.has(q.question_id)}
             onToggle={() => toggleExpand(q.question_id)}
-            courseId={courseId}
           />
         ))}
         {filtered.length === 0 && (
@@ -164,15 +139,17 @@ export function QuizResults({ result, courseId, quizId }: QuizResultsProps) {
 
 function QuestionReviewItem({
   question,
+  questionNumber,
   expanded,
   onToggle,
-  courseId,
 }: {
   question: QuestionResult;
+  questionNumber: number;
   expanded: boolean;
   onToggle: () => void;
-  courseId: string;
 }) {
+  const questionText = question.question_text ?? "";
+
   return (
     <Card>
       <button
@@ -188,12 +165,12 @@ function QuestionReviewItem({
                 <X className="h-4 w-4 text-red-600 shrink-0" />
               )}
               <span className="text-sm font-medium">
-                Q{question.question_number}.
+                Q{questionNumber}.
               </span>
               <span className="text-sm truncate">
-                {question.question_text.length > 80
-                  ? question.question_text.slice(0, 80) + "..."
-                  : question.question_text}
+                {questionText.length > 80
+                  ? questionText.slice(0, 80) + "..."
+                  : questionText}
               </span>
             </div>
             {expanded ? (
@@ -206,7 +183,7 @@ function QuestionReviewItem({
       </button>
       {expanded && (
         <CardContent className="pt-0 px-4 pb-4 space-y-3">
-          <p className="text-sm">{question.question_text}</p>
+          {questionText && <p className="text-sm">{questionText}</p>}
 
           {question.options && (
             <div className="space-y-1">
@@ -216,14 +193,14 @@ function QuestionReviewItem({
                   className={cn(
                     "text-sm px-3 py-1.5 rounded",
                     opt === question.correct_answer && "bg-green-50 text-green-700 font-medium",
-                    opt === question.selected_answer &&
+                    opt === question.student_answer &&
                       opt !== question.correct_answer &&
                       "bg-red-50 text-red-700 line-through",
                   )}
                 >
                   {String.fromCharCode(65 + i)}) {opt}
-                  {opt === question.correct_answer && " ✓"}
-                  {opt === question.selected_answer &&
+                  {opt === question.correct_answer && " \u2713"}
+                  {opt === question.student_answer &&
                     opt !== question.correct_answer &&
                     " (your answer)"}
                 </div>
@@ -241,7 +218,7 @@ function QuestionReviewItem({
                     : "bg-red-50 text-red-700",
                 )}
               >
-                Your answer: {question.selected_answer ?? "(skipped)"}
+                Your answer: {question.student_answer || "(skipped)"}
               </div>
               {!question.is_correct && (
                 <div className="px-3 py-1.5 rounded bg-green-50 text-green-700">
@@ -251,32 +228,11 @@ function QuestionReviewItem({
             </div>
           )}
 
-          <p className="text-sm text-muted-foreground">
-            {question.explanation}
-          </p>
-
-          <div className="flex items-center gap-3">
-            {question.concept && (
-              <Badge variant="secondary" className="text-xs">
-                {question.concept}
-              </Badge>
-            )}
-            {question.source_lecture_id && question.source_lecture_title && (
-              <a
-                href={`/dashboard/courses/${courseId}/lectures/${question.source_lecture_id}${
-                  question.source_timestamp_seconds != null
-                    ? `?t=${question.source_timestamp_seconds}`
-                    : ""
-                }`}
-                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-              >
-                <BookOpen className="h-3 w-3" />
-                {question.source_lecture_title}
-                {question.source_timestamp_seconds != null &&
-                  ` at ${Math.floor(question.source_timestamp_seconds / 60)}:${String(question.source_timestamp_seconds % 60).padStart(2, "0")}`}
-              </a>
-            )}
-          </div>
+          {question.explanation && (
+            <p className="text-sm text-muted-foreground">
+              {question.explanation}
+            </p>
+          )}
         </CardContent>
       )}
     </Card>

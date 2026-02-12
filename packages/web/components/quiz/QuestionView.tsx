@@ -7,6 +7,38 @@ import { QuestionFeedback } from "@/components/quiz/QuestionFeedback";
 import { Badge } from "@/components/ui/badge";
 import type { QuizQuestion } from "@/types/database";
 
+function checkAnswerCorrectness(
+  question: QuizQuestion,
+  selectedAnswer: string | null,
+): boolean {
+  if (selectedAnswer == null || selectedAnswer === "") return false;
+
+  // MCQ: compare selected text against the option at correct_option_index
+  if (question.question_type === "mcq") {
+    if (question.correct_option_index != null && question.options) {
+      return question.options[question.correct_option_index] === selectedAnswer;
+    }
+    // Fallback: case-insensitive text comparison
+    return selectedAnswer.trim().toLowerCase() === (question.correct_answer ?? "").trim().toLowerCase();
+  }
+
+  // True/False: use hardcoded ["True", "False"] to match TrueFalseOptions component
+  if (question.question_type === "true_false") {
+    if (question.correct_option_index != null) {
+      const tfOptions = ["True", "False"];
+      return tfOptions[question.correct_option_index] === selectedAnswer;
+    }
+    return selectedAnswer.trim().toLowerCase() === (question.correct_answer ?? "").trim().toLowerCase();
+  }
+
+  // Short answer: case-insensitive trimmed comparison
+  if (question.question_type === "short_answer") {
+    return selectedAnswer.trim().toLowerCase() === (question.correct_answer ?? "").trim().toLowerCase();
+  }
+
+  return false;
+}
+
 interface QuestionViewProps {
   question: QuizQuestion;
   selectedAnswer: string | null;
@@ -22,7 +54,7 @@ export function QuestionView({
   showFeedback,
   courseId,
 }: QuestionViewProps) {
-  const isCorrect = selectedAnswer === question.correct_answer;
+  const isCorrect = checkAnswerCorrectness(question, selectedAnswer);
   const feedbackDisabled = showFeedback;
 
   return (
@@ -45,6 +77,7 @@ export function QuestionView({
           onSelect={onAnswer}
           disabled={feedbackDisabled}
           correctAnswer={question.correct_answer}
+          correctOptionIndex={question.correct_option_index}
           showFeedback={showFeedback}
         />
       )}
@@ -55,6 +88,7 @@ export function QuestionView({
           onSelect={onAnswer}
           disabled={feedbackDisabled}
           correctAnswer={question.correct_answer}
+          correctOptionIndex={question.correct_option_index}
           showFeedback={showFeedback}
         />
       )}
@@ -70,13 +104,13 @@ export function QuestionView({
         />
       )}
 
-      {showFeedback && selectedAnswer != null && (
+      {showFeedback && selectedAnswer != null && question.explanation && (
         <QuestionFeedback
           isCorrect={isCorrect}
           explanation={question.explanation}
-          sourceLectureId={question.source_lecture_id}
-          sourceLectureTitle={question.source_lecture_title}
-          sourceTimestampSeconds={question.source_timestamp_seconds}
+          sourceLectureId={question.source_lecture_id ?? null}
+          sourceLectureTitle={question.source_lecture_title ?? null}
+          sourceTimestampSeconds={question.source_timestamp_seconds ?? null}
           courseId={courseId}
         />
       )}

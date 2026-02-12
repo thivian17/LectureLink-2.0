@@ -6,30 +6,79 @@ Uses a generator-critic loop for high-quality question generation:
 3. Critique: LLM reviews for faithfulness, clarity, difficulty
 4. Revise: flagged questions regenerated with feedback (max 3 iterations)
 5. Score: check student answers against correct answers
+
+IMPORTANT: ``run_quiz_generation`` is a **sync** function so that
+FastAPI's ``BackgroundTasks`` runs it in a thread-pool instead of the
+main async event loop.  The quiz pipeline uses async Gemini calls mixed
+with sync Supabase calls — running async on the main loop would block
+the entire server.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
+from supabase import create_client
+
 logger = logging.getLogger(__name__)
 
+DIFFICULTY_TO_FLOAT = {"easy": 0.3, "medium": 0.5, "hard": 0.8}
 
-async def generate_quiz_background(
+
+def _difficulty_float(val) -> float:
+    """Convert a difficulty value to float for the DB column."""
+    if isinstance(val, (int, float)):
+        return float(val)
+    return DIFFICULTY_TO_FLOAT.get(str(val).lower(), 0.5)
+
+
+def run_quiz_generation(
+    supabase_url: str,
+    supabase_key: str,
+    user_token: str,
+    quiz_id: str,
+    course_id: str,
+    user_id: str,
+    target_assessment_id: str | None = None,
+    lecture_ids: list[str] | None = None,
+    num_questions: int = 10,
+    difficulty: str = "mixed",
+) -> None:
+    """Background task for quiz generation.
+
+    This is a **sync** function on purpose — FastAPI will run it in a
+    thread-pool worker, keeping the main event loop responsive.  A
+    private event loop is created for the async pipeline stages.
+    """
+    sb = create_client(supabase_url, supabase_key)
+    sb.auth.set_session(user_token, "")
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(
+            _generate_quiz_async(
+                sb, quiz_id, course_id, user_id,
+                target_assessment_id, lecture_ids,
+                num_questions, difficulty,
+            )
+        )
+    finally:
+        loop.close()
+
+
+async def _generate_quiz_async(
     supabase,
     quiz_id: str,
     course_id: str,
     user_id: str,
     target_assessment_id: str | None = None,
+    lecture_ids: list[str] | None = None,
     num_questions: int = 10,
     difficulty: str = "mixed",
 ) -> None:
-    """Background task: generate quiz questions using generator-critic loop.
-
-    Updates the quiz record with generated questions and sets status to 'ready'.
-    On failure, sets status to 'failed' with error message.
-    """
+    """Async quiz generation executed inside the background thread's event loop."""
     try:
         from .quiz_loop import run_quiz_generation_loop
         from .quiz_planner import plan_quiz
@@ -41,6 +90,7 @@ async def generate_quiz_background(
                 course_id=course_id,
                 user_id=user_id,
                 target_assessment_id=target_assessment_id,
+                lecture_ids=lecture_ids,
                 num_questions=num_questions,
                 difficulty=difficulty if difficulty != "mixed" else "medium",
             )
@@ -52,7 +102,8 @@ async def generate_quiz_background(
             )
             await _generate_simple(
                 supabase, quiz_id, course_id, user_id,
-                target_assessment_id, num_questions, difficulty,
+                target_assessment_id, lecture_ids,
+                num_questions, difficulty,
             )
             return
 
@@ -76,13 +127,14 @@ async def generate_quiz_background(
         for q in questions:
             question_rows.append({
                 "quiz_id": quiz_id,
+                "user_id": user_id,
                 "question_index": q["question_index"],
                 "question_type": q.get("question_type", "mcq"),
                 "question_text": q["question_text"],
                 "options": q.get("options", []),
                 "correct_answer": q["correct_answer"],
                 "explanation": q.get("explanation", ""),
-                "difficulty": q.get("difficulty", "medium"),
+                "difficulty": _difficulty_float(q.get("difficulty", 0.5)),
                 "source_chunk_ids": q.get("source_chunk_ids", []),
                 "concept_id": q.get("concept_id"),
             })
@@ -131,6 +183,7 @@ async def _generate_simple(
     course_id: str,
     user_id: str,
     target_assessment_id: str | None,
+    lecture_ids: list[str] | None,
     num_questions: int,
     difficulty: str,
 ) -> None:
@@ -164,6 +217,7 @@ async def _generate_simple(
         supabase=supabase,
         course_id=course_id,
         query=query,
+        lecture_ids=lecture_ids,
         limit=15,
         user_id=user_id,
     )
@@ -209,13 +263,14 @@ Output as JSON array of question objects."""
     for i, q in enumerate(questions):
         question_rows.append({
             "quiz_id": quiz_id,
+            "user_id": user_id,
             "question_index": i,
             "question_type": q.get("question_type", "mcq"),
             "question_text": q["question_text"],
             "options": q.get("options", []),
             "correct_answer": q["correct_answer"],
             "explanation": q.get("explanation", ""),
-            "difficulty": q.get("difficulty", "medium"),
+            "difficulty": _difficulty_float(q.get("difficulty", 0.5)),
             "source_chunk_ids": [],
         })
 
@@ -272,13 +327,24 @@ def score_quiz(
         if is_correct:
             correct_count += 1
 
+        # Strip is_correct from options for the response
+        raw_options = question.get("options") or []
+        safe_options = [
+            opt.get("text", "") if isinstance(opt, dict) else str(opt)
+            for opt in raw_options
+        ] if raw_options else None
+
         results.append({
             "question_id": answer["question_id"],
             "is_correct": is_correct,
             "student_answer": answer["student_answer"],
             "correct_answer": question["correct_answer"],
             "explanation": question.get("explanation", ""),
+            "question_text": question.get("question_text", ""),
+            "question_type": question.get("question_type", "mcq"),
+            "options": safe_options,
             "source_chunk_ids": question.get("source_chunk_ids", []),
+            "concept_id": question.get("concept_id"),
         })
 
         # Save attempt
@@ -286,6 +352,7 @@ def score_quiz(
             supabase.table("quiz_attempts")
             .insert({
                 "quiz_id": quiz_id,
+                "user_id": question.get("user_id"),
                 "question_id": answer["question_id"],
                 "student_answer": answer["student_answer"],
                 "is_correct": is_correct,

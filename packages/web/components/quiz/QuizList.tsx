@@ -15,11 +15,12 @@ import { ErrorState } from "@/components/error-state";
 import {
   getQuizzes,
   getAssessments,
+  getLectures,
   generateQuiz,
   AuthError,
   RateLimitError,
 } from "@/lib/api";
-import type { Quiz, Assessment, QuizDifficulty } from "@/types/database";
+import type { Quiz, Assessment, Lecture, QuizDifficulty } from "@/types/database";
 
 interface QuizListProps {
   courseId: string;
@@ -31,6 +32,7 @@ export function QuizList({ courseId, courseName }: QuizListProps) {
   const searchParams = useSearchParams();
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [lectures, setLectures] = useState<Lecture[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [dialogOpen, setDialogOpen] = useState(
@@ -42,20 +44,39 @@ export function QuizList({ courseId, courseName }: QuizListProps) {
     setLoading(true);
     setError(null);
     try {
-      const [quizData, assessmentData] = await Promise.all([
-        getQuizzes(courseId),
-        getAssessments(courseId),
-      ]);
-      setQuizzes(quizData);
-      setAssessments(assessmentData);
+      // Use allSettled so one failure doesn't block the rest
+      const [quizResult, assessmentResult, lectureResult] =
+        await Promise.allSettled([
+          getQuizzes(courseId),
+          getAssessments(courseId),
+          getLectures(courseId),
+        ]);
+
+      // Check for auth errors first
+      for (const r of [quizResult, assessmentResult, lectureResult]) {
+        if (r.status === "rejected" && r.reason instanceof AuthError) {
+          toast.error("Session expired. Please log in again.");
+          router.push("/login");
+          return;
+        }
+      }
+
+      if (quizResult.status === "fulfilled") {
+        setQuizzes(quizResult.value);
+      } else {
+        throw quizResult.reason;
+      }
+
+      // Assessments and lectures are optional — dialog still works without them
+      if (assessmentResult.status === "fulfilled") {
+        setAssessments(assessmentResult.value);
+      }
+      if (lectureResult.status === "fulfilled") {
+        setLectures(lectureResult.value);
+      }
     } catch (err) {
       const e = err instanceof Error ? err : new Error("Failed to load quizzes");
       setError(e);
-      if (err instanceof AuthError) {
-        toast.error("Session expired. Please log in again.");
-        router.push("/login");
-        return;
-      }
       if (err instanceof RateLimitError) {
         toast.error(
           `Rate limit reached. Try again in ${Math.ceil(err.retryAfterSeconds / 60)} min.`,
@@ -80,6 +101,7 @@ export function QuizList({ courseId, courseName }: QuizListProps) {
 
   async function handleGenerate(options: {
     target_assessment_id: string | null;
+    lecture_ids: string[] | null;
     question_count: number;
     difficulty: QuizDifficulty;
   }) {
@@ -99,6 +121,17 @@ export function QuizList({ courseId, courseName }: QuizListProps) {
     }
   }
 
+  // Always render the dialog so it's available in every state
+  const dialog = (
+    <GenerateQuizDialog
+      open={dialogOpen}
+      onOpenChange={setDialogOpen}
+      assessments={assessments}
+      lectures={lectures}
+      onGenerate={handleGenerate}
+    />
+  );
+
   if (generatingQuizId) {
     return (
       <div className="space-y-6">
@@ -112,6 +145,7 @@ export function QuizList({ courseId, courseName }: QuizListProps) {
             courseId={courseId}
           />
         </div>
+        {dialog}
       </div>
     );
   }
@@ -139,6 +173,7 @@ export function QuizList({ courseId, courseName }: QuizListProps) {
             </Card>
           ))}
         </div>
+        {dialog}
       </div>
     );
   }
@@ -151,6 +186,7 @@ export function QuizList({ courseId, courseName }: QuizListProps) {
           onGenerate={() => setDialogOpen(true)}
         />
         <ErrorState error={error} onRetry={loadQuizzes} />
+        {dialog}
       </div>
     );
   }
@@ -173,12 +209,7 @@ export function QuizList({ courseId, courseName }: QuizListProps) {
             Generate Quiz
           </Button>
         </div>
-        <GenerateQuizDialog
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          assessments={assessments}
-          onGenerate={handleGenerate}
-        />
+        {dialog}
       </div>
     );
   }
@@ -194,12 +225,7 @@ export function QuizList({ courseId, courseName }: QuizListProps) {
           <QuizCard key={quiz.id} quiz={quiz} courseId={courseId} />
         ))}
       </div>
-      <GenerateQuizDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        assessments={assessments}
-        onGenerate={handleGenerate}
-      />
+      {dialog}
     </div>
   );
 }

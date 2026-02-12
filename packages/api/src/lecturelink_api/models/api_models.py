@@ -169,14 +169,17 @@ class QuizResponse(BaseModel):
     difficulty: str
     best_score: float | None = None
     attempt_count: int
+    created_at: datetime
 
 class QuizQuestionResponse(BaseModel):
     id: str
     question_index: int
     question_type: str
     question_text: str
-    options: list[dict] | None = None
-    # Note: correct_answer NOT included until after submission
+    options: list[str] | None = None
+    correct_answer: str | None = None
+    correct_option_index: int | None = None
+    explanation: str | None = None
 
 class QuizSubmissionResult(BaseModel):
     score: float
@@ -260,7 +263,8 @@ class QARequest(BaseModel):
 class QuizGenerateRequest(BaseModel):
     course_id: str
     target_assessment_id: str | None = None
-    num_questions: int = Field(default=10, ge=1, le=30)
+    lecture_ids: list[str] | None = None
+    question_count: int = Field(default=10, ge=1, le=30)
     difficulty: str = "mixed"
 
 

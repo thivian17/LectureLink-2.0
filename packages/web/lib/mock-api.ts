@@ -9,7 +9,6 @@ import type {
   QuizQuestion,
   QuizSubmissionResult,
   QuestionResult,
-  ConceptPerformance,
   QuizGenerationStatus,
   QuizAnswer,
   QuizDifficulty,
@@ -278,6 +277,7 @@ async function mockGetLectureDetail(lectureId: string): Promise<LectureDetail> {
     concepts: lecture.processing_status === "completed" ? mockConcepts : [],
     slides: lecture.processing_status === "completed" ? mockSlides : [],
     processing_path: "audio+slides",
+    slide_count: lecture.processing_status === "completed" ? mockSlides.length : null,
   };
 }
 
@@ -352,7 +352,7 @@ const mockQuizQuestions: QuizQuestion[] = [
   {
     id: "q-1",
     quiz_id: "quiz-1",
-    question_number: 1,
+    question_index: 1,
     question_type: "mcq",
     question_text:
       "What is the primary function of the mitochondria in cellular respiration?",
@@ -363,6 +363,7 @@ const mockQuizQuestions: QuizQuestion[] = [
       "It regulates cell division",
     ],
     correct_answer: "It produces ATP through oxidative phosphorylation",
+    correct_option_index: 1,
     explanation:
       "The mitochondria is known as the powerhouse of the cell because it produces ATP (adenosine triphosphate) through oxidative phosphorylation, which is the primary energy currency of the cell.",
     concept: "Cellular Respiration",
@@ -373,7 +374,7 @@ const mockQuizQuestions: QuizQuestion[] = [
   {
     id: "q-2",
     quiz_id: "quiz-1",
-    question_number: 2,
+    question_index: 2,
     question_type: "mcq",
     question_text: "Which law of thermodynamics states that energy cannot be created or destroyed?",
     options: [
@@ -383,6 +384,7 @@ const mockQuizQuestions: QuizQuestion[] = [
       "Third Law",
     ],
     correct_answer: "First Law",
+    correct_option_index: 1,
     explanation:
       "The First Law of Thermodynamics, also known as the Law of Conservation of Energy, states that energy cannot be created or destroyed in an isolated system.",
     concept: "First Law of Thermodynamics",
@@ -393,7 +395,7 @@ const mockQuizQuestions: QuizQuestion[] = [
   {
     id: "q-3",
     quiz_id: "quiz-1",
-    question_number: 3,
+    question_index: 3,
     question_type: "mcq",
     question_text: "What is entropy a measure of?",
     options: [
@@ -403,6 +405,7 @@ const mockQuizQuestions: QuizQuestion[] = [
       "Volume of a gas",
     ],
     correct_answer: "Disorder or randomness in a system",
+    correct_option_index: 2,
     explanation:
       "Entropy is a thermodynamic quantity representing the unavailability of a system's thermal energy for conversion into mechanical work, often interpreted as the degree of disorder or randomness in the system.",
     concept: "Entropy",
@@ -413,7 +416,7 @@ const mockQuizQuestions: QuizQuestion[] = [
   {
     id: "q-4",
     quiz_id: "quiz-1",
-    question_number: 4,
+    question_index: 4,
     question_type: "mcq",
     question_text: "In an adiabatic process, what is transferred between the system and surroundings?",
     options: [
@@ -423,6 +426,7 @@ const mockQuizQuestions: QuizQuestion[] = [
       "Neither heat nor work",
     ],
     correct_answer: "Work only",
+    correct_option_index: 1,
     explanation:
       "In an adiabatic process, no heat is transferred between the system and its surroundings. Only work can be exchanged.",
     concept: "Adiabatic Process",
@@ -433,7 +437,7 @@ const mockQuizQuestions: QuizQuestion[] = [
   {
     id: "q-5",
     quiz_id: "quiz-1",
-    question_number: 5,
+    question_index: 5,
     question_type: "mcq",
     question_text: "What does the Zeroth Law of Thermodynamics establish?",
     options: [
@@ -443,6 +447,7 @@ const mockQuizQuestions: QuizQuestion[] = [
       "Absolute zero temperature",
     ],
     correct_answer: "Concept of temperature and thermal equilibrium",
+    correct_option_index: 2,
     explanation:
       "The Zeroth Law states that if two systems are each in thermal equilibrium with a third system, they are in thermal equilibrium with each other, establishing the concept of temperature.",
     concept: "Zeroth Law",
@@ -453,11 +458,12 @@ const mockQuizQuestions: QuizQuestion[] = [
   {
     id: "q-6",
     quiz_id: "quiz-1",
-    question_number: 6,
+    question_index: 6,
     question_type: "true_false",
     question_text: "In an isothermal process, the temperature of the system remains constant.",
     options: ["True", "False"],
     correct_answer: "True",
+    correct_option_index: 0,
     explanation:
       "By definition, an isothermal process occurs at a constant temperature. The system exchanges heat with the surroundings to maintain this temperature.",
     concept: "Isothermal Process",
@@ -468,11 +474,12 @@ const mockQuizQuestions: QuizQuestion[] = [
   {
     id: "q-7",
     quiz_id: "quiz-1",
-    question_number: 7,
+    question_index: 7,
     question_type: "true_false",
     question_text: "Heat always flows from a cold body to a hot body spontaneously.",
     options: ["True", "False"],
     correct_answer: "False",
+    correct_option_index: 1,
     explanation:
       "The Second Law of Thermodynamics states that heat spontaneously flows from hot to cold, not the reverse. Energy is required to transfer heat from cold to hot (e.g., refrigeration).",
     concept: "Second Law of Thermodynamics",
@@ -483,11 +490,12 @@ const mockQuizQuestions: QuizQuestion[] = [
   {
     id: "q-8",
     quiz_id: "quiz-1",
-    question_number: 8,
+    question_index: 8,
     question_type: "true_false",
     question_text: "Internal energy is a state function that depends on the path taken.",
     options: ["True", "False"],
     correct_answer: "False",
+    correct_option_index: 1,
     explanation:
       "Internal energy is a state function, meaning it depends only on the current state of the system, not on the path taken to reach that state.",
     concept: "Internal Energy",
@@ -498,11 +506,12 @@ const mockQuizQuestions: QuizQuestion[] = [
   {
     id: "q-9",
     quiz_id: "quiz-1",
-    question_number: 9,
+    question_index: 9,
     question_type: "short_answer",
     question_text: "What is the formula for the First Law of Thermodynamics? Express it in terms of internal energy (U), heat (Q), and work (W).",
     options: null,
     correct_answer: "ΔU = Q - W",
+    correct_option_index: null,
     explanation:
       "The First Law of Thermodynamics is expressed as ΔU = Q - W, where ΔU is the change in internal energy, Q is the heat added to the system, and W is the work done by the system.",
     concept: "First Law of Thermodynamics",
@@ -513,11 +522,12 @@ const mockQuizQuestions: QuizQuestion[] = [
   {
     id: "q-10",
     quiz_id: "quiz-1",
-    question_number: 10,
+    question_index: 10,
     question_type: "short_answer",
     question_text: "Name the thermodynamic process in which no heat exchange occurs between the system and its surroundings.",
     options: null,
     correct_answer: "Adiabatic",
+    correct_option_index: null,
     explanation:
       "An adiabatic process is one in which no heat is transferred between the system and its surroundings. The system is thermally insulated.",
     concept: "Adiabatic Process",
@@ -550,7 +560,7 @@ async function mockGetQuizQuestions(quizId: string): Promise<QuizQuestion[]> {
   await delay(300);
   return mockQuizQuestions
     .filter((q) => q.quiz_id === quizId)
-    .sort((a, b) => a.question_number - b.question_number);
+    .sort((a, b) => a.question_index - b.question_index);
 }
 
 async function mockGenerateQuiz(
@@ -603,50 +613,36 @@ async function mockSubmitQuiz(
 ): Promise<QuizSubmissionResult> {
   await delay(500);
   const questions = mockQuizQuestions.filter((q) => q.quiz_id === "quiz-1");
-  const perQuestion: QuestionResult[] = questions.map((q) => {
+  const questionResults: QuestionResult[] = questions.map((q) => {
     const answer = answers.find((a) => a.question_id === q.id);
-    const isCorrect = answer?.selected_answer === q.correct_answer;
+    const studentAnswer = answer?.student_answer ?? "";
+    let isCorrect = false;
+    if (studentAnswer && q.correct_option_index != null && q.options) {
+      isCorrect = q.options.indexOf(studentAnswer) === q.correct_option_index;
+    } else if (studentAnswer && q.correct_answer) {
+      isCorrect =
+        studentAnswer.trim().toLowerCase() ===
+        q.correct_answer.trim().toLowerCase();
+    }
     return {
       question_id: q.id,
-      question_number: q.question_number,
+      is_correct: isCorrect,
+      student_answer: answer?.student_answer ?? "",
+      correct_answer: q.correct_answer ?? "",
+      explanation: q.explanation ?? "",
       question_text: q.question_text,
       question_type: q.question_type,
       options: q.options,
-      selected_answer: answer?.selected_answer ?? null,
-      correct_answer: q.correct_answer,
-      is_correct: isCorrect,
-      explanation: q.explanation,
-      concept: q.concept,
-      source_lecture_id: q.source_lecture_id,
-      source_lecture_title: q.source_lecture_title,
-      source_timestamp_seconds: q.source_timestamp_seconds,
-      time_spent_seconds: answer?.time_spent_seconds ?? 0,
     };
   });
 
-  const correctCount = perQuestion.filter((r) => r.is_correct).length;
-
-  const conceptMap = new Map<string, { correct: number; total: number }>();
-  for (const r of perQuestion) {
-    if (!r.concept) continue;
-    const existing = conceptMap.get(r.concept) ?? { correct: 0, total: 0 };
-    existing.total++;
-    if (r.is_correct) existing.correct++;
-    conceptMap.set(r.concept, existing);
-  }
-  const conceptPerformance: ConceptPerformance[] = Array.from(
-    conceptMap.entries(),
-  ).map(([concept, stats]) => ({ concept, ...stats }));
+  const correctCount = questionResults.filter((r) => r.is_correct).length;
 
   return {
-    quiz_id: "quiz-1",
     score: Math.round((correctCount / questions.length) * 100),
     total_questions: questions.length,
     correct_count: correctCount,
-    time_total_seconds: answers.reduce((s, a) => s + a.time_spent_seconds, 0),
-    attempt_number: 3,
-    per_question: perQuestion,
-    concept_performance: conceptPerformance,
+    results: questionResults,
   };
 }
 

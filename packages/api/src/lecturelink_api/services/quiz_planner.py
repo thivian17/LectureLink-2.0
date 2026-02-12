@@ -14,6 +14,7 @@ async def plan_quiz(
     course_id: str,
     user_id: str,
     target_assessment_id: str | None = None,
+    lecture_ids: list[str] | None = None,
     num_questions: int = 10,
     difficulty: str = "medium",
 ) -> dict:
@@ -28,6 +29,7 @@ async def plan_quiz(
         course_id: Course to quiz on
         user_id: Student (for priority personalization in Phase 3)
         target_assessment_id: Optional — quiz targets a specific assessment
+        lecture_ids: Optional — restrict to specific lectures
         num_questions: How many questions to generate (default 10)
         difficulty: easy / medium / hard
 
@@ -65,15 +67,17 @@ async def plan_quiz(
         else:
             concepts = []
     else:
-        concepts_result = (
+        query = (
             supabase.table("concepts")
             .select(
                 "id, title, description, category,"
                 " difficulty_estimate, lecture_id"
             )
             .eq("course_id", course_id)
-            .execute()
         )
+        if lecture_ids:
+            query = query.in_("lecture_id", lecture_ids)
+        concepts_result = query.execute()
         concepts = concepts_result.data
 
     if not concepts:
@@ -100,13 +104,16 @@ async def plan_quiz(
     quiz_plan: list[dict] = []
     for concept in selected:
         query = f"{concept['title']}: {concept.get('description', '')}"
+        # Prefer the concept's own lecture, but fall back to lecture_ids filter
+        search_lecture_ids = (
+            [concept["lecture_id"]] if concept.get("lecture_id")
+            else lecture_ids
+        )
         chunks = await search_lectures(
             supabase=supabase,
             course_id=course_id,
             query=query,
-            lecture_ids=(
-                [concept["lecture_id"]] if concept.get("lecture_id") else None
-            ),
+            lecture_ids=search_lecture_ids,
             limit=3,
         )
 

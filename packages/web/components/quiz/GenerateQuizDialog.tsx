@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -19,15 +20,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
-import type { Assessment, QuizDifficulty } from "@/types/database";
+import type { Assessment, Lecture, QuizDifficulty } from "@/types/database";
 
 interface GenerateQuizDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   assessments: Assessment[];
+  lectures: Lecture[];
   onGenerate: (options: {
     target_assessment_id: string | null;
+    lecture_ids: string[] | null;
     question_count: number;
     difficulty: QuizDifficulty;
   }) => Promise<void>;
@@ -44,10 +46,14 @@ export function GenerateQuizDialog({
   open,
   onOpenChange,
   assessments,
+  lectures,
   onGenerate,
 }: GenerateQuizDialogProps) {
-  const [target, setTarget] = useState<"full" | "assessment">("full");
+  const [target, setTarget] = useState<"full" | "assessment" | "lectures">(
+    "full",
+  );
   const [assessmentId, setAssessmentId] = useState<string | null>(null);
+  const [selectedLectureIds, setSelectedLectureIds] = useState<string[]>([]);
   const [questionCount, setQuestionCount] = useState(10);
   const [difficulty, setDifficulty] = useState<QuizDifficulty>("medium");
   const [generating, setGenerating] = useState(false);
@@ -57,6 +63,7 @@ export function GenerateQuizDialog({
     try {
       await onGenerate({
         target_assessment_id: target === "assessment" ? assessmentId : null,
+        lecture_ids: target === "lectures" ? selectedLectureIds : null,
         question_count: questionCount,
         difficulty,
       });
@@ -65,10 +72,27 @@ export function GenerateQuizDialog({
     }
   }
 
+  function toggleLecture(lectureId: string) {
+    setSelectedLectureIds((prev) =>
+      prev.includes(lectureId)
+        ? prev.filter((id) => id !== lectureId)
+        : [...prev, lectureId],
+    );
+  }
+
   const upcomingAssessments = assessments.filter((a) => {
     if (!a.due_date) return false;
     return new Date(a.due_date) > new Date();
   });
+
+  const completedLectures = lectures
+    .filter((l) => l.processing_status === "completed")
+    .sort((a, b) => (a.lecture_number ?? 999) - (b.lecture_number ?? 999));
+
+  const canGenerate =
+    !generating &&
+    !(target === "assessment" && !assessmentId) &&
+    !(target === "lectures" && selectedLectureIds.length === 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -84,14 +108,22 @@ export function GenerateQuizDialog({
           {/* Target */}
           <div className="space-y-2">
             <Label>Target</Label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 variant={target === "full" ? "default" : "outline"}
                 size="sm"
                 onClick={() => setTarget("full")}
               >
-                Full course review
+                Full course
+              </Button>
+              <Button
+                type="button"
+                variant={target === "lectures" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setTarget("lectures")}
+              >
+                Specific lectures
               </Button>
               <Button
                 type="button"
@@ -99,9 +131,10 @@ export function GenerateQuizDialog({
                 size="sm"
                 onClick={() => setTarget("assessment")}
               >
-                Target an assessment
+                Target assessment
               </Button>
             </div>
+
             {target === "assessment" && (
               <Select
                 value={assessmentId ?? ""}
@@ -133,6 +166,36 @@ export function GenerateQuizDialog({
                   )}
                 </SelectContent>
               </Select>
+            )}
+
+            {target === "lectures" && (
+              <div className="mt-2 max-h-48 overflow-auto rounded-md border p-2 space-y-1">
+                {completedLectures.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2 text-center">
+                    No processed lectures available
+                  </p>
+                ) : (
+                  completedLectures.map((lecture) => (
+                    <label
+                      key={lecture.id}
+                      className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent/50 cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={selectedLectureIds.includes(lecture.id)}
+                        onCheckedChange={() => toggleLecture(lecture.id)}
+                      />
+                      <span className="text-sm truncate">
+                        {lecture.lecture_number != null && (
+                          <span className="text-muted-foreground mr-1">
+                            #{lecture.lecture_number}
+                          </span>
+                        )}
+                        {lecture.title}
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
             )}
           </div>
 
@@ -175,14 +238,10 @@ export function GenerateQuizDialog({
 
           {/* Generate */}
           <div className="flex justify-end pt-2">
-            <Button
-              onClick={handleGenerate}
-              disabled={
-                generating ||
-                (target === "assessment" && !assessmentId)
-              }
-            >
-              {generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button onClick={handleGenerate} disabled={!canGenerate}>
+              {generating && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
               Generate
             </Button>
           </div>

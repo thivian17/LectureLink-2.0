@@ -8,6 +8,7 @@ interface TrueFalseOptionsProps {
   onSelect: (answer: string) => void;
   disabled?: boolean;
   correctAnswer?: string;
+  correctOptionIndex?: number | null;
   showFeedback?: boolean;
 }
 
@@ -16,16 +17,21 @@ export function TrueFalseOptions({
   onSelect,
   disabled,
   correctAnswer,
+  correctOptionIndex,
   showFeedback,
 }: TrueFalseOptionsProps) {
   const options = ["True", "False"];
 
   return (
     <div className="flex gap-4">
-      {options.map((option) => {
+      {options.map((option, i) => {
         const isSelected = selectedAnswer === option;
-        const isCorrect = showFeedback && option === correctAnswer;
-        const isWrong = showFeedback && isSelected && option !== correctAnswer;
+        const isCorrectOption =
+          correctOptionIndex != null
+            ? i === correctOptionIndex
+            : option.toLowerCase() === (correctAnswer ?? "").toLowerCase();
+        const isCorrect = showFeedback && isCorrectOption;
+        const isWrong = showFeedback && isSelected && !isCorrectOption;
 
         return (
           <button

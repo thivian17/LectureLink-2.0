@@ -126,51 +126,44 @@ export interface Quiz {
 
 export interface QuizQuestion {
   id: string;
-  quiz_id: string;
-  question_number: number;
+  quiz_id?: string;
+  question_index: number;
   question_type: QuestionType;
   question_text: string;
   options: string[] | null;
-  correct_answer: string;
-  explanation: string;
-  concept: string | null;
-  source_lecture_id: string | null;
-  source_lecture_title: string | null;
-  source_timestamp_seconds: number | null;
+  correct_answer?: string;
+  correct_option_index?: number | null;
+  explanation?: string;
+  concept?: string | null;
+  source_lecture_id?: string | null;
+  source_lecture_title?: string | null;
+  source_timestamp_seconds?: number | null;
 }
 
 export interface QuizAnswer {
   question_id: string;
-  selected_answer: string | null;
-  time_spent_seconds: number;
+  student_answer: string;
+  time_spent_seconds: number | null;
 }
 
 export interface QuizSubmissionResult {
-  quiz_id: string;
   score: number;
   total_questions: number;
   correct_count: number;
-  time_total_seconds: number;
-  attempt_number: number;
-  per_question: QuestionResult[];
-  concept_performance: ConceptPerformance[];
+  results: QuestionResult[];
 }
 
 export interface QuestionResult {
   question_id: string;
-  question_number: number;
-  question_text: string;
-  question_type: QuestionType;
-  options: string[] | null;
-  selected_answer: string | null;
-  correct_answer: string;
   is_correct: boolean;
+  student_answer: string;
+  correct_answer: string;
   explanation: string;
-  concept: string | null;
-  source_lecture_id: string | null;
-  source_lecture_title: string | null;
-  source_timestamp_seconds: number | null;
-  time_spent_seconds: number;
+  question_text?: string;
+  question_type?: QuestionType;
+  options?: string[] | null;
+  source_chunk_ids?: string[];
+  concept_id?: string | null;
 }
 
 export interface ConceptPerformance {

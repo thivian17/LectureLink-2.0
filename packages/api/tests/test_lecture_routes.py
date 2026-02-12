@@ -266,7 +266,7 @@ class TestLectureGet:
         assert resp.status_code == 200
         data = resp.json()
         assert data["id"] == lecture["id"]
-        assert data["transcript"] == lecture["transcript"]
+        assert "transcript_segments" in data
         assert "concepts" in data
 
     @pytest.mark.asyncio
