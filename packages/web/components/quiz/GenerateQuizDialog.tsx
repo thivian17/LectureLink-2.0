@@ -40,6 +40,7 @@ const DIFFICULTIES: { value: QuizDifficulty; label: string }[] = [
   { value: "easy", label: "Easy" },
   { value: "medium", label: "Medium" },
   { value: "hard", label: "Hard" },
+  { value: "adaptive", label: "Adaptive" },
 ];
 
 export function GenerateQuizDialog({

@@ -9,6 +9,7 @@ RATE_LIMITS = {
     'quiz_generate': {'max_count': 10, 'window_hours': 24},
     'qa_question': {'max_count': 50, 'window_hours': 1},
     'lecture_upload': {'max_count': 30, 'window_hours': 24},
+    'study_coach': {'max_count': 30, 'window_hours': 1},
 }
 
 def check_rate_limit(supabase, user_id: str, action: str) -> bool:

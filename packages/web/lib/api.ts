@@ -14,6 +14,9 @@ import type {
   QuizDifficulty,
   SearchResponse,
   QAResponse,
+  PerformanceData,
+  CoachResponse,
+  StudyActionsResponse,
 } from "@/types/database";
 import {
   ApiError,
@@ -488,5 +491,59 @@ export async function submitQuiz(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ answers }),
   });
+  return resp.json();
+}
+
+// ---------------------------------------------------------------------------
+// Performance Analytics (Phase 3)
+// ---------------------------------------------------------------------------
+
+export async function getCoursePerformance(
+  courseId: string,
+): Promise<PerformanceData> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/performance`,
+  );
+  return resp.json();
+}
+
+// ---------------------------------------------------------------------------
+// Study Coach (Phase 3)
+// ---------------------------------------------------------------------------
+
+export async function chatWithCoach(
+  courseId: string,
+  message: string,
+  conversationHistory?: Array<{ role: string; content: string }>,
+): Promise<CoachResponse> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/study-coach/chat`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message,
+        conversation_history: conversationHistory,
+      }),
+    },
+  );
+  return resp.json();
+}
+
+// ---------------------------------------------------------------------------
+// Study Actions (Study Hub)
+// ---------------------------------------------------------------------------
+
+export async function getStudyActions(): Promise<StudyActionsResponse> {
+  const resp = await fetchWithAuth(`${API_BASE}/api/study-actions`);
+  return resp.json();
+}
+
+export async function getCourseStudyActions(
+  courseId: string,
+): Promise<StudyActionsResponse> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/study-actions`,
+  );
   return resp.json();
 }

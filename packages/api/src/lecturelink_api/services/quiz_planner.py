@@ -31,7 +31,7 @@ async def plan_quiz(
         target_assessment_id: Optional — quiz targets a specific assessment
         lecture_ids: Optional — restrict to specific lectures
         num_questions: How many questions to generate (default 10)
-        difficulty: easy / medium / hard
+        difficulty: easy / medium / hard / adaptive
 
     Returns:
         {
@@ -83,22 +83,63 @@ async def plan_quiz(
     if not concepts:
         raise ValueError(f"No concepts found for course {course_id}")
 
-    # 2. Filter by difficulty band
-    difficulty_ranges = {
-        "easy": (0.0, 0.4),
-        "medium": (0.2, 0.7),
-        "hard": (0.5, 1.0),
-    }
-    low, high = difficulty_ranges.get(difficulty, (0.2, 0.7))
+    # 2. Concept selection: adaptive or difficulty-band
+    adaptive_difficulties: dict[str, float] | None = None
 
-    in_range = [
-        c for c in concepts
-        if low <= c.get("difficulty_estimate", 0.5) <= high
-    ]
-    out_of_range = [c for c in concepts if c not in in_range]
-    prioritized = in_range + out_of_range
+    if difficulty == "adaptive" and user_id:
+        # Adaptive: prioritize weak concepts using student mastery data
+        mastery_result = supabase.rpc(
+            "get_concept_mastery",
+            {"p_course_id": course_id, "p_user_id": user_id},
+        ).execute()
+        mastery_map = {
+            m["concept_id"]: m for m in (mastery_result.data or [])
+        }
 
-    selected = prioritized[:num_questions]
+        def _adaptive_score(concept):
+            m = mastery_map.get(concept["id"])
+            if m is None or m["total_attempts"] == 0:
+                return 0.5  # new concepts get medium priority
+            mastery = m["accuracy"] * 0.6 + m["recent_accuracy"] * 0.4
+            return 1.0 - mastery  # low mastery = high priority
+
+        concepts.sort(key=_adaptive_score, reverse=True)
+
+        # Compute per-concept adaptive difficulty
+        adaptive_difficulties = {}
+        for c in concepts:
+            m = mastery_map.get(c["id"])
+            if m is None or m["total_attempts"] == 0:
+                adaptive_difficulties[c["id"]] = c.get("difficulty_estimate", 0.5)
+            else:
+                student_mastery = m["accuracy"] * 0.6 + m["recent_accuracy"] * 0.4
+                adaptive_difficulties[c["id"]] = min(
+                    1.0,
+                    max(
+                        0.1,
+                        c.get("difficulty_estimate", 0.5)
+                        + (student_mastery - 0.5) * 0.4,
+                    ),
+                )
+
+        selected = concepts[:num_questions]
+    else:
+        # Original difficulty band filtering
+        difficulty_ranges = {
+            "easy": (0.0, 0.4),
+            "medium": (0.2, 0.7),
+            "hard": (0.5, 1.0),
+        }
+        low, high = difficulty_ranges.get(difficulty, (0.2, 0.7))
+
+        in_range = [
+            c for c in concepts
+            if low <= c.get("difficulty_estimate", 0.5) <= high
+        ]
+        out_of_range = [c for c in concepts if c not in in_range]
+        prioritized = in_range + out_of_range
+
+        selected = prioritized[:num_questions]
 
     # 3. For each concept, retrieve grounding chunks
     quiz_plan: list[dict] = []
@@ -133,9 +174,13 @@ async def plan_quiz(
         len(quiz_plan), difficulty,
     )
 
-    return {
+    result = {
         "concepts": quiz_plan,
         "difficulty": difficulty,
         "num_questions": len(quiz_plan),
         "target_assessment_id": target_assessment_id,
     }
+    if adaptive_difficulties:
+        result["adaptive_difficulties"] = adaptive_difficulties
+
+    return result

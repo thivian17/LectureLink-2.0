@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   BookOpen,
   Calendar,
+  GraduationCap,
   Settings,
   LogOut,
   Menu,
@@ -17,7 +18,7 @@ import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 
 const navItems = [
-  { label: "Courses", href: "/dashboard", icon: BookOpen },
+  { label: "Study Hub", href: "/dashboard", icon: GraduationCap },
   { label: "Calendar", href: "/dashboard/calendar", icon: Calendar },
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
 ];

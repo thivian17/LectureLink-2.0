@@ -109,7 +109,7 @@ export interface LectureDetail extends Lecture {
 
 export type QuizStatus = "pending" | "generating" | "ready" | "failed";
 export type QuestionType = "mcq" | "true_false" | "short_answer";
-export type QuizDifficulty = "easy" | "medium" | "hard";
+export type QuizDifficulty = "easy" | "medium" | "hard" | "adaptive";
 
 export interface Quiz {
   id: string;
@@ -230,4 +230,105 @@ export interface QAResponse {
   citations: QACitation[];
   follow_ups: string[];
   confidence: number;
+}
+
+// ---------------------------------------------------------------------------
+// Performance Analytics (Phase 3)
+// ---------------------------------------------------------------------------
+
+export type ConceptTrend = "improving" | "declining" | "stable" | "new";
+
+export interface ConceptMastery {
+  concept_id: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  difficulty_estimate: number;
+  lecture_id: string | null;
+  mastery: number;
+  total_attempts: number;
+  correct_attempts: number;
+  accuracy: number;
+  avg_time_seconds: number;
+  recent_accuracy: number;
+  trend: ConceptTrend;
+  linked_assessments: Array<{
+    assessment_id: string;
+    title: string;
+    relevance_score: number;
+  }>;
+}
+
+export interface PerformanceOverall {
+  total_questions_attempted: number;
+  overall_accuracy: number;
+  quizzes_taken: number;
+  average_quiz_score: number | null;
+  strongest_category: string | null;
+  weakest_category: string | null;
+}
+
+export interface QuizHistoryItem {
+  quiz_id: string;
+  title: string;
+  difficulty: string;
+  best_score: number | null;
+  attempt_count: number;
+  question_count: number;
+  created_at: string;
+}
+
+export interface PerformanceData {
+  overall: PerformanceOverall;
+  concepts: ConceptMastery[];
+  quiz_history: QuizHistoryItem[];
+  weak_concepts: string[];
+  strong_concepts: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Study Coach (Phase 3)
+// ---------------------------------------------------------------------------
+
+export interface CoachRecommendation {
+  concept: string;
+  action: string;
+  priority: "high" | "medium" | "low";
+}
+
+export interface CoachResponse {
+  message: string;
+  recommendations: CoachRecommendation[];
+  suggested_quiz: { focus: string | null; difficulty: string } | null;
+}
+
+export interface CoachMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  recommendations: CoachRecommendation[];
+  suggested_quiz: { focus: string | null; difficulty: string } | null;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Study Actions (Study Hub)
+// ---------------------------------------------------------------------------
+
+export interface StudyAction {
+  action_type: string;
+  priority: number;
+  course_id: string;
+  course_name: string;
+  course_code: string | null;
+  title: string;
+  description: string;
+  cta_label: string;
+  cta_url: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface StudyActionsResponse {
+  actions: StudyAction[];
+  generated_at: string;
 }

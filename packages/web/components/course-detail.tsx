@@ -39,6 +39,8 @@ import { LectureList } from "@/components/lectures/lecture-list";
 import { QuizList } from "@/components/quiz/QuizList";
 import { SearchPageClient } from "@/components/search/search-page-client";
 import { FloatingQAButton } from "@/components/chat/floating-qa-button";
+import { StudyCoachTab } from "@/components/study-coach/StudyCoachTab";
+import { CourseActionBanner } from "@/components/study-hub/CourseActionBanner";
 import { deleteCourse, getAssessments } from "@/lib/api";
 import type { Assessment, Course, Syllabus } from "@/types/database";
 
@@ -194,6 +196,9 @@ export function CourseDetail({
         <Badge variant="outline">Target: {gradeLabel}</Badge>
       </div>
 
+      {/* Smart action banner */}
+      <CourseActionBanner courseId={course.id} />
+
       {/* Tabs */}
       <Tabs defaultValue="overview">
         <div className="overflow-x-auto -mx-1 px-1">
@@ -207,6 +212,7 @@ export function CourseDetail({
             <TabsTrigger value="calendar">Calendar</TabsTrigger>
             <TabsTrigger value="search">Search</TabsTrigger>
             <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
+            <TabsTrigger value="coach">Study Coach</TabsTrigger>
           </TabsList>
         </div>
 
@@ -445,6 +451,10 @@ export function CourseDetail({
 
         <TabsContent value="quizzes" className="mt-6">
           <QuizList courseId={course.id} courseName={course.name} />
+        </TabsContent>
+
+        <TabsContent value="coach" className="mt-6">
+          <StudyCoachTab courseId={course.id} />
         </TabsContent>
       </Tabs>
 

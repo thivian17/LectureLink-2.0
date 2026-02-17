@@ -9,7 +9,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from lecturelink_api.config import get_settings
-from lecturelink_api.routers import assessments, courses, lectures, quizzes, search, syllabi
+from lecturelink_api.routers import (
+    assessments,
+    coach,
+    courses,
+    lectures,
+    quizzes,
+    search,
+    study_actions,
+    syllabi,
+)
 
 # Configure Google GenAI to use Vertex AI (ADC) when no API key is set.
 # Must happen before any ADK/genai imports that initialize clients.
@@ -58,6 +67,8 @@ app.include_router(assessments.router)
 app.include_router(lectures.router)
 app.include_router(search.router)
 app.include_router(quizzes.router)
+app.include_router(coach.router)
+app.include_router(study_actions.router)
 
 
 @app.get("/health")
