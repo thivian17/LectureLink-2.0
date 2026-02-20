@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -23,13 +23,15 @@ export function SlideViewer({
   const [currentSlide, setCurrentSlide] = useState(1);
   const [imageLoaded, setImageLoaded] = useState(false);
 
-  // Sync with transcript-driven slide changes
-  useEffect(() => {
+  // Sync with transcript-driven slide changes (render-time adjustment)
+  const [prevActiveSlide, setPrevActiveSlide] = useState(activeSlideNumber);
+  if (activeSlideNumber !== prevActiveSlide) {
+    setPrevActiveSlide(activeSlideNumber);
     if (activeSlideNumber !== null && activeSlideNumber !== currentSlide) {
       setCurrentSlide(activeSlideNumber);
       setImageLoaded(false);
     }
-  }, [activeSlideNumber]); // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   const slide = slides.find((s) => s.slide_number === currentSlide) ?? slides[0];
   const totalSlides = slides.length;

@@ -9,7 +9,6 @@ import {
   VolumeX,
 } from "lucide-react";
 
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -25,14 +24,34 @@ import { PLAYBACK_RATES } from "@/components/lectures/hooks/use-audio-player";
 
 interface AudioPlayerBarProps {
   audioUrl: string;
-  player: AudioPlayerState;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
+  controls: Omit<AudioPlayerState, "audioRef">;
 }
 
-export function AudioPlayerBar({ audioUrl, player }: AudioPlayerBarProps) {
+export function AudioPlayerBar({
+  audioUrl,
+  audioRef,
+  controls,
+}: AudioPlayerBarProps) {
+  const {
+    isPlaying,
+    currentTime,
+    duration,
+    playbackRate,
+    volume,
+    isMuted,
+    toggle,
+    skip,
+    seek,
+    setPlaybackRate,
+    setVolume,
+    toggleMute,
+  } = controls;
+
   return (
     <>
       {/* Hidden audio element */}
-      <audio ref={player.audioRef} src={audioUrl} preload="metadata" />
+      <audio ref={audioRef} src={audioUrl} preload="metadata" />
 
       {/* Player bar */}
       <div className="fixed bottom-0 inset-x-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-t">
@@ -41,7 +60,7 @@ export function AudioPlayerBar({ audioUrl, player }: AudioPlayerBarProps) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => player.skip(-10)}
+            onClick={() => skip(-10)}
             className="h-8 w-8 p-0 shrink-0"
             title="Skip back 10s"
           >
@@ -52,11 +71,11 @@ export function AudioPlayerBar({ audioUrl, player }: AudioPlayerBarProps) {
           <Button
             variant="default"
             size="sm"
-            onClick={player.toggle}
+            onClick={toggle}
             className="h-9 w-9 p-0 rounded-full shrink-0"
-            title={player.isPlaying ? "Pause" : "Play"}
+            title={isPlaying ? "Pause" : "Play"}
           >
-            {player.isPlaying ? (
+            {isPlaying ? (
               <Pause className="h-4 w-4" />
             ) : (
               <Play className="h-4 w-4 ml-0.5" />
@@ -67,7 +86,7 @@ export function AudioPlayerBar({ audioUrl, player }: AudioPlayerBarProps) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => player.skip(10)}
+            onClick={() => skip(10)}
             className="h-8 w-8 p-0 shrink-0"
             title="Skip forward 10s"
           >
@@ -76,28 +95,28 @@ export function AudioPlayerBar({ audioUrl, player }: AudioPlayerBarProps) {
 
           {/* Current time */}
           <span className="text-xs font-mono text-muted-foreground w-10 text-right shrink-0">
-            {formatTimestamp(player.currentTime)}
+            {formatTimestamp(currentTime)}
           </span>
 
           {/* Seek bar */}
           <Slider
-            value={[player.currentTime]}
+            value={[currentTime]}
             min={0}
-            max={player.duration || 100}
+            max={duration || 100}
             step={1}
-            onValueChange={([val]) => player.seek(val)}
+            onValueChange={([val]) => seek(val)}
             className="flex-1 mx-2"
           />
 
           {/* Duration */}
           <span className="text-xs font-mono text-muted-foreground w-10 shrink-0">
-            {formatTimestamp(player.duration)}
+            {formatTimestamp(duration)}
           </span>
 
           {/* Speed selector */}
           <Select
-            value={String(player.playbackRate)}
-            onValueChange={(v) => player.setPlaybackRate(Number(v))}
+            value={String(playbackRate)}
+            onValueChange={(v) => setPlaybackRate(Number(v))}
           >
             <SelectTrigger className="h-7 w-16 text-xs shrink-0">
               <SelectValue />
@@ -116,22 +135,22 @@ export function AudioPlayerBar({ audioUrl, player }: AudioPlayerBarProps) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={player.toggleMute}
+              onClick={toggleMute}
               className="h-8 w-8 p-0"
-              title={player.isMuted ? "Unmute" : "Mute"}
+              title={isMuted ? "Unmute" : "Mute"}
             >
-              {player.isMuted || player.volume === 0 ? (
+              {isMuted || volume === 0 ? (
                 <VolumeX className="h-4 w-4" />
               ) : (
                 <Volume2 className="h-4 w-4" />
               )}
             </Button>
             <Slider
-              value={[player.isMuted ? 0 : player.volume]}
+              value={[isMuted ? 0 : volume]}
               min={0}
               max={1}
               step={0.05}
-              onValueChange={([val]) => player.setVolume(val)}
+              onValueChange={([val]) => setVolume(val)}
               className="w-20"
             />
           </div>

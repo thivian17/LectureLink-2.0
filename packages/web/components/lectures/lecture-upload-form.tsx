@@ -93,7 +93,7 @@ export function LectureUploadForm({
         setUploading(false);
       }
     },
-    [canSubmit, files, title, lectureNumber, lectureDate, courseId],
+    [canSubmit, files, title, lectureNumber, lectureDate, courseId, router],
   );
 
   // Show processing status after upload

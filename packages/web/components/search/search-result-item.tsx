@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Clock, Image } from "lucide-react";
+import { Clock, ImageIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import type { SearchResult } from "@/types/database";
@@ -70,7 +70,7 @@ export function SearchResultItem({ result, courseId }: SearchResultItemProps) {
                 {result.timestamp_seconds != null ? (
                   <Clock className="h-3 w-3" />
                 ) : (
-                  <Image className="h-3 w-3" />
+                  <ImageIcon className="h-3 w-3" />
                 )}
                 {locationLabel}
               </span>

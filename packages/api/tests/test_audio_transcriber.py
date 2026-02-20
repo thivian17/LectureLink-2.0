@@ -229,7 +229,7 @@ class TestTranscribeAudio:
 
         client = _make_mock_client("This is not JSON at all")
 
-        with pytest.raises(TranscriptionError, match="Failed to parse transcript JSON"):
+        with pytest.raises(TranscriptionError, match="Audio transcription failed"):
             await transcribe_audio(str(audio_file), client=client)
 
     async def test_file_not_found_raises_error(self):
@@ -278,8 +278,8 @@ class TestTranscribeAudio:
 
     async def test_large_file_uses_file_api(self, tmp_path):
         audio_file = tmp_path / "lecture.flac"
-        # Write > 20MB to trigger File API upload
-        audio_file.write_bytes(b"\x00" * (21 * 1024 * 1024))
+        # Write > 100MB to exceed INLINE_SIZE_LIMIT and trigger File API upload
+        audio_file.write_bytes(b"\x00" * (101 * 1024 * 1024))
 
         transcript_data = [
             {"start": 0.0, "end": 10.0, "text": "Large file test.", "speaker": "professor"},

@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { QuizResultsClient } from "@/components/quiz/QuizResultsClient";
-import type { Course } from "@/types/database";
 
 export default async function QuizResultsPage({
   params,

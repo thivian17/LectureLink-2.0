@@ -33,7 +33,7 @@ function getConfidenceLabel(c: number): { label: string; className: string } {
 function renderAnswer(
   content: string,
   citations: QACitation[],
-  courseId: string,
+  _courseId: string,
 ): React.ReactNode[] {
   const parts = content.split(/(\[Source \d+\])/g);
   return parts.map((part, i) => {

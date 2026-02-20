@@ -1,9 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
 import { QuizResults } from "@/components/quiz/QuizResults";
 import type { QuizSubmissionResult } from "@/types/database";
@@ -18,14 +16,11 @@ export function QuizResultsClient({
   quizId,
 }: QuizResultsClientProps) {
   const router = useRouter();
-  const [result, setResult] = useState<QuizSubmissionResult | null>(null);
-
-  useEffect(() => {
+  const [result] = useState<QuizSubmissionResult | null>(() => {
+    if (typeof window === "undefined") return null;
     const stored = sessionStorage.getItem(`quiz-result-${quizId}`);
-    if (stored) {
-      setResult(JSON.parse(stored));
-    }
-  }, [quizId]);
+    return stored ? (JSON.parse(stored) as QuizSubmissionResult) : null;
+  });
 
   if (!result) {
     return (

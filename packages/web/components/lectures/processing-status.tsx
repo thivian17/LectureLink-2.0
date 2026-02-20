@@ -42,8 +42,6 @@ const PROCESSING_STAGES = [
   { key: "completed", label: "Processing complete!", icon: CheckCircle },
 ] as const;
 
-type StageKey = (typeof PROCESSING_STAGES)[number]["key"];
-
 function getStageIndex(stage: string | null): number {
   if (!stage) return -1;
   return PROCESSING_STAGES.findIndex((s) => s.key === stage);
@@ -220,7 +218,6 @@ export function LectureProcessingStatus({
               stageStatus = "pending";
             }
 
-            const Icon = stage.icon;
             const isLast = i === PROCESSING_STAGES.length - 1;
 
             return (

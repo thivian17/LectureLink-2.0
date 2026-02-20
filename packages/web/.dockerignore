@@ -1,0 +1,20 @@
+# Dependencies (reinstalled in image)
+**/node_modules
+
+# Build output (rebuilt in image)
+**/.next
+
+# Environment / secrets
+.env.local
+.env
+.env.*
+
+# Version control
+.git
+.gitignore
+
+# Backend (not needed for web image)
+packages/api/
+
+# Misc
+*.md

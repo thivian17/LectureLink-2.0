@@ -1,0 +1,28 @@
+# Python caches
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.ruff_cache
+**/.pytest_cache
+
+# Tests (not needed in production image)
+packages/api/tests/
+
+# Environment / secrets
+.env
+.env.*
+**/.env.local
+
+# Version control
+.git
+.gitignore
+
+# Frontend (not needed for API image)
+packages/web/
+
+# Misc
+**/node_modules
+**/.coverage
+**/htmlcov
+**/test_metrics_report.json
+*.md

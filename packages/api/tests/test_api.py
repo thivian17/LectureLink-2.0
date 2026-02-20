@@ -560,8 +560,18 @@ class TestAuth:
     @pytest.mark.asyncio
     async def test_health_no_auth_required(self):
         """Health check should work without authentication."""
+        from lecturelink_api.config import Settings, get_settings
+
+        app.dependency_overrides[get_settings] = lambda: Settings(
+            SUPABASE_URL="https://fake.supabase.co",
+            SUPABASE_ANON_KEY="fake-anon-key",
+        )
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.get("/health")
         assert resp.status_code == 200
-        assert resp.json() == {"status": "ok"}
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["version"] == "0.1.0"
+        assert "environment" in data
+        app.dependency_overrides.pop(get_settings, None)

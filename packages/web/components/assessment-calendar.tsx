@@ -10,7 +10,6 @@ import {
   addMonths,
   subMonths,
   isSameMonth,
-  isSameDay,
   isToday,
   differenceInCalendarDays,
   eachDayOfInterval,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -36,20 +36,29 @@ export function LectureDetailClient({
   );
   const [conceptPanelOpen, setConceptPanelOpen] = useState(false);
 
+  // Reset loading/error when lectureId changes (render-time adjustment)
+  const [prevLectureId, setPrevLectureId] = useState(lectureId);
+  if (lectureId !== prevLectureId) {
+    setPrevLectureId(lectureId);
+    setLoading(true);
+    setError(null);
+  }
+
   // Hooks
-  const audioPlayer = useAudioPlayer();
-  const segments = lecture?.transcript_segments ?? [];
+  const { audioRef, seek: audioSeek, ...audioControls } = useAudioPlayer();
+  const segments = useMemo(
+    () => lecture?.transcript_segments ?? [],
+    [lecture?.transcript_segments],
+  );
   const { activeSegmentIndex, activeSlideNumber } = useTranscriptSync(
     segments,
-    audioPlayer.currentTime,
+    audioControls.currentTime,
   );
   const search = useTranscriptSearch(segments);
 
   // Fetch lecture detail
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
     getLectureDetail(lectureId)
       .then((data) => {
@@ -72,10 +81,10 @@ export function LectureDetailClient({
     (index: number) => {
       const segment = segments[index];
       if (segment?.start !== null) {
-        audioPlayer.seek(segment.start!);
+        audioSeek(segment.start!);
       }
     },
-    [segments, audioPlayer],
+    [segments, audioSeek],
   );
 
   const handleConceptClick = useCallback(
@@ -94,10 +103,10 @@ export function LectureDetailClient({
         (s) => s.slide_number === slideNumber,
       );
       if (segIndex >= 0 && segments[segIndex].start !== null) {
-        audioPlayer.seek(segments[segIndex].start!);
+        audioSeek(segments[segIndex].start!);
       }
     },
-    [segments, audioPlayer],
+    [segments, audioSeek],
   );
 
   // Loading state
@@ -191,7 +200,11 @@ export function LectureDetailClient({
 
       {/* Audio player */}
       {hasAudio && (
-        <AudioPlayerBar audioUrl={lecture.audio_url!} player={audioPlayer} />
+        <AudioPlayerBar
+          audioUrl={lecture.audio_url!}
+          audioRef={audioRef}
+          controls={{ seek: audioSeek, ...audioControls }}
+        />
       )}
 
       {/* Concept side panel */}

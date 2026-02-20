@@ -24,6 +24,7 @@ from lecturelink_api.models.api_models import (
 )
 from lecturelink_api.pipeline.background import run_lecture_processing
 from lecturelink_api.services.lecture_storage import cleanup_lecture_data
+from lecturelink_api.services.task_queue import TaskQueueService, get_task_queue
 
 router = APIRouter(prefix="/api", tags=["lectures"])
 
@@ -81,7 +82,6 @@ def _signed_urls_from_lecture(sb_admin, lecture: dict) -> list[str]:
 
 @router.post("/lectures/upload", status_code=status.HTTP_200_OK)
 async def upload_lecture(
-    background_tasks: BackgroundTasks,
     course_id: str = Form(...),
     title: str = Form(...),
     lecture_number: int | None = Form(default=None),
@@ -89,6 +89,7 @@ async def upload_lecture(
     files: list[UploadFile] = File(...),
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
+    task_queue: TaskQueueService = Depends(get_task_queue),
 ):
     sb = _sb(user, settings)
 
@@ -179,16 +180,15 @@ async def upload_lecture(
     result = sb.table("lectures").insert(insert_data).execute()
     lecture_id = result.data[0]["id"]
 
-    # Trigger background processing (sync task → runs in thread pool)
-    background_tasks.add_task(
-        run_lecture_processing,
-        supabase_url=settings.SUPABASE_URL,
-        supabase_key=settings.SUPABASE_ANON_KEY,
-        user_token=user["token"],
+    # Trigger processing via task queue (Cloud Tasks in prod, direct thread in dev)
+    task_queue.enqueue_lecture_processing(
         lecture_id=lecture_id,
         course_id=course_id,
         user_id=user["id"],
         file_urls=file_urls,
+        supabase_url=settings.SUPABASE_URL,
+        supabase_key=settings.SUPABASE_ANON_KEY,
+        user_token=user["token"],
     )
 
     return {"lecture_id": lecture_id, "status": "processing"}

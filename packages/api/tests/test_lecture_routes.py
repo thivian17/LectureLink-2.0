@@ -96,8 +96,17 @@ def _override_settings():
     app.dependency_overrides.pop(get_settings, None)
 
 
+@pytest.fixture()
+def _override_task_queue():
+    from lecturelink_api.services.task_queue import get_task_queue
+    mock_tq = MagicMock()
+    app.dependency_overrides[get_task_queue] = lambda: mock_tq
+    yield mock_tq
+    app.dependency_overrides.pop(get_task_queue, None)
+
+
 @pytest_asyncio.fixture()
-async def client(_override_auth, _override_settings):
+async def client(_override_auth, _override_settings, _override_task_queue):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -117,7 +126,6 @@ class TestLectureUpload:
         with (
             patch("lecturelink_api.routers.lectures.create_client") as mock_create,
             patch("lecturelink_api.routers.lectures.check_rate_limit"),
-            patch("lecturelink_api.routers.lectures.run_lecture_processing"),
         ):
             sb = MagicMock()
             mock_create.return_value = sb

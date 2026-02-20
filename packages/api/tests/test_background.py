@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -15,6 +15,16 @@ LECTURE_ID = "lec-0001"
 COURSE_ID = "course-0001"
 USER_ID = "user-0001"
 FILE_URLS = ["https://storage.example.com/lecture.mp3"]
+SUPABASE_URL = "https://test.supabase.co"
+SUPABASE_KEY = "test-anon-key"
+USER_TOKEN = "test-jwt-token"
+
+
+def _mock_create_client():
+    """Return a mock create_client that produces a mock Supabase client."""
+    sb = MagicMock()
+    sb.auth.set_session = MagicMock()
+    return patch(f"{_MOD}.create_client", return_value=sb), sb
 
 
 # ---------------------------------------------------------------------------
@@ -23,8 +33,7 @@ FILE_URLS = ["https://storage.example.com/lecture.mp3"]
 
 
 class TestSuccessfulProcessing:
-    @pytest.mark.asyncio
-    async def test_returns_result_on_success(self):
+    def test_returns_result_on_success(self):
         expected = {
             "lecture_id": LECTURE_ID,
             "chunks_stored": 10,
@@ -34,9 +43,13 @@ class TestSuccessfulProcessing:
             "duration_seconds": 12.5,
         }
 
-        with patch(f"{_MOD}.process_lecture", AsyncMock(return_value=expected)):
-            result = await run_lecture_processing(
-                supabase=None,
+        patch_cc, _ = _mock_create_client()
+        with patch_cc, \
+             patch(f"{_MOD}.process_lecture", AsyncMock(return_value=expected)):
+            result = run_lecture_processing(
+                supabase_url=SUPABASE_URL,
+                supabase_key=SUPABASE_KEY,
+                user_token=USER_TOKEN,
                 lecture_id=LECTURE_ID,
                 course_id=COURSE_ID,
                 user_id=USER_ID,
@@ -45,13 +58,16 @@ class TestSuccessfulProcessing:
 
         assert result == expected
 
-    @pytest.mark.asyncio
-    async def test_calls_process_lecture_with_correct_args(self):
+    def test_calls_process_lecture_with_correct_args(self):
         mock_process = AsyncMock(return_value={"lecture_id": LECTURE_ID})
 
-        with patch(f"{_MOD}.process_lecture", mock_process):
-            await run_lecture_processing(
-                supabase="sb_client",
+        patch_cc, sb = _mock_create_client()
+        with patch_cc, \
+             patch(f"{_MOD}.process_lecture", mock_process):
+            run_lecture_processing(
+                supabase_url=SUPABASE_URL,
+                supabase_key=SUPABASE_KEY,
+                user_token=USER_TOKEN,
                 lecture_id=LECTURE_ID,
                 course_id=COURSE_ID,
                 user_id=USER_ID,
@@ -60,7 +76,7 @@ class TestSuccessfulProcessing:
             )
 
         mock_process.assert_called_once_with(
-            supabase="sb_client",
+            supabase=sb,
             lecture_id=LECTURE_ID,
             course_id=COURSE_ID,
             user_id=USER_ID,
@@ -75,8 +91,7 @@ class TestSuccessfulProcessing:
 
 
 class TestRetryBehavior:
-    @pytest.mark.asyncio
-    async def test_retries_on_failure_then_succeeds(self):
+    def test_retries_on_failure_then_succeeds(self):
         expected = {"lecture_id": LECTURE_ID, "chunks_stored": 5}
 
         mock_process = AsyncMock(
@@ -86,10 +101,14 @@ class TestRetryBehavior:
             ]
         )
 
-        with patch(f"{_MOD}.process_lecture", mock_process), \
+        patch_cc, _ = _mock_create_client()
+        with patch_cc, \
+             patch(f"{_MOD}.process_lecture", mock_process), \
              patch(f"{_MOD}.asyncio.sleep", AsyncMock()):
-            result = await run_lecture_processing(
-                supabase=None,
+            result = run_lecture_processing(
+                supabase_url=SUPABASE_URL,
+                supabase_key=SUPABASE_KEY,
+                user_token=USER_TOKEN,
                 lecture_id=LECTURE_ID,
                 course_id=COURSE_ID,
                 user_id=USER_ID,
@@ -103,16 +122,19 @@ class TestRetryBehavior:
         second_call = mock_process.call_args_list[1]
         assert second_call[1]["is_reprocess"] is True
 
-    @pytest.mark.asyncio
-    async def test_all_retries_exhausted_returns_none(self):
+    def test_all_retries_exhausted_returns_none(self):
         mock_process = AsyncMock(
             side_effect=LectureProcessingError("persistent error", "unknown")
         )
 
-        with patch(f"{_MOD}.process_lecture", mock_process), \
+        patch_cc, _ = _mock_create_client()
+        with patch_cc, \
+             patch(f"{_MOD}.process_lecture", mock_process), \
              patch(f"{_MOD}.asyncio.sleep", AsyncMock()):
-            result = await run_lecture_processing(
-                supabase=None,
+            result = run_lecture_processing(
+                supabase_url=SUPABASE_URL,
+                supabase_key=SUPABASE_KEY,
+                user_token=USER_TOKEN,
                 lecture_id=LECTURE_ID,
                 course_id=COURSE_ID,
                 user_id=USER_ID,
@@ -130,8 +152,7 @@ class TestRetryBehavior:
 
 
 class TestExponentialBackoff:
-    @pytest.mark.asyncio
-    async def test_backoff_durations(self):
+    def test_backoff_durations(self):
         mock_process = AsyncMock(
             side_effect=LectureProcessingError("fail", "unknown")
         )
@@ -140,10 +161,14 @@ class TestExponentialBackoff:
         async def mock_sleep(seconds):
             sleep_calls.append(seconds)
 
-        with patch(f"{_MOD}.process_lecture", mock_process), \
+        patch_cc, _ = _mock_create_client()
+        with patch_cc, \
+             patch(f"{_MOD}.process_lecture", mock_process), \
              patch(f"{_MOD}.asyncio.sleep", side_effect=mock_sleep):
-            await run_lecture_processing(
-                supabase=None,
+            run_lecture_processing(
+                supabase_url=SUPABASE_URL,
+                supabase_key=SUPABASE_KEY,
+                user_token=USER_TOKEN,
                 lecture_id=LECTURE_ID,
                 course_id=COURSE_ID,
                 user_id=USER_ID,
@@ -153,15 +178,18 @@ class TestExponentialBackoff:
         # Backoff: 2^1=2, 2^2=4, 2^3=8
         assert sleep_calls == [2, 4, 8]
 
-    @pytest.mark.asyncio
-    async def test_no_sleep_on_success(self):
+    def test_no_sleep_on_success(self):
         mock_process = AsyncMock(return_value={"lecture_id": LECTURE_ID})
         mock_sleep = AsyncMock()
 
-        with patch(f"{_MOD}.process_lecture", mock_process), \
+        patch_cc, _ = _mock_create_client()
+        with patch_cc, \
+             patch(f"{_MOD}.process_lecture", mock_process), \
              patch(f"{_MOD}.asyncio.sleep", mock_sleep):
-            await run_lecture_processing(
-                supabase=None,
+            run_lecture_processing(
+                supabase_url=SUPABASE_URL,
+                supabase_key=SUPABASE_KEY,
+                user_token=USER_TOKEN,
                 lecture_id=LECTURE_ID,
                 course_id=COURSE_ID,
                 user_id=USER_ID,

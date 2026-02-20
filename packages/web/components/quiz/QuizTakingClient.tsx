@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
   ChevronRight,
@@ -27,7 +27,6 @@ import {
 } from "@/components/ui/dialog";
 import { QuestionView } from "@/components/quiz/QuestionView";
 import { QuizProgress } from "@/components/quiz/QuizProgress";
-import { cn } from "@/lib/utils";
 import { getQuizQuestions, submitQuiz, AuthError, RateLimitError } from "@/lib/api";
 import type { QuizQuestion, QuizAnswer } from "@/types/database";
 
@@ -43,8 +42,6 @@ export function QuizTakingClient({
   quizId,
 }: QuizTakingClientProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const isRetake = searchParams.get("retake") === "1";
 
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,7 +86,7 @@ export function QuizTakingClient({
     return () => {
       cancelled = true;
     };
-  }, [quizId]);
+  }, [quizId, router]);
 
   // Per-question timer
   useEffect(() => {

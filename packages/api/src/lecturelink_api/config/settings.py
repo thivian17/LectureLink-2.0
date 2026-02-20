@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     GOOGLE_CLOUD_PROJECT: str = ""
     ENVIRONMENT: str = "development"
     DATABASE_URL: str = ""
+    INTERNAL_API_KEY: str = ""
+    RESEND_API_KEY: str = ""
+    SENTRY_DSN: str = ""
+    POSTHOG_API_KEY: str = ""
+    LANGFUSE_SECRET_KEY: str = ""
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
