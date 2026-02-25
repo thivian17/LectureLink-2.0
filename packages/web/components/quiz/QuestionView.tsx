@@ -1,11 +1,27 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { MCQOptions } from "@/components/quiz/MCQOptions";
 import { TrueFalseOptions } from "@/components/quiz/TrueFalseOptions";
 import { ShortAnswerInput } from "@/components/quiz/ShortAnswerInput";
 import { QuestionFeedback } from "@/components/quiz/QuestionFeedback";
 import { Badge } from "@/components/ui/badge";
-import type { QuizQuestion } from "@/types/database";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { QuizQuestion, CodeGradingResult } from "@/types/database";
+
+const CodeQuestion = dynamic(
+  () => import("@/components/quiz/CodeQuestion").then((m) => m.CodeQuestion),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-64 w-full rounded-md" />
+        <Skeleton className="h-9 w-32" />
+      </div>
+    ),
+  },
+);
 
 function checkAnswerCorrectness(
   question: QuizQuestion,
@@ -45,6 +61,10 @@ interface QuestionViewProps {
   onAnswer: (answer: string) => void;
   showFeedback: boolean;
   courseId: string;
+  quizId?: string;
+  gradingResult?: CodeGradingResult;
+  isSubmitting?: boolean;
+  timeElapsed?: number;
 }
 
 export function QuestionView({
@@ -53,22 +73,34 @@ export function QuestionView({
   onAnswer,
   showFeedback,
   courseId,
+  quizId,
+  gradingResult,
+  isSubmitting,
+  timeElapsed,
 }: QuestionViewProps) {
   const isCorrect = checkAnswerCorrectness(question, selectedAnswer);
   const feedbackDisabled = showFeedback;
 
+  const isCodeQuestion =
+    question.question_type === "code_writing" ||
+    question.question_type === "code_fix" ||
+    question.question_type === "code_explain";
+
   return (
     <div className="space-y-6">
-      <div className="space-y-3">
-        <p className="text-lg font-medium leading-relaxed">
-          {question.question_text}
-        </p>
-        {question.concept && (
-          <Badge variant="secondary" className="text-xs">
-            {question.concept}
-          </Badge>
-        )}
-      </div>
+      {/* Header for non-code questions (CodeQuestion renders its own) */}
+      {!isCodeQuestion && (
+        <div className="space-y-3">
+          <p className="text-lg font-medium leading-relaxed">
+            {question.question_text}
+          </p>
+          {question.concept && (
+            <Badge variant="secondary" className="text-xs">
+              {question.concept}
+            </Badge>
+          )}
+        </div>
+      )}
 
       {question.question_type === "mcq" && question.options && (
         <MCQOptions
@@ -103,6 +135,22 @@ export function QuestionView({
           isCorrect={isCorrect}
         />
       )}
+
+      {(question.question_type === "code_writing" ||
+        question.question_type === "code_fix" ||
+        question.question_type === "code_explain") &&
+        quizId && (
+          <CodeQuestion
+            question={question}
+            quizId={quizId}
+            selectedAnswer={selectedAnswer}
+            onAnswer={onAnswer}
+            showFeedback={showFeedback}
+            gradingResult={gradingResult}
+            isSubmitting={isSubmitting}
+            timeElapsed={timeElapsed}
+          />
+        )}
 
       {showFeedback && selectedAnswer != null && question.explanation && (
         <QuestionFeedback

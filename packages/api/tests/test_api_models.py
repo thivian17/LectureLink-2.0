@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from lecturelink_api.models.api_models import (
     ConceptResponse,
     LectureResponse,
@@ -15,6 +13,7 @@ from lecturelink_api.models.api_models import (
     QuizSubmissionResult,
     SearchResult,
 )
+from pydantic import ValidationError
 
 
 class TestLectureResponse:

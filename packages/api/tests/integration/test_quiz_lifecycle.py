@@ -11,8 +11,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tests.integration.conftest import (
-    FAKE_USER_ID,
-    make_course,
     make_quiz,
     make_quiz_question,
     mock_chain,

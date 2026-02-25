@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
     POSTHOG_API_KEY: str = ""
     LANGFUSE_SECRET_KEY: str = ""
+    REDIS_URL: str = "redis://localhost:6379"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

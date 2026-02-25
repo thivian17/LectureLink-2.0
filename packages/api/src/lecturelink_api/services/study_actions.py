@@ -10,16 +10,17 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 DAY_MAP: dict[str, int] = {
-    "Monday": 0,
-    "Tuesday": 1,
-    "Wednesday": 2,
-    "Thursday": 3,
-    "Friday": 4,
-    "Saturday": 5,
-    "Sunday": 6,
+    "Monday": 0, "Mon": 0,
+    "Tuesday": 1, "Tue": 1,
+    "Wednesday": 2, "Wed": 2,
+    "Thursday": 3, "Thu": 3,
+    "Friday": 4, "Fri": 4,
+    "Saturday": 5, "Sat": 5,
+    "Sunday": 6, "Sun": 6,
 }
 
-DAY_NAMES = {v: k for k, v in DAY_MAP.items()}
+DAY_NAMES = {0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday",
+             4: "Friday", 5: "Saturday", 6: "Sunday"}
 
 
 # ---------------------------------------------------------------------------
@@ -171,8 +172,8 @@ async def _gather_course_context(supabase, course: dict, user_id: str) -> dict:
     lecture_count = len(lectures_result.data) if lectures_result.data else 0
 
     # Upcoming assessments (due within 14 days)
-    today_str = date.today().isoformat()
-    future_str = (date.today() + timedelta(days=14)).isoformat()
+    today_str = f"{date.today().isoformat()}T00:00:00Z"
+    future_str = f"{(date.today() + timedelta(days=14)).isoformat()}T23:59:59Z"
     assessments_result = (
         supabase.table("assessments")
         .select("id, title, type, due_date, weight_percent, topics")
@@ -332,11 +333,15 @@ async def _actions_for_course(
                 if not due_str:
                     continue
                 try:
-                    due = date.fromisoformat(str(due_str))
+                    due = date.fromisoformat(str(due_str)[:10])
                 except (ValueError, TypeError):
                     continue
 
                 days_until = (due - date.today()).days
+                logger.debug(
+                    "Assessment %s due=%s days_until=%d",
+                    assessment.get("title"), due, days_until,
+                )
                 weight = assessment.get("weight_percent") or 10
 
                 # Find weak concepts linked to this assessment
@@ -372,11 +377,11 @@ async def _actions_for_course(
                         description=(
                             f"Your mastery of \"{weakest['title']}\" is at "
                             f"{mastery_pct}%. This concept appears on the "
-                            f"upcoming {assessment['type']}. Take a targeted "
-                            f"quiz to improve before the deadline."
+                            f"upcoming {assessment['type']}. Start a study "
+                            f"session to improve before the deadline."
                         ),
-                        cta_label="Start Quiz",
-                        cta_url=f"{base_url}/quizzes?difficulty=adaptive",
+                        cta_label="Study Now",
+                        cta_url=f"{base_url}/tutor",
                         metadata={
                             "assessment_id": assessment["id"],
                             "assessment_title": a_title,
@@ -405,12 +410,12 @@ async def _actions_for_course(
                         f" ({mastery_pct}% mastery)"
                     ),
                     description=(
-                        f"Take an adaptive quiz to strengthen your "
+                        f"Start a study session to strengthen your "
                         f"understanding of \"{weakest['title']}\". "
                         f"Your mastery is currently at {mastery_pct}%."
                     ),
-                    cta_label="Take Quiz",
-                    cta_url=f"{base_url}/quizzes?difficulty=adaptive",
+                    cta_label="Study Now",
+                    cta_url=f"{base_url}/tutor",
                     metadata={
                         "concept_title": weakest["title"],
                         "mastery": weakest["mastery"],

@@ -8,10 +8,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-
 from lecturelink_api.agents.syllabus_processor import post_process_extraction
 from lecturelink_api.models.syllabus_models import (
     SyllabusExtraction,
@@ -20,14 +19,11 @@ from lecturelink_api.models.syllabus_models import (
 from lecturelink_api.tools.date_resolver import SemesterContext, resolve_all_dates
 
 from tests.integration.conftest import (
-    FAKE_USER_ID,
     make_assessment,
-    make_course,
     make_pipeline_output,
     make_syllabus,
     mock_chain,
 )
-
 
 # ---------------------------------------------------------------------------
 # Pipeline output → post-processing tests
@@ -230,18 +226,17 @@ class TestUploadAndReviewFlow:
             )
             sb.storage.from_.return_value.upload.return_value = None
 
-            with patch("lecturelink_api.routers.syllabi.process_syllabus"):
-                resp = await client.post(
-                    "/api/syllabi/upload",
-                    data={"course_id": course_id},
-                    files={
-                        "file": (
-                            "phys201.pdf",
-                            b"%PDF-1.4 fake",
-                            "application/pdf",
-                        )
-                    },
-                )
+            resp = await client.post(
+                "/api/syllabi/upload",
+                data={"course_id": course_id},
+                files={
+                    "file": (
+                        "phys201.pdf",
+                        b"%PDF-1.4 fake",
+                        "application/pdf",
+                    )
+                },
+            )
 
         assert resp.status_code == 201
         data = resp.json()

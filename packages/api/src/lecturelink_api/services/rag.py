@@ -5,23 +5,12 @@ from __future__ import annotations
 import json
 import logging
 
-from google import genai
-
+from .genai_client import get_genai_client as _get_client
 from .search import format_chunks_for_context, search_lectures
 
 logger = logging.getLogger(__name__)
 
 RAG_MODEL = "gemini-2.5-flash"
-
-_client = None
-
-
-def _get_client():
-    """Lazy singleton for the Gemini client (avoids import-time failure)."""
-    global _client
-    if _client is None:
-        _client = genai.Client()
-    return _client
 
 RAG_SYSTEM_PROMPT = """You are a helpful study assistant answering questions about lecture content.
 

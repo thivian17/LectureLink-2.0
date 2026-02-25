@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
+from .quiz import VALID_QUESTION_TYPES
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,10 +18,30 @@ def save_quiz(
     questions: list[dict],
     target_assessment_id: str | None = None,
     difficulty: str = "medium",
+    valid_concept_ids: set[str] | None = None,
 ) -> dict:
-    """Save a generated quiz and its questions to the database."""
+    """Save a generated quiz and its questions to the database.
+
+    Parameters
+    ----------
+    valid_concept_ids:
+        Optional set of concept UUIDs known to exist.  Any ``concept_id``
+        not in this set is silently replaced with ``None`` to avoid FK
+        constraint violations from LLM-hallucinated IDs.
+    """
+    # Validate concept IDs before using them
+    def _safe_concept_id(raw: str | None) -> str | None:
+        if not raw:
+            return None
+        if valid_concept_ids is not None and raw not in valid_concept_ids:
+            logger.warning("save_quiz: dropping invalid concept_id %r", raw)
+            return None
+        return raw
+
     target_concepts = list(set(
-        q.get("concept_id") for q in questions if q.get("concept_id")
+        _safe_concept_id(q.get("concept_id"))
+        for q in questions
+        if _safe_concept_id(q.get("concept_id"))
     ))
 
     quiz_data = {
@@ -38,16 +60,24 @@ def save_quiz(
 
     question_records = []
     for q in questions:
+        qtype = q.get("question_type", "mcq")
+        if qtype not in VALID_QUESTION_TYPES:
+            logger.warning(
+                "Quiz %s: dropping question with invalid type %r",
+                quiz_id, qtype,
+            )
+            continue
         record = {
             "quiz_id": quiz_id,
+            "user_id": user_id,
             "question_index": q["question_index"],
             "question_text": q["question_text"],
-            "question_type": q["question_type"],
+            "question_type": qtype,
             "options": q.get("options"),
             "correct_answer": q["correct_answer"],
             "explanation": q["explanation"],
             "source_chunk_ids": q.get("source_chunk_ids", []),
-            "concept_id": q.get("concept_id"),
+            "concept_id": _safe_concept_id(q.get("concept_id")),
             "difficulty": q.get("difficulty", difficulty),
         }
         question_records.append(record)

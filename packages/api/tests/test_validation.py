@@ -5,7 +5,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from lecturelink_api.agents.syllabus_processor import (
     post_process_extraction,
     validate_assessment_completeness,
@@ -14,7 +13,6 @@ from lecturelink_api.agents.syllabus_processor import (
     validate_no_duplicates,
 )
 from lecturelink_api.models.syllabus_models import SyllabusExtraction
-
 
 # ---------------------------------------------------------------------------
 # Helpers

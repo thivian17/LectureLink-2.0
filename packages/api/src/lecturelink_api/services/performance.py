@@ -14,6 +14,8 @@ async def get_performance(
 ) -> dict:
     """Compute performance analytics for a student in a course.
 
+    Results are cached in Redis for 60 seconds when available.
+
     Returns:
         {
             "overall": {total_questions_attempted, overall_accuracy, ...},
@@ -23,6 +25,17 @@ async def get_performance(
             "strong_concepts": [concept_ids with mastery >= 0.8],
         }
     """
+    # Check Redis cache first
+    cache_key = f"perf:{user_id}:{course_id}"
+    try:
+        from lecturelink_api.services.redis_client import cache_get
+
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            return cached
+    except Exception:
+        pass
+
     # 1. Concept mastery via SQL function
     try:
         mastery_result = supabase.rpc(
@@ -148,7 +161,7 @@ async def get_performance(
     ]
     strong_ids = [c["concept_id"] for c in concepts if c["mastery"] >= 0.8]
 
-    return {
+    result = {
         "overall": {
             "total_questions_attempted": total_attempted,
             "overall_accuracy": round(overall_accuracy, 4),
@@ -173,3 +186,13 @@ async def get_performance(
         "weak_concepts": weak_ids,
         "strong_concepts": strong_ids,
     }
+
+    # Cache the result for 60 seconds
+    try:
+        from lecturelink_api.services.redis_client import cache_set
+
+        await cache_set(cache_key, result, ttl=60)
+    except Exception:
+        pass
+
+    return result

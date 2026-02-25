@@ -71,6 +71,12 @@ export interface TranscriptSegment {
   source: string;
 }
 
+export interface Subconcept {
+  title: string;
+  description: string;
+  difficulty_estimate: number;
+}
+
 export interface LectureConcept {
   id: string;
   title: string;
@@ -84,6 +90,7 @@ export interface LectureConcept {
     relevance_score: number;
   }>;
   segment_indices: number[];
+  subconcepts: Subconcept[];
 }
 
 export interface SlideInfo {
@@ -108,7 +115,13 @@ export interface LectureDetail extends Lecture {
 // ---------------------------------------------------------------------------
 
 export type QuizStatus = "pending" | "generating" | "ready" | "failed";
-export type QuestionType = "mcq" | "true_false" | "short_answer";
+export type QuestionType =
+  | "mcq"
+  | "true_false"
+  | "short_answer"
+  | "code_writing"
+  | "code_fix"
+  | "code_explain";
 export type QuizDifficulty = "easy" | "medium" | "hard" | "adaptive";
 
 export interface Quiz {
@@ -138,6 +151,7 @@ export interface QuizQuestion {
   source_lecture_id?: string | null;
   source_lecture_title?: string | null;
   source_timestamp_seconds?: number | null;
+  code_metadata?: CodeMetadata;
 }
 
 export interface QuizAnswer {
@@ -164,6 +178,7 @@ export interface QuestionResult {
   options?: string[] | null;
   source_chunk_ids?: string[];
   concept_id?: string | null;
+  code_grading_result?: CodeGradingResult;
 }
 
 export interface ConceptPerformance {
@@ -177,6 +192,59 @@ export interface QuizGenerationStatus {
   status: QuizStatus;
   stage: string | null;
   error_message: string | null;
+}
+
+// Coding question metadata (from quiz_questions.code_metadata)
+export interface CodeMetadata {
+  language: string;
+  starter_code: string;
+  reference_solution: string;
+  grading_rubric: Record<
+    string,
+    {
+      weight: number;
+      criteria: string;
+    }
+  >;
+  hints: string[];
+  example_inputs_outputs: Array<{
+    input: string;
+    expected: string;
+  }>;
+  common_mistakes: string[];
+  max_lines: number;
+  time_limit_minutes: number;
+  related_lecture_concepts: string[];
+}
+
+// Grading result (from quiz_attempts.code_grading_result)
+export interface CodeGradingResult {
+  overall_score: number;
+  is_correct: boolean;
+  rubric_scores: Record<
+    string,
+    {
+      score: number;
+      max_weight: number;
+      feedback: string;
+    }
+  >;
+  line_feedback: Array<{
+    line: number;
+    type: "error" | "suggestion" | "praise";
+    message: string;
+  }>;
+  overall_feedback: string;
+  suggested_improvement: string | null;
+  concepts_demonstrated: string[];
+  concepts_lacking: string[];
+}
+
+// Hint response
+export interface HintResponse {
+  hint: string;
+  hints_remaining: number;
+  hint_index: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -331,4 +399,241 @@ export interface StudyAction {
 export interface StudyActionsResponse {
   actions: StudyAction[];
   generated_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Onboarding
+// ---------------------------------------------------------------------------
+
+export type OnboardingPath =
+  | "just_starting"
+  | "mid_semester"
+  | "course_complete";
+
+export interface OnboardingStatus {
+  path: OnboardingPath | null;
+  step: string | null;
+  completed_at: string | null;
+  welcome_message: {
+    message: string;
+    generated_at: string;
+    path: string;
+  } | null;
+}
+
+export interface SuggestedPath {
+  suggested_path: OnboardingPath;
+  progress_pct: number;
+}
+
+export interface LectureChecklistItem {
+  lecture_number: number;
+  expected_date: string;
+  week_number: number;
+  topic_hint: string | null;
+  day_of_week: string;
+  status: "pending" | "uploaded" | "skipped";
+}
+
+export interface SemesterProgress {
+  status: "not_started" | "in_progress" | "complete";
+  progress_pct: number;
+  weeks_elapsed: number;
+  estimated_lectures_passed: number;
+  days_remaining: number;
+  past_assessments: Assessment[];
+  upcoming_assessments: Assessment[];
+  next_assessment: Assessment | null;
+}
+
+export interface PersonalizedMessage {
+  message: string;
+  generated_at: string;
+  path: string;
+}
+
+// ---------------------------------------------------------------------------
+// Study Tutor
+// ---------------------------------------------------------------------------
+
+export type TutorMode = "diagnostic" | "full_lesson" | "custom_topic" | "custom_plan";
+export type TutorSessionStatus = "active" | "paused" | "completed" | "abandoned";
+export type MisconceptionType = "near_miss" | "fundamental" | "incomplete";
+export type TutorQuestionType =
+  | "mcq"
+  | "short_answer"
+  | "true_false"
+  | "fill_in_blank"
+  | "long_answer"
+  | "ordering";
+export type ChatRelevance = "on_topic" | "related" | "off_topic";
+export type BlockType =
+  | "teaching"
+  | "check"
+  | "feedback"
+  | "reteach"
+  | "practice"
+  | "summary"
+  | "transition"
+  | "chat_response"
+  | "complete"
+  | "concept_complete";
+
+export interface AssessmentChoice {
+  id: string;
+  title: string;
+  due_date: string;
+  weight_percent: number | null;
+  days_remaining: number;
+}
+
+export interface MasterySummaryItem {
+  concept: string;
+  mastery: number;
+  status: string;
+}
+
+export interface TutorSessionEntry {
+  upcoming_assessments: AssessmentChoice[];
+  active_session: TutorSession | null;
+  mastery_summary: MasterySummaryItem[];
+  suggested_duration_minutes: number;
+}
+
+export interface TutorSession {
+  id: string;
+  course_id: string;
+  mode: TutorMode;
+  status: TutorSessionStatus;
+  lesson_plan: LessonPlan | null;
+  current_concept_index: number;
+  current_step_index: number;
+  concepts_planned: number;
+  concepts_completed: number;
+  questions_asked: number;
+  questions_correct: number;
+  duration_seconds: number;
+  suggested_duration_minutes: number;
+  target_assessment_id: string | null;
+  started_at: string;
+  created_at: string;
+}
+
+export interface LessonPlan {
+  session_title: string;
+  estimated_duration_minutes: number;
+  concepts: LessonConcept[];
+  wrap_up: { type: string; description: string };
+}
+
+export interface LessonConcept {
+  concept_id: string | null;
+  title: string;
+  mastery: number;
+  priority_score: number;
+  teaching_approach: "foundational" | "application" | "synthesis";
+  estimated_minutes: number;
+  outline: LessonStep[];
+  generated_content?: ConceptContent;
+}
+
+export interface LessonStep {
+  type: "activate" | "explain" | "check" | "practice" | "summary" | "transition";
+  description: string;
+  question_type?: TutorQuestionType;
+  targets?: string;
+}
+
+export interface ConceptContent {
+  concept_title: string;
+  blocks: ContentBlock[];
+}
+
+export interface ContentBlock {
+  block_type: BlockType;
+  content: string;
+  question?: TutorQuestion;
+  rubric?: QuestionRubric;
+}
+
+export interface TutorQuestion {
+  question_id: string;
+  question_text: string;
+  question_type: TutorQuestionType;
+  options?: string[];
+  concept_title: string;
+}
+
+export interface QuestionRubric {
+  must_mention: string[];
+  partial_credit_for: string[];
+  common_misconceptions: string[];
+  model_answer: string;
+}
+
+export interface GradingResult {
+  is_correct: boolean;
+  feedback: string;
+  misconception_type: MisconceptionType | null;
+  reteach_triggered: boolean;
+  reteach_content: string | null;
+  grading_confidence: number;
+  rubric_evaluation: Record<string, unknown> | null;
+  model_answer: string | null;
+}
+
+export interface TutorChatResponse {
+  response: string;
+  relevance: ChatRelevance;
+}
+
+export interface ConceptReadiness {
+  concept_id: string | null;
+  title: string;
+  mastery: number;
+  covered: boolean;
+  teaching_approach: "foundational" | "application" | "synthesis";
+  lecture_title: string | null;
+}
+
+export interface AssessmentReadiness {
+  assessment_id: string;
+  assessment_title: string;
+  due_date: string | null;
+  days_remaining: number | null;
+  concepts: ConceptReadiness[];
+  overall_readiness: number;
+  ready_count: number;
+  total_count: number;
+}
+
+export interface DiagnosticResult {
+  total_correct: number;
+  total_questions: number;
+  concept_results: {
+    concept: string;
+    correct: boolean;
+    misconception?: string;
+  }[];
+  identified_gaps: string[];
+  recommended_focus: (string | { concept_title: string; approach: string })[];
+}
+
+export interface SessionSummary {
+  session_id: string;
+  mode: TutorMode;
+  concepts_covered: {
+    concept_title: string;
+    questions_asked: number;
+    questions_correct: number;
+  }[];
+  total_questions: number;
+  total_correct: number;
+  accuracy_percent: number;
+  duration_seconds: number;
+  mastery_changes: {
+    concept: string;
+    before: number;
+    after: number;
+  }[] | null;
 }

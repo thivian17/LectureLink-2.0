@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-
 from lecturelink_api.main import app
 
 FAKE_USER_ID = str(uuid.uuid4())

@@ -4,30 +4,19 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date, timedelta
+from datetime import date
 
-from google import genai
-
+from .genai_client import get_genai_client as _get_client
 from .study_actions import (
-    StudyAction,
     LectureGap,
-    compute_lecture_gap,
+    StudyAction,
     _gather_course_context,
+    compute_lecture_gap,
 )
 
 logger = logging.getLogger(__name__)
 
 ACTIONS_MODEL = "gemini-2.5-flash"
-
-_client = None
-
-
-def _get_client():
-    """Lazy singleton for the Gemini client."""
-    global _client
-    if _client is None:
-        _client = genai.Client()
-    return _client
 
 
 VALID_ACTION_TYPES = frozenset({
@@ -54,18 +43,21 @@ names, dates, lecture counts, and assessment names when available.
    - Bad: "Assessment prep for CS 201"
    - Good: "You're 4 lectures behind in Data Structures — your Monday class was 2 days ago"
    - Bad: "Upload lectures for your course"
-4. Each action MUST use one of these exact action_types:
+4. ALWAYS use the pre-computed "days_until" field for time references. \
+NEVER calculate days from dates yourself — your math will be wrong. For example, \
+if days_until=1, say "tomorrow" or "in 1 day", NOT "in 36 days".
+5. Each action MUST use one of these exact action_types:
    - "upload_syllabus": Course has no usable syllabus
    - "review_syllabus": AI extraction from syllabus needs human review
    - "upload_lectures": Student is behind on uploading lecture materials
    - "assessment_prep": Upcoming assessment with weak areas to study
    - "take_quiz": Practice quiz to strengthen a weak concept
    - "study_weak_concept": Broader review of a struggling topic
-5. course_id, course_name, and course_code MUST be copied EXACTLY from the input data.
-6. cta_url MUST be selected from the cta_urls provided for each course. Do NOT invent URLs.
-7. cta_label should be a short imperative phrase (2-4 words): "Upload Syllabus", \
+6. course_id, course_name, and course_code MUST be copied EXACTLY from the input data.
+7. cta_url MUST be selected from the cta_urls provided for each course. Do NOT invent URLs.
+8. cta_label should be a short imperative phrase (2-4 words): "Upload Syllabus", \
 "Start Quiz", "Review Extraction", "Upload Lecture", "Study Now".
-8. priority is a float from 0.0 to 1.0:
+9. priority is a float from 0.0 to 1.0:
    - 0.9-1.0: Blocking issue (no syllabus) or exam tomorrow
    - 0.7-0.9: Urgent (exam this week, significantly behind on lectures)
    - 0.4-0.7: Important but not urgent (weak concepts, routine study)
@@ -118,7 +110,7 @@ def _build_llm_context(
                 "upload_syllabus": base_url,
                 "review_syllabus": f"{base_url}/syllabus/review",
                 "upload_lectures": f"{base_url}/lectures/new",
-                "quiz": f"{base_url}/quizzes?difficulty=adaptive",
+                "study": f"{base_url}/tutor",
             },
         }
 
@@ -154,15 +146,14 @@ def _build_llm_context(
                 ae: dict = {
                     "title": a["title"],
                     "type": a["type"],
-                    "due_date": a.get("due_date"),
                     "weight_percent": a.get("weight_percent"),
                 }
                 due_str = a.get("due_date")
                 if due_str:
                     try:
-                        ae["days_until"] = (
-                            date.fromisoformat(str(due_str)) - today
-                        ).days
+                        due = date.fromisoformat(str(due_str)[:10])
+                        ae["days_until"] = (due - today).days
+                        ae["due_date_display"] = due.strftime("%b %d")
                     except (ValueError, TypeError):
                         pass
                 topics = a.get("topics")
@@ -243,9 +234,9 @@ def _validate_llm_actions(raw: dict, courses: list[dict]) -> list[StudyAction]:
                     "upload_syllabus": base,
                     "review_syllabus": f"{base}/syllabus/review",
                     "upload_lectures": f"{base}/lectures/new",
-                    "assessment_prep": f"{base}/quizzes?difficulty=adaptive",
-                    "take_quiz": f"{base}/quizzes?difficulty=adaptive",
-                    "study_weak_concept": f"{base}/quizzes?difficulty=adaptive",
+                    "assessment_prep": f"{base}/tutor",
+                    "take_quiz": f"{base}/tutor",
+                    "study_weak_concept": f"{base}/tutor",
                 }
                 cta = url_map.get(action_type, base)
 

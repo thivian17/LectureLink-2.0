@@ -5,21 +5,11 @@ from __future__ import annotations
 import json
 import logging
 
-from google import genai
+from .genai_client import get_genai_client as _get_client
 
 logger = logging.getLogger(__name__)
 
 CRITIC_MODEL = "gemini-2.5-flash"
-
-_client = None
-
-
-def _get_client():
-    """Lazy singleton for the Gemini client."""
-    global _client
-    if _client is None:
-        _client = genai.Client()
-    return _client
 
 CRITIC_SYSTEM_PROMPT = """\
 Review generated quiz questions for quality.

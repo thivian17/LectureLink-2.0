@@ -209,15 +209,15 @@ def _get_syllabus_schedule(supabase, course_id: str) -> list[dict]:
     try:
         syllabi = (
             supabase.table("syllabi")
-            .select("extracted_data")
+            .select("raw_extraction")
             .eq("course_id", course_id)
             .eq("status", "confirmed")
             .limit(1)
             .execute()
         )
 
-        if syllabi.data and syllabi.data[0].get("extracted_data"):
-            data = syllabi.data[0]["extracted_data"]
+        if syllabi.data and syllabi.data[0].get("raw_extraction"):
+            data = syllabi.data[0]["raw_extraction"]
             return data.get("schedule", [])
     except Exception as e:
         logger.warning("Failed to fetch syllabus schedule: %s", e)

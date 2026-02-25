@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import pytest
 from lecturelink_api.agents.input_router import (
-    SUPPORTED_AUDIO,
-    SUPPORTED_SLIDES,
     route_input,
 )
 

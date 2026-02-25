@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from google import genai
+from lecturelink_api.services.embedding import embed_texts
 
 logger = logging.getLogger(__name__)
 
@@ -126,17 +126,14 @@ def estimate_tokens(text: str) -> int:
     return int(len(text.split()) * TOKEN_ESTIMATE_FACTOR)
 
 
-EMBED_BATCH_SIZE = 100
-
-
 async def embed_chunks(chunks: list[dict]) -> list[dict]:
-    """Batch embed all chunks using gemini-embedding-001.
+    """Batch embed all chunks using the centralized embedding service.
 
     Args:
         chunks: List of chunk dicts with 'content' field.
 
     Returns:
-        Same chunks with 'embedding' field added (768-dim vector).
+        Same chunks with 'embedding' field added (2000-dim vector).
 
     Raises:
         EmbeddingError: If embedding generation fails.
@@ -144,36 +141,19 @@ async def embed_chunks(chunks: list[dict]) -> list[dict]:
     if not chunks:
         return []
 
-    client = genai.Client()
     texts = [c["content"] for c in chunks]
 
-    all_embeddings: list[list[float]] = []
-
-    for i in range(0, len(texts), EMBED_BATCH_SIZE):
-        batch_texts = texts[i : i + EMBED_BATCH_SIZE]
-
-        try:
-            response = await client.aio.models.embed_content(
-                model="gemini-embedding-001",
-                contents=batch_texts,
-                config={
-                    "task_type": "RETRIEVAL_DOCUMENT",
-                    "output_dimensionality": 2000,
-                },
-            )
-
-            for emb in response.embeddings:
-                all_embeddings.append(emb.values)
-
-        except Exception as e:
-            logger.error("Embedding batch %d failed: %s", i // EMBED_BATCH_SIZE, e)
-            raise EmbeddingError(f"Embedding generation failed: {e}") from e
+    try:
+        all_embeddings = await embed_texts(texts, task_type="RETRIEVAL_DOCUMENT")
+    except Exception as e:
+        logger.error("Chunk embedding failed: %s", e)
+        raise EmbeddingError(f"Embedding generation failed: {e}") from e
 
     for chunk, embedding in zip(chunks, all_embeddings, strict=False):
         chunk["embedding"] = embedding
 
     logger.info(
-        "Embedding complete: %d chunks embedded with 768-dim vectors",
+        "Embedding complete: %d chunks embedded with 2000-dim vectors",
         len(chunks),
     )
     return chunks
@@ -186,7 +166,7 @@ async def embed_concepts(concepts: list[dict]) -> list[dict]:
         concepts: List of concept dicts with 'title' and 'description' fields.
 
     Returns:
-        Same concepts with 'embedding' field added (768-dim vector).
+        Same concepts with 'embedding' field added (2000-dim vector).
 
     Raises:
         EmbeddingError: If embedding generation fails.
@@ -194,25 +174,16 @@ async def embed_concepts(concepts: list[dict]) -> list[dict]:
     if not concepts:
         return []
 
-    client = genai.Client()
     texts = [f"{c['title']}: {c.get('description', '')}" for c in concepts]
 
     try:
-        response = await client.aio.models.embed_content(
-            model="gemini-embedding-001",
-            contents=texts,
-            config={
-                "task_type": "RETRIEVAL_DOCUMENT",
-                "output_dimensionality": 2000,
-            },
-        )
-
-        for concept, emb in zip(concepts, response.embeddings, strict=False):
-            concept["embedding"] = emb.values
-
+        all_embeddings = await embed_texts(texts, task_type="RETRIEVAL_DOCUMENT")
     except Exception as e:
         logger.error("Concept embedding failed: %s", e)
         raise EmbeddingError(f"Concept embedding failed: {e}") from e
+
+    for concept, embedding in zip(concepts, all_embeddings, strict=False):
+        concept["embedding"] = embedding
 
     logger.info("Concept embedding complete: %d concepts", len(concepts))
     return concepts

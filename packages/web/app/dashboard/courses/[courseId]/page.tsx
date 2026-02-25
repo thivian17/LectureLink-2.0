@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CourseDetail } from "@/components/course-detail";
 import type { Course, Syllabus } from "@/types/database";
@@ -19,6 +19,11 @@ export default async function CourseDetailPage({
 
   if (error || !course) {
     notFound();
+  }
+
+  // Redirect to onboarding if not completed
+  if (!course.onboarding_completed_at) {
+    redirect(`/dashboard/courses/${courseId}/onboarding`);
   }
 
   const { count: assessmentCount } = await supabase

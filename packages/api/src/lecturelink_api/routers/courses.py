@@ -7,7 +7,12 @@ from supabase import create_client
 
 from lecturelink_api.auth import get_current_user
 from lecturelink_api.config import Settings, get_settings
-from lecturelink_api.models.api_models import CourseCreate, CourseResponse, CourseUpdate
+from lecturelink_api.models.api_models import (
+    CourseCreate,
+    CourseCreateResponse,
+    CourseResponse,
+    CourseUpdate,
+)
 
 router = APIRouter(prefix="/api/courses", tags=["courses"])
 
@@ -19,7 +24,7 @@ def _sb(user: dict, settings: Settings):
     return client
 
 
-@router.post("", response_model=CourseResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=CourseCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_course(
     body: CourseCreate,
     user: dict = Depends(get_current_user),
@@ -29,7 +34,23 @@ async def create_course(
     payload = body.model_dump(mode="json", exclude_none=True)
     payload["user_id"] = user["id"]
     result = sb.table("courses").insert(payload).execute()
-    return result.data[0]
+    course = result.data[0]
+
+    # Check if this is the user's first course
+    existing_courses = (
+        sb.table("courses")
+        .select("id")
+        .eq("user_id", user["id"])
+        .execute()
+    )
+    is_first_course = len(existing_courses.data) <= 1
+
+    return {
+        **course,
+        "needs_onboarding": True,
+        "is_first_course": is_first_course,
+        "onboarding_completed_at": course.get("onboarding_completed_at"),
+    }
 
 
 @router.get("", response_model=list[CourseResponse])

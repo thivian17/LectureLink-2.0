@@ -104,6 +104,9 @@ export function QuizList({ courseId, courseName }: QuizListProps) {
     lecture_ids: string[] | null;
     question_count: number;
     difficulty: QuizDifficulty;
+    include_coding?: boolean;
+    coding_ratio?: number;
+    coding_language?: string;
   }) {
     try {
       const result = await generateQuiz(courseId, options);

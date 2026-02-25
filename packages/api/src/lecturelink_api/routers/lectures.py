@@ -11,7 +11,6 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.background import BackgroundTasks
 from supabase import create_client
 
 from lecturelink_api.auth import get_current_user
@@ -22,7 +21,6 @@ from lecturelink_api.models.api_models import (
     LectureResponse,
     LectureStatusResponse,
 )
-from lecturelink_api.pipeline.background import run_lecture_processing
 from lecturelink_api.services.lecture_storage import cleanup_lecture_data
 from lecturelink_api.services.task_queue import TaskQueueService, get_task_queue
 
@@ -122,17 +120,33 @@ async def upload_lecture(
                 detail=f"Unsupported file type: {f.content_type}",
             )
 
-        file_bytes = await f.read()
+        # Stream into a SpooledTemporaryFile (stays in memory up to 10MB,
+        # spills to disk for larger files — avoids unbounded RAM usage).
+        import shutil
+        import tempfile
+
         max_size = _max_size_for(f.content_type)
-        if len(file_bytes) > max_size:
-            raise HTTPException(
-                status_code=413,
-                detail=(
-                    f"File too large: {f.filename} "
-                    f"({len(file_bytes) / 1024 / 1024:.1f}MB > "
-                    f"{max_size / 1024 / 1024:.0f}MB limit)"
-                ),
-            )
+        spooled = tempfile.SpooledTemporaryFile(max_size=10 * 1024 * 1024)
+        total_bytes = 0
+        while True:
+            chunk = await f.read(1024 * 1024)  # 1 MB chunks
+            if not chunk:
+                break
+            total_bytes += len(chunk)
+            if total_bytes > max_size:
+                spooled.close()
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"File too large: {f.filename} "
+                        f"({total_bytes / 1024 / 1024:.1f}MB > "
+                        f"{max_size / 1024 / 1024:.0f}MB limit)"
+                    ),
+                )
+            spooled.write(chunk)
+        spooled.seek(0)
+        file_bytes = spooled.read()
+        spooled.close()
 
         filename = f.filename or "upload"
         storage_path = f"lectures/{user['id']}/{course_id}/{filename}"
@@ -180,8 +194,8 @@ async def upload_lecture(
     result = sb.table("lectures").insert(insert_data).execute()
     lecture_id = result.data[0]["id"]
 
-    # Trigger processing via task queue (Cloud Tasks in prod, direct thread in dev)
-    task_queue.enqueue_lecture_processing(
+    # Trigger processing via arq task queue
+    await task_queue.enqueue_lecture_processing(
         lecture_id=lecture_id,
         course_id=course_id,
         user_id=user["id"],
@@ -279,55 +293,66 @@ async def get_lecture(
     else:
         processing_path = "audio_only"
 
-    # ── Concepts with linked assessments + segment indices ──
+    # ── Concepts with linked assessments + segment indices (bulk, O(3) queries) ──
     concepts_result = (
         sb.table("concepts")
         .select(
             "id, title, description, category, "
-            "difficulty_estimate, source_chunk_ids"
+            "difficulty_estimate, source_chunk_ids, subconcepts"
         )
         .eq("lecture_id", lecture_id)
         .execute()
     )
-    concepts = []
-    for c in concepts_result.data or []:
-        # Map source_chunk_ids → segment indices
-        segment_indices = [
-            chunk_id_to_index[cid]
-            for cid in (c.get("source_chunk_ids") or [])
-            if cid in chunk_id_to_index
-        ]
+    concept_rows = concepts_result.data or []
+    concept_ids = [c["id"] for c in concept_rows]
 
-        # Get linked assessments
-        links_result = (
+    # Bulk fetch all concept-assessment links for these concepts
+    links_by_concept: dict[str, list[dict]] = {}
+    if concept_ids:
+        all_links_result = (
             sb.table("concept_assessment_links")
-            .select("assessment_id, relevance_score")
-            .eq("concept_id", c["id"])
+            .select("concept_id, assessment_id, relevance_score")
+            .in_("concept_id", concept_ids)
             .execute()
         )
-        linked = []
-        for link in links_result.data or []:
-            a_result = (
+        # Bulk fetch assessment titles
+        assessment_ids = list({lnk["assessment_id"] for lnk in (all_links_result.data or [])})
+        assessments_map: dict[str, dict] = {}
+        if assessment_ids:
+            assessments_result = (
                 sb.table("assessments")
-                .select("title, due_date")
-                .eq("id", link["assessment_id"])
+                .select("id, title, due_date")
+                .in_("id", assessment_ids)
                 .execute()
             )
-            a_data = a_result.data[0] if a_result.data else {}
-            linked.append({
+            assessments_map = {a["id"]: a for a in (assessments_result.data or [])}
+
+        for link in all_links_result.data or []:
+            cid = link["concept_id"]
+            a_data = assessments_map.get(link["assessment_id"], {})
+            links_by_concept.setdefault(cid, []).append({
                 "id": link["assessment_id"],
                 "title": a_data.get("title", "Unknown"),
                 "due_date": a_data.get("due_date"),
                 "relevance_score": link.get("relevance_score", 0),
             })
+
+    concepts = []
+    for c in concept_rows:
+        segment_indices = [
+            chunk_id_to_index[cid]
+            for cid in (c.get("source_chunk_ids") or [])
+            if cid in chunk_id_to_index
+        ]
         concepts.append({
             "id": c["id"],
             "title": c["title"],
             "description": c.get("description"),
             "category": c.get("category", "concept"),
             "difficulty_estimate": c.get("difficulty_estimate", 0.5),
-            "linked_assessments": linked,
+            "linked_assessments": links_by_concept.get(c["id"], []),
             "segment_indices": segment_indices,
+            "subconcepts": c.get("subconcepts") or [],
         })
 
     # ── Slide count ──
@@ -431,9 +456,9 @@ async def list_course_lectures(
 @router.post("/lectures/{lecture_id}/retry")
 async def retry_lecture(
     lecture_id: str,
-    background_tasks: BackgroundTasks,
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
+    task_queue: TaskQueueService = Depends(get_task_queue),
 ):
     sb = _sb(user, settings)
 
@@ -476,16 +501,15 @@ async def retry_lecture(
     sb_admin = _sb_admin(settings)
     file_urls = _signed_urls_from_lecture(sb_admin, lecture)
 
-    # Re-trigger processing (sync task → runs in thread pool)
-    background_tasks.add_task(
-        run_lecture_processing,
-        supabase_url=settings.SUPABASE_URL,
-        supabase_key=settings.SUPABASE_ANON_KEY,
-        user_token=user["token"],
+    # Re-trigger processing via arq
+    await task_queue.enqueue_lecture_processing(
         lecture_id=lecture_id,
         course_id=lecture["course_id"],
         user_id=user["id"],
         file_urls=file_urls,
+        supabase_url=settings.SUPABASE_URL,
+        supabase_key=settings.SUPABASE_ANON_KEY,
+        user_token=user["token"],
     )
 
     return {"status": "processing", "retry_count": new_retry}
@@ -494,9 +518,9 @@ async def retry_lecture(
 @router.post("/lectures/{lecture_id}/reprocess")
 async def reprocess_lecture(
     lecture_id: str,
-    background_tasks: BackgroundTasks,
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
+    task_queue: TaskQueueService = Depends(get_task_queue),
 ):
     sb = _sb(user, settings)
 
@@ -531,16 +555,15 @@ async def reprocess_lecture(
     sb_admin = _sb_admin(settings)
     file_urls = _signed_urls_from_lecture(sb_admin, lecture)
 
-    # Re-trigger full pipeline (sync task → runs in thread pool)
-    background_tasks.add_task(
-        run_lecture_processing,
-        supabase_url=settings.SUPABASE_URL,
-        supabase_key=settings.SUPABASE_ANON_KEY,
-        user_token=user["token"],
+    # Re-trigger full pipeline via arq
+    await task_queue.enqueue_lecture_processing(
         lecture_id=lecture_id,
         course_id=lecture["course_id"],
         user_id=user["id"],
         file_urls=file_urls,
+        supabase_url=settings.SUPABASE_URL,
+        supabase_key=settings.SUPABASE_ANON_KEY,
+        user_token=user["token"],
         is_reprocess=True,
     )
 

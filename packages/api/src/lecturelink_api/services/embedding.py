@@ -4,22 +4,12 @@ from __future__ import annotations
 
 import logging
 
-from google import genai
+from .genai_client import get_genai_client as _get_client, reset_genai_client
 
 logger = logging.getLogger(__name__)
 
 EMBEDDING_MODEL = "gemini-embedding-001"
 EMBEDDING_DIMENSIONS = 2000
-
-_client = None
-
-
-def _get_client():
-    """Lazy singleton for the Gemini client (avoids import-time failure)."""
-    global _client
-    if _client is None:
-        _client = genai.Client()
-    return _client
 
 
 async def embed_query(query: str) -> list[float]:
@@ -42,6 +32,20 @@ async def embed_query(query: str) -> list[float]:
             },
         )
         return result.embeddings[0].values
+    except RuntimeError as e:
+        if "Event loop is closed" in str(e):
+            logger.warning("Stale embedding client detected, recreating")
+            reset_genai_client()
+            result = await _get_client().aio.models.embed_content(
+                model=EMBEDDING_MODEL,
+                contents=query,
+                config={
+                    "task_type": "RETRIEVAL_QUERY",
+                    "output_dimensionality": EMBEDDING_DIMENSIONS,
+                },
+            )
+            return result.embeddings[0].values
+        raise
     except Exception as e:
         logger.error(f"Query embedding failed: {e}")
         raise
@@ -78,6 +82,21 @@ async def embed_texts(
                 },
             )
             embeddings.extend([e.values for e in result.embeddings])
+        except RuntimeError as e:
+            if "Event loop is closed" in str(e):
+                logger.warning("Stale embedding client detected, recreating")
+                reset_genai_client()
+                result = await _get_client().aio.models.embed_content(
+                    model=EMBEDDING_MODEL,
+                    contents=batch,
+                    config={
+                        "task_type": task_type,
+                        "output_dimensionality": EMBEDDING_DIMENSIONS,
+                    },
+                )
+                embeddings.extend([e.values for e in result.embeddings])
+            else:
+                raise
         except Exception as e:
             logger.error(f"Batch embedding failed for batch {i // batch_size}: {e}")
             raise

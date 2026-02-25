@@ -1,9 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { Clock } from "lucide-react";
+import { Clock, RotateCcw } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   Card,
@@ -13,8 +14,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/lectures/status-badge";
 import { formatDuration } from "@/lib/format";
+import { retryLecture } from "@/lib/api";
 import type { Lecture } from "@/types/database";
 
 function parseLocalDate(dateStr: string): Date {
@@ -25,9 +28,27 @@ function parseLocalDate(dateStr: string): Date {
 interface LectureCardProps {
   lecture: Lecture;
   courseId: string;
+  onRetry?: () => void;
 }
 
-export const LectureCard = React.memo(function LectureCard({ lecture, courseId }: LectureCardProps) {
+export const LectureCard = React.memo(function LectureCard({ lecture, courseId, onRetry }: LectureCardProps) {
+  const [retrying, setRetrying] = useState(false);
+
+  async function handleRetry(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setRetrying(true);
+    try {
+      await retryLecture(lecture.id);
+      toast.success("Lecture queued for retry");
+      onRetry?.();
+    } catch {
+      toast.error("Failed to retry lecture");
+    } finally {
+      setRetrying(false);
+    }
+  }
+
   return (
     <Link href={`/dashboard/courses/${courseId}/lectures/${lecture.id}`}>
       <Card className="h-full transition-colors hover:bg-accent/50">
@@ -60,6 +81,18 @@ export const LectureCard = React.memo(function LectureCard({ lecture, courseId }
                   {formatDuration(lecture.duration_seconds)}
                 </span>
               )}
+            {lecture.processing_status === "failed" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 gap-1 text-xs"
+                disabled={retrying}
+                onClick={handleRetry}
+              >
+                <RotateCcw className={`h-3 w-3 ${retrying ? "animate-spin" : ""}`} />
+                {retrying ? "Retrying…" : "Retry"}
+              </Button>
+            )}
           </div>
           {lecture.processing_status === "completed" && lecture.summary && (
             <p className="text-sm text-muted-foreground line-clamp-2">

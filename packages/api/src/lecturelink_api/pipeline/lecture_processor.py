@@ -190,16 +190,24 @@ async def process_lecture(
         )
 
         # ── Update lecture record ──
-        full_transcript = "\n".join(
-            seg["text"] for seg in aligned_segments if seg.get("text")
-        )
+        # Store structured JSONB array of segments (cap at 500 to avoid row bloat)
+        transcript_json = [
+            {
+                "start": seg.get("start"),
+                "end": seg.get("end"),
+                "text": seg.get("text"),
+                "speaker": seg.get("speaker"),
+            }
+            for seg in aligned_segments
+            if seg.get("text")
+        ][:500]
 
         update_data = {
             "processing_status": "completed",
             "processing_stage": "completed",
             "processing_progress": 1.0,
             "processing_error": None,
-            "transcript": full_transcript[:50000],
+            "transcript": transcript_json,
         }
         if duration_seconds:
             update_data["duration_seconds"] = int(duration_seconds)

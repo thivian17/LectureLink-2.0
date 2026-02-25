@@ -8,8 +8,8 @@ blocked by persistence issues.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
 from google.adk.sessions import Session
@@ -37,11 +37,11 @@ class DatabaseSessionService(BaseSessionService):
         *,
         app_name: str,
         user_id: str,
-        state: Optional[dict[str, Any]] = None,
-        session_id: Optional[str] = None,
+        state: dict[str, Any] | None = None,
+        session_id: str | None = None,
     ) -> Session:
         sid = session_id or str(uuid4())
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         session = Session(
             id=sid,
@@ -68,8 +68,8 @@ class DatabaseSessionService(BaseSessionService):
         app_name: str,
         user_id: str,
         session_id: str,
-        config: Optional[GetSessionConfig] = None,
-    ) -> Optional[Session]:
+        config: GetSessionConfig | None = None,
+    ) -> Session | None:
         result = (
             self._sb.table("adk_sessions")
             .select("*")
@@ -86,8 +86,8 @@ class DatabaseSessionService(BaseSessionService):
         if expires_at:
             exp = datetime.fromisoformat(str(expires_at))
             if exp.tzinfo is None:
-                exp = exp.replace(tzinfo=timezone.utc)
-            if exp < datetime.now(timezone.utc):
+                exp = exp.replace(tzinfo=UTC)
+            if exp < datetime.now(UTC):
                 return None
 
         # Reconstruct Session from stored JSONB
@@ -106,7 +106,7 @@ class DatabaseSessionService(BaseSessionService):
 
         # Touch updated_at
         self._sb.table("adk_sessions").update({
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         }).eq("id", session_id).execute()
 
         return session
@@ -115,13 +115,13 @@ class DatabaseSessionService(BaseSessionService):
         self,
         *,
         app_name: str,
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
     ) -> ListSessionsResponse:
         query = (
             self._sb.table("adk_sessions")
             .select("*")
             .eq("agent_name", app_name)
-            .gte("expires_at", datetime.now(timezone.utc).isoformat())
+            .gte("expires_at", datetime.now(UTC).isoformat())
             .order("updated_at", desc=True)
         )
         if user_id is not None:
@@ -169,7 +169,7 @@ class DatabaseSessionService(BaseSessionService):
         try:
             self._sb.table("adk_sessions").update({
                 "state": session.model_dump(mode="json"),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
             }).eq("id", session.id).execute()
         except Exception:
             logger.warning(
@@ -185,7 +185,7 @@ class DatabaseSessionService(BaseSessionService):
 
 def cleanup_expired_sessions(supabase_client: Any) -> int:
     """Delete expired ADK sessions. Returns count of deleted rows."""
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     result = (
         supabase_client.table("adk_sessions")
         .delete()

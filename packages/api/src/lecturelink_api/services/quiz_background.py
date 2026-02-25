@@ -60,6 +60,7 @@ async def generate_quiz_background(
         for q in questions:
             record = {
                 "quiz_id": quiz_id,
+                "user_id": user_id,
                 "question_index": q["question_index"],
                 "question_text": q["question_text"],
                 "question_type": q["question_type"],

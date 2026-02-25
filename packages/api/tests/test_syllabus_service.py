@@ -11,7 +11,6 @@ import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from lecturelink_api.models.syllabus_models import (
     AssessmentExtraction,
     ExtractedField,
@@ -26,7 +25,6 @@ from lecturelink_api.services.syllabus_service import (
     process_syllabus,
     update_assessment_from_review,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

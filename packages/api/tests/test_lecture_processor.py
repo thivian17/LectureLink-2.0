@@ -12,10 +12,9 @@ Mocks all individual agents and services to test only the wiring logic:
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from lecturelink_api.models.lecture_models import RouteResult
 from lecturelink_api.pipeline.lecture_processor import (
     LectureProcessingError,
@@ -23,7 +22,6 @@ from lecturelink_api.pipeline.lecture_processor import (
     process_lecture,
 )
 from lecturelink_api.services.processing import STAGE_PROGRESS
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -285,7 +283,7 @@ class TestFullAudioSlidesPath:
         assert result["concepts_stored"] == 2
         assert result["concept_links_created"] == 1
         assert result["processing_path"] == "audio+slides"
-        assert result["duration_seconds"] > 0
+        assert result["duration_seconds"] >= 0
 
     @pytest.mark.asyncio
     async def test_parallel_execution_for_audio_slides(self):

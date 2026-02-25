@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from fastapi.background import BackgroundTasks
 from supabase import create_client
 
 from lecturelink_api.auth import get_current_user
@@ -14,7 +13,7 @@ from lecturelink_api.models.api_models import (
     SyllabusStatusResponse,
     SyllabusUploadResponse,
 )
-from lecturelink_api.services.syllabus_service import process_syllabus
+from lecturelink_api.services.task_queue import TaskQueueService, get_task_queue
 
 router = APIRouter(prefix="/api/syllabi", tags=["syllabi"])
 
@@ -37,11 +36,11 @@ def _sb_admin(settings: Settings):
 
 @router.post("/upload", response_model=SyllabusUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_syllabus(
-    background_tasks: BackgroundTasks,
     course_id: str = Form(...),
     file: UploadFile = File(...),
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
+    task_queue: TaskQueueService = Depends(get_task_queue),
 ):
     if file.content_type not in _ALLOWED_TYPES:
         raise HTTPException(
@@ -93,16 +92,17 @@ async def upload_syllabus(
     )
     syllabus_id = result.data[0]["id"]
 
-    # Trigger background processing
-    background_tasks.add_task(
-        process_syllabus,
+    # Trigger background processing via arq
+    await task_queue.enqueue_syllabus_processing(
         syllabus_id=syllabus_id,
         file_bytes=file_bytes,
         file_name=file_name,
         mime_type=file.content_type,
         course_id=course_id,
         user_id=user["id"],
-        supabase=sb,
+        supabase_url=settings.SUPABASE_URL,
+        supabase_key=settings.SUPABASE_ANON_KEY,
+        user_token=user["token"],
     )
 
     return SyllabusUploadResponse(syllabus_id=syllabus_id, status="processing")

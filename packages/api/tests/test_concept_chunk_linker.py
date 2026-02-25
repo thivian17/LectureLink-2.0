@@ -3,13 +3,9 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
-
 from lecturelink_api.agents.concept_chunk_linker import (
-    DEFAULT_TOP_K,
     link_concepts_to_chunks,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

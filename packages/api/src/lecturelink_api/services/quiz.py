@@ -24,6 +24,11 @@ from supabase import create_client
 
 logger = logging.getLogger(__name__)
 
+VALID_QUESTION_TYPES = frozenset({
+    "mcq", "true_false", "short_answer",
+    "code_writing", "code_fix", "code_explain",
+})
+
 DIFFICULTY_TO_FLOAT = {"easy": 0.3, "medium": 0.5, "hard": 0.8}
 
 
@@ -32,6 +37,38 @@ def _difficulty_float(val) -> float:
     if isinstance(val, (int, float)):
         return float(val)
     return DIFFICULTY_TO_FLOAT.get(str(val).lower(), 0.5)
+
+
+async def run_quiz_generation_async(
+    supabase_url: str,
+    supabase_key: str,
+    user_token: str,
+    quiz_id: str,
+    course_id: str,
+    user_id: str,
+    target_assessment_id: str | None = None,
+    lecture_ids: list[str] | None = None,
+    num_questions: int = 10,
+    difficulty: str = "mixed",
+    include_coding: bool = False,
+    coding_ratio: float = 0.3,
+    coding_language: str = "python",
+    coding_only: bool = False,
+) -> None:
+    """Async entry point for quiz generation (used by arq worker)."""
+    sb = create_client(supabase_url, supabase_key)
+    if user_token:
+        sb.auth.set_session(user_token, "")
+
+    await _generate_quiz_async(
+        sb, quiz_id, course_id, user_id,
+        target_assessment_id, lecture_ids,
+        num_questions, difficulty,
+        include_coding=include_coding,
+        coding_ratio=coding_ratio,
+        coding_language=coding_language,
+        coding_only=coding_only,
+    )
 
 
 def run_quiz_generation(
@@ -45,15 +82,15 @@ def run_quiz_generation(
     lecture_ids: list[str] | None = None,
     num_questions: int = 10,
     difficulty: str = "mixed",
+    include_coding: bool = False,
+    coding_ratio: float = 0.3,
+    coding_language: str = "python",
+    coding_only: bool = False,
 ) -> None:
-    """Background task for quiz generation.
-
-    This is a **sync** function on purpose — FastAPI will run it in a
-    thread-pool worker, keeping the main event loop responsive.  A
-    private event loop is created for the async pipeline stages.
-    """
+    """Sync fallback for quiz generation (runs in a daemon thread)."""
     sb = create_client(supabase_url, supabase_key)
-    sb.auth.set_session(user_token, "")
+    if user_token:
+        sb.auth.set_session(user_token, "")
 
     loop = asyncio.new_event_loop()
     try:
@@ -62,8 +99,14 @@ def run_quiz_generation(
                 sb, quiz_id, course_id, user_id,
                 target_assessment_id, lecture_ids,
                 num_questions, difficulty,
+                include_coding=include_coding,
+                coding_ratio=coding_ratio,
+                coding_language=coding_language,
+                coding_only=coding_only,
             )
         )
+    except Exception:
+        logger.exception("Quiz generation thread failed for %s", quiz_id)
     finally:
         loop.close()
 
@@ -77,6 +120,10 @@ async def _generate_quiz_async(
     lecture_ids: list[str] | None = None,
     num_questions: int = 10,
     difficulty: str = "mixed",
+    include_coding: bool = False,
+    coding_ratio: float = 0.3,
+    coding_language: str = "python",
+    coding_only: bool = False,
 ) -> None:
     """Async quiz generation executed inside the background thread's event loop."""
     try:
@@ -104,11 +151,66 @@ async def _generate_quiz_async(
                 supabase, quiz_id, course_id, user_id,
                 target_assessment_id, lecture_ids,
                 num_questions, difficulty,
+                include_coding=include_coding,
+                coding_ratio=coding_ratio,
+                coding_language=coding_language,
+                coding_only=coding_only,
             )
             return
 
-        # 2. Run generator-critic loop
-        questions = await run_quiz_generation_loop(quiz_plan)
+        # 2. Determine question counts and type distribution
+        from .code_question_generator import generate_coding_questions
+
+        if coding_only:
+            coding_count = num_questions
+            regular_count = 0
+            type_distribution = {
+                "code_writing": 0.5, "code_fix": 0.3, "code_explain": 0.2,
+            }
+        elif include_coding:
+            coding_count = max(1, round(num_questions * coding_ratio))
+            regular_count = num_questions - coding_count
+            type_distribution = None
+        else:
+            coding_count = 0
+            regular_count = num_questions
+            type_distribution = None
+
+        # Generate regular questions
+        regular_questions = []
+        if regular_count > 0:
+            regular_plan = {**quiz_plan, "num_questions": regular_count}
+            regular_questions = await run_quiz_generation_loop(regular_plan)
+
+        # Generate coding questions
+        coding_questions = []
+        if coding_count > 0:
+            coding_plan = {**quiz_plan, "num_questions": coding_count}
+            coding_questions = await generate_coding_questions(
+                coding_plan,
+                language=coding_language,
+                type_distribution=type_distribution,
+            )
+
+        # Interleave or use whichever list has questions
+        if regular_questions and coding_questions:
+            questions = []
+            ri, ci = 0, 0
+            while ri < len(regular_questions) or ci < len(coding_questions):
+                if ri < len(regular_questions):
+                    questions.append(regular_questions[ri])
+                    ri += 1
+                if ci < len(coding_questions):
+                    questions.append(coding_questions[ci])
+                    ci += 1
+        elif coding_questions:
+            questions = coding_questions
+        else:
+            questions = regular_questions
+
+        # Re-index after merging
+        for i, q in enumerate(questions):
+            q["question_index"] = i
 
         if not questions:
             (
@@ -123,20 +225,43 @@ async def _generate_quiz_async(
             return
 
         # 3. Store questions
+        # Build set of valid concept IDs from the plan so we can
+        # discard hallucinated IDs that would violate the FK constraint.
+        valid_concept_ids = {
+            item["concept"]["id"]
+            for item in quiz_plan.get("concepts", [])
+            if item.get("concept", {}).get("id")
+        }
+
         question_rows = []
         for q in questions:
+            qtype = q.get("question_type", "mcq")
+            if qtype not in VALID_QUESTION_TYPES:
+                logger.warning(
+                    "Quiz %s: dropping question with invalid type %r",
+                    quiz_id, qtype,
+                )
+                continue
+            raw_concept_id = q.get("concept_id")
+            if raw_concept_id and raw_concept_id not in valid_concept_ids:
+                logger.warning(
+                    "Quiz %s: dropping invalid concept_id %r",
+                    quiz_id, raw_concept_id,
+                )
+                raw_concept_id = None
             question_rows.append({
                 "quiz_id": quiz_id,
                 "user_id": user_id,
                 "question_index": q["question_index"],
-                "question_type": q.get("question_type", "mcq"),
+                "question_type": qtype,
                 "question_text": q["question_text"],
                 "options": q.get("options", []),
                 "correct_answer": q["correct_answer"],
                 "explanation": q.get("explanation", ""),
                 "difficulty": _difficulty_float(q.get("difficulty", 0.5)),
                 "source_chunk_ids": q.get("source_chunk_ids", []),
-                "concept_id": q.get("concept_id"),
+                "concept_id": raw_concept_id,
+                "code_metadata": q.get("code_metadata"),
             })
 
         if question_rows:
@@ -186,16 +311,19 @@ async def _generate_simple(
     lecture_ids: list[str] | None,
     num_questions: int,
     difficulty: str,
+    include_coding: bool = False,
+    coding_ratio: float = 0.3,
+    coding_language: str = "python",
+    coding_only: bool = False,
 ) -> None:
     """Simple fallback generation without concepts (pre-concept-extraction).
 
     Used when the course has lecture chunks but no extracted concepts yet.
     """
-    from google import genai
-
+    from .genai_client import get_genai_client
     from .search import format_chunks_for_context, search_lectures
 
-    client = genai.Client()
+    client = get_genai_client()
     assessment_context = ""
     if target_assessment_id:
         assessment = (
@@ -232,13 +360,28 @@ async def _generate_simple(
         return
 
     context = format_chunks_for_context(chunks, max_tokens=8000)
-    prompt = (
-        f"Generate exactly {num_questions} quiz questions.\n"
-        f"Difficulty: {difficulty}\n{assessment_context}\n\n"
-        f"Lecture Content:\n{context}"
-    )
 
-    system_prompt = """\
+    # Determine how many regular vs coding questions
+    if coding_only:
+        coding_count = num_questions
+        regular_count = 0
+    elif include_coding:
+        coding_count = max(1, round(num_questions * coding_ratio))
+        regular_count = num_questions - coding_count
+    else:
+        regular_count = num_questions
+        coding_count = 0
+
+    # Generate regular questions
+    regular_questions = []
+    if regular_count > 0:
+        prompt = (
+            f"Generate exactly {regular_count} quiz questions.\n"
+            f"Difficulty: {difficulty}\n{assessment_context}\n\n"
+            f"Lecture Content:\n{context}"
+        )
+
+        system_prompt = """\
 Generate quiz questions from lecture content.
 Rules:
 - Questions must be answerable from the provided content ONLY
@@ -247,20 +390,80 @@ Rules:
 - true_false: exactly 2 options labeled True/False
 Output as JSON array of question objects."""
 
-    response = await client.aio.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
-        config={
-            "system_instruction": system_prompt,
-            "temperature": 0.7,
-            "response_mime_type": "application/json",
-        },
-    )
+        response = await client.aio.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config={
+                "system_instruction": system_prompt,
+                "temperature": 0.7,
+                "response_mime_type": "application/json",
+            },
+        )
 
-    questions = json.loads(response.text)
+        regular_questions = json.loads(response.text)
+
+    # Generate coding questions in simple mode (no concepts available)
+    coding_questions = []
+    if coding_count > 0:
+        from .code_question_generator import CODING_QUESTION_SYSTEM_PROMPT
+
+        type_dist_instruction = ""
+        if coding_only:
+            type_dist_instruction = (
+                "\nDistribute question types approximately as follows: "
+                "50% code_writing, 30% code_fix, 20% code_explain.\n"
+            )
+        else:
+            type_dist_instruction = (
+                "\nVary the question types: prefer ~50% code_writing, "
+                "~30% code_fix, ~20% code_explain.\n"
+            )
+
+        coding_prompt = (
+            f"Programming language: {coding_language}\n"
+            f"Difficulty: {difficulty}\n"
+            f"Student mastery level: 0.5\n"
+            f"Generate {coding_count} coding questions.\n"
+            f"{type_dist_instruction}"
+            f"{assessment_context}\n\n"
+            f"Lecture Content:\n{context}"
+        )
+
+        coding_response = await client.aio.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=coding_prompt,
+            config={
+                "system_instruction": CODING_QUESTION_SYSTEM_PROMPT,
+                "temperature": 0.7,
+                "response_mime_type": "application/json",
+            },
+        )
+        raw_coding_text = coding_response.text
+        try:
+            coding_questions = json.loads(raw_coding_text)
+        except json.JSONDecodeError:
+            from .code_question_generator import _repair_json_escapes
+            logger.debug("Repairing invalid JSON escapes in simple coding gen")
+            coding_questions = json.loads(_repair_json_escapes(raw_coding_text))
+
+    # Interleave or use whichever list has questions
+    if regular_questions and coding_questions:
+        all_questions: list[dict] = []
+        ri, ci = 0, 0
+        while ri < len(regular_questions) or ci < len(coding_questions):
+            if ri < len(regular_questions):
+                all_questions.append(regular_questions[ri])
+                ri += 1
+            if ci < len(coding_questions):
+                all_questions.append(coding_questions[ci])
+                ci += 1
+    elif coding_questions:
+        all_questions = coding_questions
+    else:
+        all_questions = regular_questions
 
     question_rows = []
-    for i, q in enumerate(questions):
+    for i, q in enumerate(all_questions):
         question_rows.append({
             "quiz_id": quiz_id,
             "user_id": user_id,
@@ -272,6 +475,7 @@ Output as JSON array of question objects."""
             "explanation": q.get("explanation", ""),
             "difficulty": _difficulty_float(q.get("difficulty", 0.5)),
             "source_chunk_ids": [],
+            "code_metadata": q.get("code_metadata"),
         })
 
     if question_rows:
@@ -292,7 +496,7 @@ Output as JSON array of question objects."""
     )
 
 
-def score_quiz(
+async def score_quiz(
     supabase,
     quiz_id: str,
     answers: list[dict],
@@ -303,7 +507,9 @@ def score_quiz(
     - MCQ: match by label or option text
     - True/false: case-insensitive match
     - Short answer: case-insensitive exact match
+    - Code questions: AI-graded via Gemini
     """
+    from .code_grading import grade_code_answer, is_code_question
     from .quiz_service import check_answer
 
     questions_result = (
@@ -323,7 +529,40 @@ def score_quiz(
         if not question:
             continue
 
-        is_correct = check_answer(question, answer["student_answer"])
+        grading_result = None
+
+        if is_code_question(question):
+            # Build attempt context for progressive feedback
+            attempt_context = {
+                "attempt_number": answer.get("attempt_number", 1),
+                "hints_used": answer.get("hints_used", 0),
+            }
+
+            # Check for previous attempt feedback
+            prev_attempts = (
+                supabase.table("quiz_attempts")
+                .select("student_answer, code_grading_result")
+                .eq("question_id", answer["question_id"])
+                .eq("user_id", question.get("user_id"))
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if prev_attempts.data:
+                prev = prev_attempts.data[0]
+                attempt_context["previous_code"] = prev["student_answer"]
+                if prev.get("code_grading_result"):
+                    attempt_context["previous_feedback"] = prev[
+                        "code_grading_result"
+                    ].get("overall_feedback", "")
+
+            grading_result = await grade_code_answer(
+                question, answer["student_answer"], attempt_context
+            )
+            is_correct = grading_result.get("is_correct", False)
+        else:
+            is_correct = check_answer(question, answer["student_answer"])
+
         if is_correct:
             correct_count += 1
 
@@ -334,7 +573,7 @@ def score_quiz(
             for opt in raw_options
         ] if raw_options else None
 
-        results.append({
+        result_entry = {
             "question_id": answer["question_id"],
             "is_correct": is_correct,
             "student_answer": answer["student_answer"],
@@ -345,19 +584,30 @@ def score_quiz(
             "options": safe_options,
             "source_chunk_ids": question.get("source_chunk_ids", []),
             "concept_id": question.get("concept_id"),
-        })
+        }
+
+        if grading_result is not None:
+            result_entry["code_grading_result"] = grading_result
+
+        results.append(result_entry)
 
         # Save attempt
+        attempt_data = {
+            "quiz_id": quiz_id,
+            "user_id": question.get("user_id"),
+            "question_id": answer["question_id"],
+            "student_answer": answer["student_answer"],
+            "is_correct": is_correct,
+            "time_spent_seconds": answer.get("time_spent_seconds"),
+        }
+
+        if grading_result is not None:
+            attempt_data["code_grading_result"] = grading_result
+            attempt_data["hints_used"] = answer.get("hints_used", 0)
+
         (
             supabase.table("quiz_attempts")
-            .insert({
-                "quiz_id": quiz_id,
-                "user_id": question.get("user_id"),
-                "question_id": answer["question_id"],
-                "student_answer": answer["student_answer"],
-                "is_correct": is_correct,
-                "time_spent_seconds": answer.get("time_spent_seconds"),
-            })
+            .insert(attempt_data)
             .execute()
         )
 

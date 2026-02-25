@@ -21,6 +21,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Assessment, Lecture, QuizDifficulty } from "@/types/database";
+import {
+  QuizModeSelector,
+  type QuizModeConfig,
+} from "@/components/quiz/QuizModeSelector";
 
 interface GenerateQuizDialogProps {
   open: boolean;
@@ -32,6 +36,10 @@ interface GenerateQuizDialogProps {
     lecture_ids: string[] | null;
     question_count: number;
     difficulty: QuizDifficulty;
+    include_coding?: boolean;
+    coding_ratio?: number;
+    coding_language?: string;
+    coding_only?: boolean;
   }) => Promise<void>;
 }
 
@@ -57,7 +65,19 @@ export function GenerateQuizDialog({
   const [selectedLectureIds, setSelectedLectureIds] = useState<string[]>([]);
   const [questionCount, setQuestionCount] = useState(10);
   const [difficulty, setDifficulty] = useState<QuizDifficulty>("medium");
+  const [quizMode, setQuizMode] = useState<QuizModeConfig>({
+    include_coding: false,
+    coding_only: false,
+    coding_ratio: 0,
+    coding_language: "python",
+    suggested_num_questions: 10,
+  });
   const [generating, setGenerating] = useState(false);
+
+  function handleModeChange(config: QuizModeConfig) {
+    setQuizMode(config);
+    setQuestionCount(config.suggested_num_questions);
+  }
 
   async function handleGenerate() {
     setGenerating(true);
@@ -67,6 +87,10 @@ export function GenerateQuizDialog({
         lecture_ids: target === "lectures" ? selectedLectureIds : null,
         question_count: questionCount,
         difficulty,
+        include_coding: quizMode.include_coding,
+        coding_only: quizMode.coding_only,
+        coding_ratio: quizMode.coding_ratio,
+        coding_language: quizMode.coding_language,
       });
     } finally {
       setGenerating(false);
@@ -236,6 +260,9 @@ export function GenerateQuizDialog({
               ))}
             </div>
           </div>
+
+          {/* Quiz mode */}
+          <QuizModeSelector onChange={handleModeChange} />
 
           {/* Generate */}
           <div className="flex justify-end pt-2">

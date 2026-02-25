@@ -1,11 +1,13 @@
 """Shared test fixtures for the LectureLink API test suite."""
 
 from __future__ import annotations
+
 import pathlib
-import pytest
-import numpy as np
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, date
+
+import numpy as np
+import pytest
 
 FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures"
 

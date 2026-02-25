@@ -4,18 +4,13 @@ import json
 import uuid
 
 import pytest
-from pydantic import ValidationError
-
 from lecturelink_api.models.syllabus_models import (
-    AssessmentExtraction,
     AssessmentType,
     ExtractedField,
-    GradeComponent,
     SyllabusExtraction,
-    WeeklyScheduleEntry,
     extraction_to_db_assessments,
 )
-
+from pydantic import ValidationError
 
 # ---------------------------------------------------------------------------
 # Fixtures

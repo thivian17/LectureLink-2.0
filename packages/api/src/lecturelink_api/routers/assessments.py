@@ -7,7 +7,12 @@ from supabase import create_client
 
 from lecturelink_api.auth import get_current_user
 from lecturelink_api.config import Settings, get_settings
-from lecturelink_api.models.api_models import AssessmentResponse, AssessmentUpdate
+from lecturelink_api.models.api_models import (
+    AssessmentResponse,
+    AssessmentResultRequest,
+    AssessmentResultResponse,
+    AssessmentUpdate,
+)
 
 router = APIRouter(tags=["assessments"])
 
@@ -117,3 +122,41 @@ async def delete_assessment(
         )
     _verify_course_ownership(sb, existing.data[0]["course_id"], user["id"])
     sb.table("assessments").delete().eq("id", assessment_id).execute()
+
+
+@router.put(
+    "/api/assessments/{assessment_id}/result",
+    response_model=AssessmentResultResponse,
+)
+async def save_assessment_result(
+    assessment_id: str,
+    body: AssessmentResultRequest,
+    user: dict = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    """Save a student's score for a past assessment (used during onboarding)."""
+    sb = _sb(user, settings)
+
+    # Verify the assessment exists
+    existing = (
+        sb.table("assessments")
+        .select("id, course_id")
+        .eq("id", assessment_id)
+        .execute()
+    )
+    if not existing.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Assessment not found"
+        )
+
+    # Verify course ownership
+    _verify_course_ownership(sb, existing.data[0]["course_id"], user["id"])
+
+    # Update student_score
+    result = (
+        sb.table("assessments")
+        .update({"student_score": body.score_percent})
+        .eq("id", assessment_id)
+        .execute()
+    )
+    return result.data[0]

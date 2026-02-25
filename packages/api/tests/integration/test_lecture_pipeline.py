@@ -12,7 +12,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tests.integration.conftest import (
-    FAKE_USER_ID,
     make_chunk,
     make_concept,
     make_course,
@@ -53,7 +52,6 @@ class TestLectureUpload:
         with (
             patch("lecturelink_api.routers.lectures.create_client") as mc,
             patch("lecturelink_api.routers.lectures.check_rate_limit"),
-            patch("lecturelink_api.routers.lectures.run_lecture_processing"),
         ):
             sb = MagicMock()
             mc.return_value = sb

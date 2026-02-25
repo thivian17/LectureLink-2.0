@@ -36,4 +36,11 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 EXPOSE 8080
 
+# Default: run the API server.
+# Override with ENTRYPOINT_MODE=worker to run the arq worker instead.
+# E.g.: docker run -e ENTRYPOINT_MODE=worker ...
+# Or use separate docker-compose services with different commands.
 CMD ["python", "-m", "uvicorn", "lecturelink_api.main:app", "--host", "0.0.0.0", "--port", "8080"]
+
+# To run the arq worker, override CMD:
+#   CMD ["python", "-m", "arq", "lecturelink_api.worker.WorkerSettings"]

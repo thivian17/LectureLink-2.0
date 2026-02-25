@@ -135,6 +135,14 @@ export function QuizTakingClient({
       }
       return next;
     });
+
+    // For code questions in immediate mode, auto-show feedback after explicit submit
+    const isCodeQ = ["code_writing", "code_fix", "code_explain"].includes(
+      currentQuestion.question_type,
+    );
+    if (feedbackMode === "immediate" && isCodeQ && answer) {
+      setFeedbackShown((prev) => new Set(prev).add(currentQuestion.id));
+    }
   }
 
   const handleNext = useCallback(() => {
@@ -336,6 +344,8 @@ export function QuizTakingClient({
               onAnswer={handleAnswer}
               showFeedback={showCurrentFeedback}
               courseId={courseId}
+              quizId={quizId}
+              timeElapsed={currentTime}
             />
           )}
         </CardContent>

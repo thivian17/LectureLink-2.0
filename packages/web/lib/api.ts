@@ -12,11 +12,28 @@ import type {
   QuizGenerationStatus,
   QuizAnswer,
   QuizDifficulty,
+  HintResponse,
   SearchResponse,
   QAResponse,
   PerformanceData,
   CoachResponse,
   StudyActionsResponse,
+  OnboardingPath,
+  OnboardingStatus,
+  SuggestedPath,
+  PersonalizedMessage,
+  LectureChecklistItem,
+  SemesterProgress,
+  AssessmentReadiness,
+  TutorMode,
+  TutorSession,
+  TutorSessionEntry,
+  TutorQuestion,
+  GradingResult,
+  TutorChatResponse,
+  DiagnosticResult,
+  SessionSummary,
+  ContentBlock,
 } from "@/types/database";
 import {
   ApiError,
@@ -116,7 +133,7 @@ export interface CourseInput {
   code?: string | null;
   semester_start: string;
   semester_end: string;
-  meeting_days?: string[];
+  meeting_days: string[];
   meeting_time?: string | null;
   holidays?: { name: string; start_date: string; end_date: string }[];
   target_grade?: number;
@@ -330,6 +347,12 @@ export async function updateAssessment(
   return assessment as Assessment;
 }
 
+export async function deleteAssessment(assessmentId: string): Promise<void> {
+  await fetchWithAuth(`${API_BASE}/api/assessments/${assessmentId}`, {
+    method: "DELETE",
+  });
+}
+
 export async function bulkUpdateAssessments(
   updates: { id: string; data: UpdateAssessmentInput }[],
 ): Promise<void> {
@@ -463,6 +486,10 @@ export async function generateQuiz(
     lecture_ids?: string[] | null;
     question_count: number;
     difficulty: QuizDifficulty;
+    include_coding?: boolean;
+    coding_ratio?: number;
+    coding_language?: string;
+    coding_only?: boolean;
   },
 ): Promise<{ quiz_id: string; status: "generating" }> {
   const resp = await fetchWithAuth(`${API_BASE}/api/quizzes/generate`, {
@@ -491,6 +518,26 @@ export async function submitQuiz(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ answers }),
   });
+  return resp.json();
+}
+
+// ---------------------------------------------------------------------------
+// Quiz Hints (Coding Questions)
+// ---------------------------------------------------------------------------
+
+export async function getHint(
+  quizId: string,
+  questionId: string,
+  hintIndex: number = 0,
+): Promise<HintResponse> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/quizzes/${quizId}/questions/${questionId}/hint`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hint_index: hintIndex }),
+    },
+  );
   return resp.json();
 }
 
@@ -539,11 +586,326 @@ export async function getStudyActions(): Promise<StudyActionsResponse> {
   return resp.json();
 }
 
+export async function getStudyActionsEnhanced(): Promise<StudyActionsResponse> {
+  const resp = await fetchWithAuth(`${API_BASE}/api/study-actions/enhanced`);
+  return resp.json();
+}
+
 export async function getCourseStudyActions(
   courseId: string,
 ): Promise<StudyActionsResponse> {
   const resp = await fetchWithAuth(
     `${API_BASE}/api/courses/${courseId}/study-actions`,
+  );
+  return resp.json();
+}
+
+// ---------------------------------------------------------------------------
+// Onboarding
+// ---------------------------------------------------------------------------
+
+export async function startOnboarding(
+  courseId: string,
+): Promise<{ status: string; step: string }> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/onboarding/start`,
+    { method: "POST" },
+  );
+  return resp.json();
+}
+
+export async function getOnboardingStatus(
+  courseId: string,
+): Promise<OnboardingStatus> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/onboarding/status`,
+  );
+  return resp.json();
+}
+
+export async function updateOnboardingStep(
+  courseId: string,
+  step: string,
+): Promise<void> {
+  await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/onboarding/step`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ step }),
+    },
+  );
+}
+
+export async function getSuggestedPath(
+  courseId: string,
+): Promise<SuggestedPath> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/onboarding/suggest-path`,
+  );
+  return resp.json();
+}
+
+export async function setOnboardingPath(
+  courseId: string,
+  path: OnboardingPath,
+): Promise<{ path: string; mode: string; suggested_path: string }> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/onboarding/set-path`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    },
+  );
+  return resp.json();
+}
+
+export async function getPersonalizedMessage(
+  courseId: string,
+  forceRegenerate?: boolean,
+): Promise<PersonalizedMessage> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/onboarding/personalized-message`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force_regenerate: forceRegenerate ?? false }),
+    },
+  );
+  return resp.json();
+}
+
+export async function getLectureChecklist(
+  courseId: string,
+): Promise<LectureChecklistItem[]> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/onboarding/lecture-checklist`,
+  );
+  return resp.json();
+}
+
+export async function getSemesterProgress(
+  courseId: string,
+): Promise<SemesterProgress> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/semester-progress`,
+  );
+  return resp.json();
+}
+
+export async function completeOnboarding(
+  courseId: string,
+): Promise<{ completed_at: string; mastery_scores_seeded: number }> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/onboarding/complete`,
+    { method: "PUT" },
+  );
+  return resp.json();
+}
+
+export async function saveAssessmentResult(
+  assessmentId: string,
+  scorePercent: number,
+): Promise<void> {
+  await fetchWithAuth(
+    `${API_BASE}/api/assessments/${assessmentId}/result`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ score_percent: scorePercent }),
+    },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Study Tutor
+// ---------------------------------------------------------------------------
+
+export async function getTutorEntry(
+  courseId: string,
+): Promise<TutorSessionEntry> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/tutor/${courseId}/entry`,
+  );
+  return resp.json();
+}
+
+export async function startTutorSession(
+  courseId: string,
+  body: {
+    mode: TutorMode;
+    custom_topic?: string;
+    target_assessment_id?: string;
+    concept_ids?: string[];
+  },
+): Promise<TutorSession> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/tutor/${courseId}/session/start`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  return resp.json();
+}
+
+export async function getActiveTutorSession(
+  courseId: string,
+): Promise<TutorSession | null> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/tutor/${courseId}/session/active`,
+  );
+  const data = await resp.json();
+  return data ?? null;
+}
+
+export async function submitTutorAnswer(
+  sessionId: string,
+  body: {
+    question_id: string;
+    student_answer: string;
+    time_spent_seconds: number;
+  },
+): Promise<GradingResult> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/tutor/session/${sessionId}/answer`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  return resp.json();
+}
+
+export async function pauseTutorSession(
+  sessionId: string,
+): Promise<void> {
+  await fetchWithAuth(
+    `${API_BASE}/api/tutor/session/${sessionId}/pause`,
+    { method: "PUT" },
+  );
+}
+
+export async function resumeTutorSession(
+  sessionId: string,
+): Promise<TutorSession> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/tutor/session/${sessionId}/resume`,
+    { method: "POST" },
+  );
+  return resp.json();
+}
+
+export async function completeTutorSession(
+  sessionId: string,
+): Promise<SessionSummary> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/tutor/session/${sessionId}/complete`,
+    { method: "PUT" },
+  );
+  return resp.json();
+}
+
+export async function sendTutorChat(
+  sessionId: string,
+  message: string,
+): Promise<TutorChatResponse> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/tutor/session/${sessionId}/chat`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    },
+  );
+  return resp.json();
+}
+
+export async function startDiagnostic(
+  sessionId: string,
+): Promise<{ questions: TutorQuestion[] }> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/tutor/session/${sessionId}/diagnostic`,
+    { method: "POST" },
+  );
+  return resp.json();
+}
+
+export async function submitDiagnostic(
+  sessionId: string,
+  answers: {
+    question_id: string;
+    question: TutorQuestion;
+    student_answer: string;
+    time_spent_seconds: number;
+  }[],
+): Promise<DiagnosticResult> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/tutor/session/${sessionId}/diagnostic/submit`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answers }),
+    },
+  );
+  return resp.json();
+}
+
+export async function submitGradingFeedback(
+  sessionId: string,
+  body: {
+    event_id: string;
+    feedback_type: "accurate" | "inaccurate";
+    feedback_text?: string;
+  },
+): Promise<void> {
+  await fetchWithAuth(
+    `${API_BASE}/api/tutor/session/${sessionId}/grading-feedback`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export async function getTutorHistory(
+  courseId: string,
+): Promise<TutorSession[]> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/tutor/${courseId}/history`,
+  );
+  return resp.json();
+}
+
+export async function getTutorSessionSummary(
+  sessionId: string,
+): Promise<SessionSummary> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/tutor/session/${sessionId}/summary`,
+  );
+  return resp.json();
+}
+
+export async function fetchNextBlock(
+  sessionId: string,
+): Promise<ContentBlock & { concept_index: number; step_index: number }> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/tutor/session/${sessionId}/next-block`,
+    { method: "POST" },
+  );
+  return resp.json();
+}
+
+export async function getAssessmentReadiness(
+  courseId: string,
+  assessmentId: string,
+): Promise<AssessmentReadiness> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/tutor/${courseId}/assessment/${assessmentId}/readiness`,
   );
   return resp.json();
 }

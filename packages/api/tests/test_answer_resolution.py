@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from lecturelink_api.routers.quizzes import (
     _resolve_correct_answer,
     _resolve_correct_option_index,

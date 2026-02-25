@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-
 from lecturelink_api.main import app
 
 # ---------------------------------------------------------------------------
@@ -26,7 +25,7 @@ def _fake_user():
 
 
 def _now_str():
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _mock_execute(data):
@@ -100,6 +99,9 @@ def _override_settings():
 def _override_task_queue():
     from lecturelink_api.services.task_queue import get_task_queue
     mock_tq = MagicMock()
+    mock_tq.enqueue_lecture_processing = AsyncMock()
+    mock_tq.enqueue_quiz_generation = AsyncMock()
+    mock_tq.enqueue_syllabus_processing = AsyncMock()
     app.dependency_overrides[get_task_queue] = lambda: mock_tq
     yield mock_tq
     app.dependency_overrides.pop(get_task_queue, None)
@@ -331,10 +333,7 @@ class TestLectureRetry:
     async def test_retry_failed_lecture(self, client):
         lecture = _sample_lecture(processing_status="failed", retry_count=1)
 
-        with (
-            patch("lecturelink_api.routers.lectures.create_client") as mock_create,
-            patch("lecturelink_api.routers.lectures.run_lecture_processing"),
-        ):
+        with patch("lecturelink_api.routers.lectures.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -393,7 +392,6 @@ class TestLectureRetry:
             patch(
                 "lecturelink_api.routers.lectures.cleanup_lecture_data",
             ),
-            patch("lecturelink_api.routers.lectures.run_lecture_processing"),
         ):
             sb = MagicMock()
             mock_create.return_value = sb

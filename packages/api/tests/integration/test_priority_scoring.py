@@ -19,7 +19,6 @@ import pytest
 
 from tests.integration.conftest import mock_chain
 
-
 # ---------------------------------------------------------------------------
 # Pure-Python reference implementation of the SQL priority formula
 # ---------------------------------------------------------------------------

@@ -6,14 +6,12 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from lecturelink_api.agents.concept_extractor import (
     ConceptExtractionError,
     extract_concepts,
     format_content_for_extraction,
     validate_concepts,
 )
-
 
 # ---------------------------------------------------------------------------
 # validate_concepts
@@ -208,7 +206,7 @@ class TestExtractConcepts:
         ]
 
         with patch(
-            "lecturelink_api.agents.concept_extractor.genai.Client",
+            "lecturelink_api.agents.concept_extractor._get_client",
             return_value=mock_client,
         ):
             result = await extract_concepts(segments)
@@ -232,7 +230,7 @@ class TestExtractConcepts:
         ]
 
         with patch(
-            "lecturelink_api.agents.concept_extractor.genai.Client",
+            "lecturelink_api.agents.concept_extractor._get_client",
             return_value=mock_client,
         ):
             result = await extract_concepts(segments)
@@ -255,11 +253,10 @@ class TestExtractConcepts:
         ]
 
         with patch(
-            "lecturelink_api.agents.concept_extractor.genai.Client",
+            "lecturelink_api.agents.concept_extractor._get_client",
             return_value=mock_client,
-        ):
-            with pytest.raises(ConceptExtractionError, match="Failed to parse"):
-                await extract_concepts(segments)
+        ), pytest.raises(ConceptExtractionError, match="Failed to parse"):
+            await extract_concepts(segments)
 
     @pytest.mark.asyncio
     async def test_api_failure_raises_error(self):
@@ -273,8 +270,7 @@ class TestExtractConcepts:
         ]
 
         with patch(
-            "lecturelink_api.agents.concept_extractor.genai.Client",
+            "lecturelink_api.agents.concept_extractor._get_client",
             return_value=mock_client,
-        ):
-            with pytest.raises(ConceptExtractionError, match="Concept extraction failed"):
-                await extract_concepts(segments)
+        ), pytest.raises(ConceptExtractionError, match="Concept extraction failed"):
+            await extract_concepts(segments)

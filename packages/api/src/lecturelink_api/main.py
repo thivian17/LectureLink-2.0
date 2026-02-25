@@ -16,10 +16,12 @@ from lecturelink_api.routers import (
     courses,
     internal,
     lectures,
+    onboarding,
     quizzes,
     search,
     study_actions,
     syllabi,
+    tutor,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,6 +53,18 @@ async def lifespan(application: FastAPI):
         load_all_secrets()
     except Exception:
         logger.warning("Failed to load secrets at startup", exc_info=True)
+
+    # Redis connection pool (non-fatal — app works without Redis in dev)
+    try:
+        from lecturelink_api.services.redis_client import close_redis_pool, get_redis_pool
+
+        settings = get_settings()
+        if settings.REDIS_URL:
+            await get_redis_pool(settings.REDIS_URL)
+        else:
+            logger.info("REDIS_URL not set — running without cache/queue")
+    except Exception:
+        logger.warning("Redis unavailable — running without cache/queue")
 
     # ADK agent mount (lazy so the app still starts if google-adk is unavailable)
     try:
@@ -89,6 +103,14 @@ async def lifespan(application: FastAPI):
         pass  # ADK mount is optional; API still works without it
     yield
 
+    # Shutdown: close Redis pool
+    try:
+        from lecturelink_api.services.redis_client import close_redis_pool
+
+        await close_redis_pool()
+    except Exception:
+        pass
+
 
 app = FastAPI(title="LectureLink V2 API", lifespan=lifespan)
 
@@ -116,6 +138,8 @@ app.include_router(search.router)
 app.include_router(quizzes.router)
 app.include_router(coach.router)
 app.include_router(study_actions.router)
+app.include_router(onboarding.router)
+app.include_router(tutor.router, prefix="/api/tutor")
 app.include_router(internal.router)
 
 

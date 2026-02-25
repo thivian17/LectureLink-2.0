@@ -7,15 +7,14 @@ rate-limit, and retry error scenarios.
 from __future__ import annotations
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 from httpx import ASGITransport, AsyncClient
-
 from lecturelink_api.main import app
+
 from tests.integration.conftest import (
-    FAKE_USER_ID,
     make_lecture,
     mock_chain,
 )

@@ -19,6 +19,7 @@ import {
   CardContent,
   CardHeader,
 } from "@/components/ui/card";
+import { CodeFeedback } from "@/components/quiz/CodeFeedback";
 import { cn } from "@/lib/utils";
 import type { QuizSubmissionResult, QuestionResult } from "@/types/database";
 
@@ -208,7 +209,7 @@ function QuestionReviewItem({
             </div>
           )}
 
-          {!question.options && (
+          {!question.options && !question.code_grading_result && (
             <div className="space-y-1 text-sm">
               <div
                 className={cn(
@@ -228,7 +229,14 @@ function QuestionReviewItem({
             </div>
           )}
 
-          {question.explanation && (
+          {question.code_grading_result && (
+            <CodeFeedback
+              result={question.code_grading_result}
+              showReference={true}
+            />
+          )}
+
+          {question.explanation && !question.code_grading_result && (
             <p className="text-sm text-muted-foreground">
               {question.explanation}
             </p>

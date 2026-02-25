@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import numpy as np
 import pytest
-
 from lecturelink_api.agents.chunker import (
     EmbeddingError,
     build_chunk,
@@ -15,7 +14,6 @@ from lecturelink_api.agents.chunker import (
     embed_concepts,
     estimate_tokens,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -182,17 +180,11 @@ class TestEstimateTokens:
 
 class TestEmbedChunks:
     @pytest.mark.asyncio
-    async def test_chunks_get_768_dim_embeddings(self):
-        mock_emb = MagicMock()
-        mock_emb.values = np.random.randn(768).tolist()
-
-        mock_response = MagicMock()
-        mock_response.embeddings = [mock_emb, mock_emb]
-
-        mock_client = MagicMock()
-        mock_client.aio.models.embed_content = AsyncMock(
-            return_value=mock_response
-        )
+    async def test_chunks_get_2000_dim_embeddings(self):
+        fake_embeddings = [
+            np.random.randn(2000).tolist(),
+            np.random.randn(2000).tolist(),
+        ]
 
         chunks = [
             {"content": "Chunk one text.", "chunk_index": 0},
@@ -200,15 +192,16 @@ class TestEmbedChunks:
         ]
 
         with patch(
-            "lecturelink_api.agents.chunker.genai.Client",
-            return_value=mock_client,
+            "lecturelink_api.agents.chunker.embed_texts",
+            new_callable=AsyncMock,
+            return_value=fake_embeddings,
         ):
             result = await embed_chunks(chunks)
 
         assert len(result) == 2
         for chunk in result:
             assert "embedding" in chunk
-            assert len(chunk["embedding"]) == 768
+            assert len(chunk["embedding"]) == 2000
 
     @pytest.mark.asyncio
     async def test_empty_chunks_returns_empty(self):
@@ -217,19 +210,14 @@ class TestEmbedChunks:
 
     @pytest.mark.asyncio
     async def test_api_failure_raises_embedding_error(self):
-        mock_client = MagicMock()
-        mock_client.aio.models.embed_content = AsyncMock(
-            side_effect=RuntimeError("API down")
-        )
-
         chunks = [{"content": "Some text.", "chunk_index": 0}]
 
         with patch(
-            "lecturelink_api.agents.chunker.genai.Client",
-            return_value=mock_client,
-        ):
-            with pytest.raises(EmbeddingError, match="Embedding generation failed"):
-                await embed_chunks(chunks)
+            "lecturelink_api.agents.chunker.embed_texts",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("API down"),
+        ), pytest.raises(EmbeddingError, match="Embedding generation failed"):
+            await embed_chunks(chunks)
 
 
 # ---------------------------------------------------------------------------
@@ -239,29 +227,21 @@ class TestEmbedChunks:
 
 class TestEmbedConcepts:
     @pytest.mark.asyncio
-    async def test_concepts_get_768_dim_embeddings(self):
-        mock_emb = MagicMock()
-        mock_emb.values = np.random.randn(768).tolist()
-
-        mock_response = MagicMock()
-        mock_response.embeddings = [mock_emb]
-
-        mock_client = MagicMock()
-        mock_client.aio.models.embed_content = AsyncMock(
-            return_value=mock_response
-        )
+    async def test_concepts_get_2000_dim_embeddings(self):
+        fake_embeddings = [np.random.randn(2000).tolist()]
 
         concepts = [{"title": "Entropy", "description": "Measure of disorder"}]
 
         with patch(
-            "lecturelink_api.agents.chunker.genai.Client",
-            return_value=mock_client,
+            "lecturelink_api.agents.chunker.embed_texts",
+            new_callable=AsyncMock,
+            return_value=fake_embeddings,
         ):
             result = await embed_concepts(concepts)
 
         assert len(result) == 1
         assert "embedding" in result[0]
-        assert len(result[0]["embedding"]) == 768
+        assert len(result[0]["embedding"]) == 2000
 
     @pytest.mark.asyncio
     async def test_empty_concepts_returns_empty(self):
@@ -270,16 +250,11 @@ class TestEmbedConcepts:
 
     @pytest.mark.asyncio
     async def test_api_failure_raises_embedding_error(self):
-        mock_client = MagicMock()
-        mock_client.aio.models.embed_content = AsyncMock(
-            side_effect=RuntimeError("API down")
-        )
-
         concepts = [{"title": "X", "description": "Y"}]
 
         with patch(
-            "lecturelink_api.agents.chunker.genai.Client",
-            return_value=mock_client,
-        ):
-            with pytest.raises(EmbeddingError, match="Concept embedding failed"):
-                await embed_concepts(concepts)
+            "lecturelink_api.agents.chunker.embed_texts",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("API down"),
+        ), pytest.raises(EmbeddingError, match="Concept embedding failed"):
+            await embed_concepts(concepts)

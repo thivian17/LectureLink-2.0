@@ -7,11 +7,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from docx import Document
+from lecturelink_api.tools.document_tools import extract_document_text
 from pptx import Presentation
 from pptx.util import Inches
-
-from lecturelink_api.tools.document_tools import extract_document_text
-
 
 # ---------------------------------------------------------------------------
 # Helpers to build in-memory test fixtures
@@ -143,7 +141,11 @@ async def test_pdf_extraction_calls_gemini():
     mock_client = MagicMock()
     mock_client.models.generate_content.return_value = mock_response
 
-    with patch("lecturelink_api.tools.document_tools.genai.Client", return_value=mock_client):
+    mock_settings = MagicMock(GOOGLE_API_KEY="fake-key")
+    with (
+        patch("lecturelink_api.tools.document_tools.get_settings", return_value=mock_settings),
+        patch("lecturelink_api.tools.document_tools.genai.Client", return_value=mock_client),
+    ):
         result = await extract_document_text(
             file_bytes=b"%PDF-1.4 fake pdf content",
             file_name="syllabus.pdf",
@@ -165,7 +167,11 @@ async def test_pdf_extraction_handles_gemini_error():
     mock_client = MagicMock()
     mock_client.models.generate_content.side_effect = RuntimeError("API quota exceeded")
 
-    with patch("lecturelink_api.tools.document_tools.genai.Client", return_value=mock_client):
+    mock_settings = MagicMock(GOOGLE_API_KEY="fake-key")
+    with (
+        patch("lecturelink_api.tools.document_tools.get_settings", return_value=mock_settings),
+        patch("lecturelink_api.tools.document_tools.genai.Client", return_value=mock_client),
+    ):
         result = await extract_document_text(
             file_bytes=b"%PDF-1.4 fake pdf content",
             file_name="syllabus.pdf",

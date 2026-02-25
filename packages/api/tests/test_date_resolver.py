@@ -11,7 +11,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from lecturelink_api.models.syllabus_models import AssessmentExtraction, ExtractedField
 from lecturelink_api.tools.date_resolver import (
     DAY_MAP,
@@ -20,7 +19,6 @@ from lecturelink_api.tools.date_resolver import (
     resolve_all_dates,
     resolve_date,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures & helpers

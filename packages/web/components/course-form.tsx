@@ -53,7 +53,7 @@ const courseFormSchema = z.object({
   code: z.string(),
   semester_start: z.date({ error: "Start date is required" }),
   semester_end: z.date({ error: "End date is required" }),
-  meeting_days: z.array(z.string()),
+  meeting_days: z.array(z.string()).min(1, "Select at least one meeting day"),
   meeting_time: z.string(),
   target_grade: z.string(),
   holidays: z.array(
@@ -137,7 +137,7 @@ export function CourseForm({ course, onSuccess }: CourseFormProps) {
       } else {
         const created = await createCourse(input);
         toast.success("Course created");
-        router.push(`/dashboard/courses/${created.id}`);
+        router.push(`/dashboard/courses/${created.id}/onboarding`);
       }
     } catch {
       toast.error(
@@ -262,7 +262,7 @@ export function CourseForm({ course, onSuccess }: CourseFormProps) {
           name="meeting_days"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Meeting Days</FormLabel>
+              <FormLabel>Meeting Days *</FormLabel>
               <div className="flex flex-wrap gap-2">
                 {DAYS.map((day) => {
                   const selected = field.value.includes(day);

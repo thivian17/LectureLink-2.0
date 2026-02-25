@@ -215,6 +215,7 @@ const mockConcepts: LectureConcept[] = [
       { id: "assess-2", title: "Homework 1", due_date: "2026-01-19", relevance_score: 0.8 },
     ],
     segment_indices: [1, 2, 14],
+    subconcepts: [],
   },
   {
     id: "concept-2",
@@ -226,6 +227,7 @@ const mockConcepts: LectureConcept[] = [
       { id: "assess-1", title: "Midterm 1", due_date: "2026-02-15", relevance_score: 0.85 },
     ],
     segment_indices: [3, 5],
+    subconcepts: [],
   },
   {
     id: "concept-3",
@@ -238,6 +240,7 @@ const mockConcepts: LectureConcept[] = [
       { id: "assess-3", title: "Lab Report 1", due_date: "2026-01-26", relevance_score: 0.6 },
     ],
     segment_indices: [6, 11],
+    subconcepts: [],
   },
   {
     id: "concept-4",
@@ -249,6 +252,7 @@ const mockConcepts: LectureConcept[] = [
       { id: "assess-1", title: "Midterm 1", due_date: "2026-02-15", relevance_score: 0.9 },
     ],
     segment_indices: [7, 8],
+    subconcepts: [],
   },
   {
     id: "concept-5",
@@ -261,6 +265,7 @@ const mockConcepts: LectureConcept[] = [
       { id: "assess-2", title: "Homework 1", due_date: "2026-01-19", relevance_score: 0.9 },
     ],
     segment_indices: [9, 10],
+    subconcepts: [],
   },
 ];
 

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from lecturelink_api.pipeline.background import MAX_RETRIES, run_lecture_processing
 from lecturelink_api.pipeline.lecture_processor import LectureProcessingError
 

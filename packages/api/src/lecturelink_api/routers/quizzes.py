@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.background import BackgroundTasks
+from pydantic import BaseModel
 from supabase import create_client
 
 from lecturelink_api.auth import get_current_user
@@ -17,7 +17,12 @@ from lecturelink_api.models.api_models import (
     QuizSubmissionResult,
     QuizSubmitRequest,
 )
-from lecturelink_api.services.quiz import run_quiz_generation, score_quiz
+from lecturelink_api.services.quiz import score_quiz
+from lecturelink_api.services.task_queue import TaskQueueService, get_task_queue
+
+
+class HintRequest(BaseModel):
+    hint_index: int = 0
 
 router = APIRouter(prefix="/api", tags=["quizzes"])
 
@@ -156,9 +161,9 @@ def _sb(user: dict, settings: Settings):
 @router.post("/quizzes/generate", status_code=status.HTTP_201_CREATED)
 async def generate_quiz(
     body: QuizGenerateRequest,
-    background_tasks: BackgroundTasks,
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
+    task_queue: TaskQueueService = Depends(get_task_queue),
 ):
     sb = _sb(user, settings)
 
@@ -218,9 +223,18 @@ async def generate_quiz(
     )
     quiz_id = result.data[0]["id"]
 
-    # Trigger background generation (sync function → runs in thread pool)
-    background_tasks.add_task(
-        run_quiz_generation,
+    # Normalize coding_only mode
+    include_coding = body.include_coding
+    coding_ratio = body.coding_ratio
+    num_questions = body.question_count
+    if body.coding_only:
+        include_coding = True
+        coding_ratio = 1.0
+        if num_questions > 8:
+            num_questions = min(num_questions, 5)
+
+    # Trigger background generation via arq
+    await task_queue.enqueue_quiz_generation(
         supabase_url=settings.SUPABASE_URL,
         supabase_key=settings.SUPABASE_ANON_KEY,
         user_token=user["token"],
@@ -229,8 +243,12 @@ async def generate_quiz(
         user_id=user["id"],
         target_assessment_id=body.target_assessment_id,
         lecture_ids=body.lecture_ids,
-        num_questions=body.question_count,
+        num_questions=num_questions,
         difficulty=body.difficulty,
+        include_coding=include_coding,
+        coding_ratio=coding_ratio,
+        coding_language=body.coding_language,
+        coding_only=body.coding_only,
     )
 
     return {"quiz_id": quiz_id, "status": "generating"}
@@ -383,7 +401,7 @@ async def get_quiz_questions(
         sb.table("quiz_questions")
         .select(
             "id, question_index, question_type, question_text, options,"
-            " correct_answer, explanation"
+            " correct_answer, explanation, code_metadata"
         )
         .eq("quiz_id", quiz_id)
         .order("question_index")
@@ -414,6 +432,7 @@ async def get_quiz_questions(
                     raw_options, q.get("correct_answer"), q.get("question_type")
                 ),
                 explanation=q.get("explanation"),
+                code_metadata=q.get("code_metadata"),
             )
         )
 
@@ -449,7 +468,7 @@ async def submit_quiz(
         )
 
     answers = [a.model_dump() for a in body.answers]
-    scoring_result = score_quiz(supabase=sb, quiz_id=quiz_id, answers=answers)
+    scoring_result = await score_quiz(supabase=sb, quiz_id=quiz_id, answers=answers)
 
     return QuizSubmissionResult(**scoring_result)
 
@@ -523,7 +542,7 @@ async def list_course_concepts(
     # Get concepts for this course
     concepts_result = (
         sb.table("concepts")
-        .select("id, title, description, category, difficulty_estimate, lecture_id")
+        .select("id, title, description, category, difficulty_estimate, lecture_id, subconcepts")
         .eq("course_id", course_id)
         .execute()
     )
@@ -585,9 +604,69 @@ async def list_course_concepts(
                 difficulty_estimate=c.get("difficulty_estimate", 0.5),
                 linked_assessments=links_by_concept.get(c["id"], []),
                 lecture_title=lecture.get("title", "Unknown"),
+                subconcepts=c.get("subconcepts") or [],
             ),
             "lecture_number": lecture.get("lecture_number", 999),
         })
 
     concepts.sort(key=lambda x: (x["lecture_number"], x["data"].title))
     return [c["data"] for c in concepts]
+
+
+@router.post("/quizzes/{quiz_id}/questions/{question_id}/hint")
+async def get_hint(
+    quiz_id: str,
+    question_id: str,
+    request: HintRequest,
+    user: dict = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    sb = _sb(user, settings)
+
+    # Verify quiz belongs to user
+    quiz_result = (
+        sb.table("quizzes")
+        .select("id")
+        .eq("id", quiz_id)
+        .eq("user_id", user["id"])
+        .execute()
+    )
+    if not quiz_result.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Quiz not found"
+        )
+
+    # Fetch the question
+    question_result = (
+        sb.table("quiz_questions")
+        .select("id, code_metadata")
+        .eq("id", question_id)
+        .eq("quiz_id", quiz_id)
+        .execute()
+    )
+    if not question_result.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Question not found"
+        )
+
+    question = question_result.data[0]
+    code_metadata = question.get("code_metadata")
+
+    if not code_metadata or not code_metadata.get("hints"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No hints available for this question",
+        )
+
+    hints = code_metadata["hints"]
+    if request.hint_index < 0 or request.hint_index >= len(hints):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"hint_index must be between 0 and {len(hints) - 1}",
+        )
+
+    return {
+        "hint": hints[request.hint_index],
+        "hints_remaining": len(hints) - request.hint_index - 1,
+        "hint_index": request.hint_index,
+    }

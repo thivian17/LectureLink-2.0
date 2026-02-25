@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-
 from lecturelink_api.main import app
 
 # ---------------------------------------------------------------------------
@@ -26,7 +25,7 @@ def _fake_user():
 
 
 def _now_str():
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +143,7 @@ class TestCourses:
                 "code": "CS101",
                 "semester_start": "2026-01-12",
                 "semester_end": "2026-05-01",
+                "meeting_days": ["Mon", "Wed"],
             })
 
         assert resp.status_code == 201
@@ -260,12 +260,22 @@ class TestSyllabi:
             )
             sb.storage.from_.return_value.upload.return_value = None
 
-            with patch("lecturelink_api.routers.syllabi.process_syllabus"):
+            from unittest.mock import AsyncMock
+
+            from lecturelink_api.services.task_queue import TaskQueueService, get_task_queue
+
+            mock_tq = MagicMock(spec=TaskQueueService)
+            mock_tq.enqueue_syllabus_processing = AsyncMock()
+            app.dependency_overrides[get_task_queue] = lambda: mock_tq
+
+            try:
                 resp = await client.post(
                     "/api/syllabi/upload",
                     data={"course_id": course_id},
                     files={"file": ("syllabus.pdf", b"%PDF-1.4 fake", "application/pdf")},
                 )
+            finally:
+                app.dependency_overrides.pop(get_task_queue, None)
 
         assert resp.status_code == 201
         data = resp.json()

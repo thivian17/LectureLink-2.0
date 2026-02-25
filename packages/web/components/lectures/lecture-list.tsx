@@ -131,7 +131,7 @@ export function LectureList({ courseId, courseName }: LectureListProps) {
       <LectureListHeader courseName={courseName} courseId={courseId} />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {lectures.map((lecture) => (
-          <LectureCard key={lecture.id} lecture={lecture} courseId={courseId} />
+          <LectureCard key={lecture.id} lecture={lecture} courseId={courseId} onRetry={loadLectures} />
         ))}
       </div>
     </div>

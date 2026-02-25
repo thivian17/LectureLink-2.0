@@ -80,11 +80,11 @@ export function CourseActionBanner({ courseId }: CourseActionBannerProps) {
   const iconColor = ICON_COLOR_MAP[action.action_type] ?? "text-gray-600";
 
   return (
-    <div className={cn("flex items-center gap-3 rounded-lg border p-3", bgClass)}>
-      <Icon className={cn("h-4 w-4 shrink-0", iconColor)} />
+    <div className={cn("flex items-start gap-3 rounded-lg border p-3", bgClass)}>
+      <Icon className={cn("h-4 w-4 shrink-0 mt-0.5", iconColor)} />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium">{action.title}</p>
-        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+        <p className="text-xs text-muted-foreground mt-0.5">
           {action.description}
         </p>
       </div>

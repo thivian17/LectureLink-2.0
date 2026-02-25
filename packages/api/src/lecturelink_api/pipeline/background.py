@@ -1,19 +1,14 @@
 """Background task runner for lecture processing with retry logic.
 
-IMPORTANT: ``run_lecture_processing`` is a **sync** function so that
-FastAPI's ``BackgroundTasks`` runs it in a thread-pool instead of the
-main async event loop.  The processing pipeline mixes truly-async calls
-(Gemini API, httpx downloads) with sync calls (supabase-py DB/storage),
-and the sync calls would block the event loop and freeze the entire
-server if run on it directly.  By running in a thread with its own
-event loop we keep the main loop free to serve HTTP requests.
+Provides both sync (thread-based) and async entry points:
+- ``run_lecture_processing`` — sync, for thread-pool fallback when Redis is unavailable
+- ``run_lecture_processing_async`` — async, called directly by arq workers
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import time
 
 from supabase import create_client
 
@@ -22,6 +17,30 @@ from .lecture_processor import LectureProcessingError, process_lecture
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
+
+
+async def run_lecture_processing_async(
+    supabase_url: str,
+    supabase_key: str,
+    user_token: str,
+    lecture_id: str,
+    course_id: str,
+    user_id: str,
+    file_urls: list[str],
+    is_reprocess: bool = False,
+) -> dict | None:
+    """Async entry point for lecture processing (used by arq worker).
+
+    The arq worker already has an event loop — no need for manual
+    ``asyncio.new_event_loop()`` gymnastics.
+    """
+    sb = create_client(supabase_url, supabase_key)
+    if user_token:
+        sb.auth.set_session(user_token, "")
+
+    return await _processing_loop(
+        sb, lecture_id, course_id, user_id, file_urls, is_reprocess,
+    )
 
 
 def run_lecture_processing(
@@ -34,37 +53,47 @@ def run_lecture_processing(
     file_urls: list[str],
     is_reprocess: bool = False,
 ) -> dict | None:
-    """Background task for lecture processing with exponential backoff retries.
+    """Sync fallback for lecture processing (runs in a daemon thread).
 
-    This is a **sync** function on purpose — FastAPI will run it in a
-    thread-pool worker, keeping the main event loop responsive.  A
-    private event loop is created for the async pipeline stages.
-
-    Args:
-        supabase_url: Supabase project URL.
-        supabase_key: Supabase anon key.
-        user_token: JWT access token for the requesting user.
-        lecture_id: The lecture UUID.
-        course_id: The course UUID.
-        user_id: The owner user UUID.
-        file_urls: List of uploaded file URLs.
-        is_reprocess: If True, clean up existing data first.
-
-    Returns:
-        Result dict on success, None if all retries exhausted.
+    Creates a private event loop for the async pipeline stages.
+    Used when Redis/arq is unavailable.
     """
-    # Create a fresh Supabase client for this thread
-    sb = create_client(supabase_url, supabase_key)
-    sb.auth.set_session(user_token, "")
-
     loop = asyncio.new_event_loop()
     try:
+        sb = create_client(supabase_url, supabase_key)
+        if user_token:
+            sb.auth.set_session(user_token, "")
+
         return loop.run_until_complete(
             _processing_loop(
                 sb, lecture_id, course_id, user_id,
                 file_urls, is_reprocess,
             )
         )
+    except Exception:
+        logger.exception(
+            "Lecture %s: daemon thread crashed", lecture_id,
+        )
+        # Best-effort: mark the lecture as failed so it doesn't stay
+        # stuck in "processing" forever.
+        try:
+            sb_fallback = create_client(supabase_url, supabase_key)
+            from lecturelink_api.services.processing import (
+                update_processing_status,
+            )
+
+            update_processing_status(
+                sb_fallback, lecture_id,
+                status="failed",
+                stage="background_thread",
+                error="Processing thread crashed unexpectedly",
+            )
+        except Exception:
+            logger.exception(
+                "Lecture %s: also failed to update status to failed",
+                lecture_id,
+            )
+        return None
     finally:
         loop.close()
 
@@ -77,7 +106,7 @@ async def _processing_loop(
     file_urls: list[str],
     is_reprocess: bool,
 ) -> dict | None:
-    """Async retry loop executed inside the background thread's event loop."""
+    """Async retry loop with exponential backoff."""
     retry_count = 0
 
     while retry_count <= MAX_RETRIES:
@@ -108,5 +137,13 @@ async def _processing_loop(
                 lecture_id, retry_count, backoff, e,
             )
             await asyncio.sleep(backoff)
+
+        except Exception as e:
+            # Unexpected error — don't retry, let it propagate so the
+            # caller (run_lecture_processing) can mark it as failed.
+            logger.exception(
+                "Lecture %s: unexpected error in processing loop", lecture_id,
+            )
+            raise
 
     return None

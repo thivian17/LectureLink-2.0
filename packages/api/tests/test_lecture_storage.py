@@ -4,14 +4,11 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from lecturelink_api.services.lecture_storage import (
     cleanup_lecture_data,
     store_chunks,
     store_concepts,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -72,29 +72,22 @@ async def process_lecture_task(
     body: ProcessLectureRequest,
     settings: Settings = Depends(get_settings),
 ):
-    """Process a lecture — called by Cloud Tasks in production."""
-    from lecturelink_api.pipeline.background import run_lecture_processing
+    """Process a lecture — enqueues to arq worker."""
+    from lecturelink_api.services.task_queue import get_task_queue
 
-    import threading
-
-    # Run in a thread to avoid blocking the event loop (same pattern as dev)
-    thread = threading.Thread(
-        target=run_lecture_processing,
-        kwargs={
-            "supabase_url": settings.SUPABASE_URL,
-            "supabase_key": settings.SUPABASE_ANON_KEY,
-            "user_token": "",  # Internal call — no user token needed
-            "lecture_id": body.lecture_id,
-            "course_id": body.course_id,
-            "user_id": body.user_id,
-            "file_urls": body.file_urls,
-            "is_reprocess": body.is_reprocess,
-        },
-        daemon=True,
+    task_queue = get_task_queue()
+    await task_queue.enqueue_lecture_processing(
+        lecture_id=body.lecture_id,
+        course_id=body.course_id,
+        user_id=body.user_id,
+        file_urls=body.file_urls,
+        supabase_url=settings.SUPABASE_URL,
+        supabase_key=settings.SUPABASE_ANON_KEY,
+        user_token="",
+        is_reprocess=body.is_reprocess,
     )
-    thread.start()
 
-    logger.info("Started lecture processing for %s via internal endpoint", body.lecture_id)
+    logger.info("Enqueued lecture processing for %s via internal endpoint", body.lecture_id)
     return {"status": "processing", "lecture_id": body.lecture_id}
 
 
@@ -102,7 +95,7 @@ async def process_lecture_task(
 async def daily_refresh_task(
     settings: Settings = Depends(get_settings),
 ):
-    """Refresh study actions for all active users — called by Cloud Scheduler."""
+    """Refresh study actions for all active users — fans out one arq job per user."""
     sb = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY or settings.SUPABASE_ANON_KEY)
 
     # Fetch all users with at least one course
@@ -111,15 +104,17 @@ async def daily_refresh_task(
 
     logger.info("Daily refresh: found %d active users", len(user_ids))
 
-    refreshed = 0
+    # Fan out: enqueue one arq job per user
+    from lecturelink_api.services.task_queue import get_task_queue
+
+    task_queue = get_task_queue()
+    enqueued = 0
     for user_id in user_ids:
         try:
-            from lecturelink_api.services.study_actions import get_study_actions
-
-            await get_study_actions(sb, user_id)
-            refreshed += 1
+            await task_queue.enqueue_user_refresh(user_id)
+            enqueued += 1
         except Exception:
-            logger.warning("Daily refresh failed for user %s", user_id, exc_info=True)
+            logger.warning("Failed to enqueue refresh for user %s", user_id, exc_info=True)
 
     # Clean up expired ADK sessions
     sessions_cleaned = 0
@@ -132,7 +127,7 @@ async def daily_refresh_task(
 
     return {
         "status": "ok",
-        "users_refreshed": refreshed,
+        "users_enqueued": enqueued,
         "users_total": len(user_ids),
         "sessions_cleaned": sessions_cleaned,
     }

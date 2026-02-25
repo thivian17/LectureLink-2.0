@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-
 from lecturelink_api.main import app
 
 # ---------------------------------------------------------------------------
@@ -27,7 +26,7 @@ def _fake_user():
 
 
 def _now_str():
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _mock_execute(data):
@@ -126,8 +125,20 @@ def _override_settings():
     app.dependency_overrides.pop(get_settings, None)
 
 
+@pytest.fixture()
+def _override_task_queue():
+    from lecturelink_api.services.task_queue import get_task_queue
+    mock_tq = MagicMock()
+    mock_tq.enqueue_lecture_processing = AsyncMock()
+    mock_tq.enqueue_quiz_generation = AsyncMock()
+    mock_tq.enqueue_syllabus_processing = AsyncMock()
+    app.dependency_overrides[get_task_queue] = lambda: mock_tq
+    yield mock_tq
+    app.dependency_overrides.pop(get_task_queue, None)
+
+
 @pytest_asyncio.fixture()
-async def client(_override_auth, _override_settings):
+async def client(_override_auth, _override_settings, _override_task_queue):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -149,7 +160,6 @@ class TestQuizGenerate:
             patch(
                 "lecturelink_api.routers.quizzes.check_rate_limit",
             ),
-            patch("lecturelink_api.routers.quizzes.run_quiz_generation"),
         ):
             sb = MagicMock()
             mock_create.return_value = sb

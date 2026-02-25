@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-
 from fixtures.mock_responses import (
     MOCK_CONCEPTS,
     MOCK_QUIZ_QUESTIONS,

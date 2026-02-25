@@ -25,9 +25,9 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from lecturelink_api.main import app
 from supabase import create_client
 
-from lecturelink_api.main import app
 from tests.integration.fixtures.syllabus_generator import ALL_SYLLABI
 from tests.integration.metrics.accuracy import compute_accuracy
 from tests.integration.metrics.reporter import MetricsReporter
@@ -108,7 +108,6 @@ def auth_token(supabase_client) -> str:
 @pytest_asyncio.fixture()
 async def live_client(auth_token):
     """AsyncClient pointing at the real FastAPI app with real auth."""
-    from lecturelink_api.auth import get_current_user
     from lecturelink_api.config import Settings, get_settings
 
     # Override settings with real env vars

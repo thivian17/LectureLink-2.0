@@ -6,7 +6,6 @@ ground_truth contains the expected extraction fields for accuracy measurement.
 
 from __future__ import annotations
 
-
 # ---------------------------------------------------------------------------
 # Minimal PDF builder (extended from conftest.py pattern)
 # ---------------------------------------------------------------------------

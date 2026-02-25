@@ -85,6 +85,7 @@ def store_concepts(
             "difficulty_estimate": concept.get("difficulty_estimate", 0.5),
             "source_chunk_ids": concept.get("source_chunk_ids", []),
             "embedding": concept.get("embedding"),
+            "subconcepts": concept.get("subconcepts", []),
         }
         rows.append(row)
 

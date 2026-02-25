@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import MagicMock
 
+import pytest
 from fastapi import HTTPException
-
 from lecturelink_api.middleware.rate_limit import (
     RATE_LIMITS,
     check_rate_limit,

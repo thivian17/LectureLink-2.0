@@ -58,7 +58,7 @@ async def plan_quiz(
                 supabase.table("concepts")
                 .select(
                     "id, title, description, category,"
-                    " difficulty_estimate, lecture_id"
+                    " difficulty_estimate, lecture_id, subconcepts"
                 )
                 .in_("id", concept_ids)
                 .execute()
@@ -71,7 +71,7 @@ async def plan_quiz(
             supabase.table("concepts")
             .select(
                 "id, title, description, category,"
-                " difficulty_estimate, lecture_id"
+                " difficulty_estimate, lecture_id, subconcepts"
             )
             .eq("course_id", course_id)
         )

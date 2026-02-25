@@ -3,20 +3,16 @@
 from __future__ import annotations
 
 import json
-import tempfile
-from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from lecturelink_api.agents.audio_transcriber import (
-    MIME_MAP,
     TranscriptionError,
     _strip_markdown_fences,
     get_audio_mime_type,
     transcribe_audio,
     validate_transcript,
 )
-
 
 # ---------------------------------------------------------------------------
 # validate_transcript

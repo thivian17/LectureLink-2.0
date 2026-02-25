@@ -21,6 +21,7 @@ async def get_performance_tool(
     from supabase import create_client
 
     from lecturelink_api.config import get_settings
+
     from .performance import get_performance
 
     settings = get_settings()

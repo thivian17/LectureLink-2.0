@@ -6,14 +6,12 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from lecturelink_api.agents.content_aligner import (
     _heuristic_align,
     _slide_to_text,
     align_content,
     validate_alignment,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

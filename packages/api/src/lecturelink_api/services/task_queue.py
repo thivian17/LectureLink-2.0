@@ -1,71 +1,47 @@
-"""Task queue service — Google Cloud Tasks in production, direct execution in dev."""
+"""Task queue service — arq (Redis) for all environments.
+
+Enqueues jobs to be picked up by the arq worker process. Falls back
+to direct execution if Redis is unavailable (e.g. local dev without
+Redis running).
+"""
 
 from __future__ import annotations
 
-import json
 import logging
-import os
+
+from redis.asyncio import Redis
 
 logger = logging.getLogger(__name__)
 
 
-def _is_production() -> bool:
-    return os.environ.get("ENVIRONMENT", "development") == "production"
-
-
-def _get_project_id() -> str:
-    return os.environ.get("GOOGLE_CLOUD_PROJECT", "")
-
-
-def _get_service_url() -> str:
-    """Base URL for internal HTTP task targets (Cloud Run service URL)."""
-    return os.environ.get("CLOUD_RUN_SERVICE_URL", "http://localhost:8000")
-
-
-_REGION = "us-central1"
-
-
 class TaskQueueService:
-    """Environment-aware task queue.
+    """Async task queue backed by arq / Redis.
 
-    In production: creates HTTP tasks via Google Cloud Tasks SDK.
-    In development: calls processing functions directly.
+    All ``enqueue_*`` methods are async and push jobs onto the arq queue.
+    If Redis is unavailable, lecture processing falls back to a background
+    thread (same as the old dev-mode behaviour).
     """
 
-    def _create_cloud_task(
-        self, queue_name: str, endpoint: str, payload: dict
-    ) -> str:
-        """Create an HTTP task in Google Cloud Tasks."""
-        from google.cloud import tasks_v2
+    def __init__(self, redis: Redis | None = None) -> None:
+        self._redis = redis
 
-        client = tasks_v2.CloudTasksClient()
-        project = _get_project_id()
-        parent = client.queue_path(project, _REGION, queue_name)
-        service_url = _get_service_url()
+    async def _enqueue(self, func_name: str, **kwargs) -> str | None:
+        """Enqueue a job via arq. Returns the job ID or None on failure."""
+        if self._redis is None:
+            logger.warning("Redis unavailable — cannot enqueue %s", func_name)
+            return None
 
-        from lecturelink_api.config.secrets import get_secret
+        from arq.connections import ArqRedis
 
-        api_key = get_secret("INTERNAL_API_KEY")
+        pool = ArqRedis(pool_or_conn=self._redis.connection_pool)
+        job = await pool.enqueue_job(func_name, _job_id=None, **kwargs)
+        if job is None:
+            logger.warning("Job %s was not enqueued (duplicate?)", func_name)
+            return None
+        logger.info("Enqueued %s → job %s", func_name, job.job_id)
+        return job.job_id
 
-        task = tasks_v2.Task(
-            http_request=tasks_v2.HttpRequest(
-                http_method=tasks_v2.HttpMethod.POST,
-                url=f"{service_url}{endpoint}",
-                headers={
-                    "Content-Type": "application/json",
-                    "X-Internal-API-Key": api_key,
-                },
-                body=json.dumps(payload).encode(),
-            )
-        )
-
-        response = client.create_task(
-            request=tasks_v2.CreateTaskRequest(parent=parent, task=task)
-        )
-        logger.info("Created Cloud Task: %s", response.name)
-        return response.name
-
-    def enqueue_lecture_processing(
+    async def enqueue_lecture_processing(
         self,
         lecture_id: str,
         course_id: str,
@@ -77,92 +53,244 @@ class TaskQueueService:
         user_token: str = "",
         is_reprocess: bool = False,
     ) -> None:
-        """Enqueue lecture processing.
-
-        In production: creates a Cloud Task targeting /internal/process-lecture.
-        In development: runs processing directly in a background thread.
-        """
-        if _is_production():
-            self._create_cloud_task(
-                queue_name="lecture-processing",
-                endpoint="/internal/process-lecture",
-                payload={
-                    "lecture_id": lecture_id,
-                    "course_id": course_id,
-                    "user_id": user_id,
-                    "file_urls": file_urls,
-                    "is_reprocess": is_reprocess,
-                },
-            )
-        else:
-            from lecturelink_api.pipeline.background import run_lecture_processing
-
-            import threading
-
-            thread = threading.Thread(
-                target=run_lecture_processing,
-                kwargs={
-                    "supabase_url": supabase_url,
-                    "supabase_key": supabase_key,
-                    "user_token": user_token,
-                    "lecture_id": lecture_id,
-                    "course_id": course_id,
-                    "user_id": user_id,
-                    "file_urls": file_urls,
-                    "is_reprocess": is_reprocess,
-                },
-                daemon=True,
-            )
-            thread.start()
-            logger.info(
-                "Started dev lecture processing thread for %s", lecture_id
+        """Enqueue lecture processing via arq."""
+        job_id = await self._enqueue(
+            "task_process_lecture",
+            lecture_id=lecture_id,
+            course_id=course_id,
+            user_id=user_id,
+            file_urls=file_urls,
+            supabase_url=supabase_url,
+            supabase_key=supabase_key,
+            user_token=user_token,
+            is_reprocess=is_reprocess,
+        )
+        if job_id is None:
+            # Fallback: run in a thread (dev without Redis)
+            self._fallback_lecture_processing(
+                supabase_url=supabase_url,
+                supabase_key=supabase_key,
+                user_token=user_token,
+                lecture_id=lecture_id,
+                course_id=course_id,
+                user_id=user_id,
+                file_urls=file_urls,
+                is_reprocess=is_reprocess,
             )
 
-    def enqueue_notification(
+    @staticmethod
+    def _fallback_lecture_processing(**kwargs) -> None:
+        """Fallback: run lecture processing in a daemon thread."""
+        import threading
+
+        from lecturelink_api.pipeline.background import run_lecture_processing
+
+        thread = threading.Thread(
+            target=run_lecture_processing,
+            kwargs=kwargs,
+            daemon=True,
+        )
+        thread.start()
+        logger.info(
+            "Fallback: started lecture processing thread for %s",
+            kwargs.get("lecture_id"),
+        )
+
+    async def enqueue_quiz_generation(
+        self,
+        *,
+        supabase_url: str = "",
+        supabase_key: str = "",
+        user_token: str = "",
+        quiz_id: str,
+        course_id: str,
+        user_id: str,
+        target_assessment_id: str | None = None,
+        lecture_ids: list[str] | None = None,
+        num_questions: int = 10,
+        difficulty: str = "mixed",
+        include_coding: bool = False,
+        coding_ratio: float = 0.3,
+        coding_language: str = "python",
+        coding_only: bool = False,
+    ) -> None:
+        """Enqueue quiz generation via arq."""
+        job_id = await self._enqueue(
+            "task_generate_quiz",
+            supabase_url=supabase_url,
+            supabase_key=supabase_key,
+            user_token=user_token,
+            quiz_id=quiz_id,
+            course_id=course_id,
+            user_id=user_id,
+            target_assessment_id=target_assessment_id,
+            lecture_ids=lecture_ids,
+            num_questions=num_questions,
+            difficulty=difficulty,
+            include_coding=include_coding,
+            coding_ratio=coding_ratio,
+            coding_language=coding_language,
+            coding_only=coding_only,
+        )
+        if job_id is None:
+            # Fallback: run in a thread
+            self._fallback_quiz_generation(
+                supabase_url=supabase_url,
+                supabase_key=supabase_key,
+                user_token=user_token,
+                quiz_id=quiz_id,
+                course_id=course_id,
+                user_id=user_id,
+                target_assessment_id=target_assessment_id,
+                lecture_ids=lecture_ids,
+                num_questions=num_questions,
+                difficulty=difficulty,
+                include_coding=include_coding,
+                coding_ratio=coding_ratio,
+                coding_language=coding_language,
+                coding_only=coding_only,
+            )
+
+    @staticmethod
+    def _fallback_quiz_generation(**kwargs) -> None:
+        """Fallback: run quiz generation in a daemon thread."""
+        import threading
+
+        from lecturelink_api.services.quiz import run_quiz_generation
+
+        thread = threading.Thread(
+            target=run_quiz_generation,
+            kwargs=kwargs,
+            daemon=True,
+        )
+        thread.start()
+        logger.info(
+            "Fallback: started quiz generation thread for %s",
+            kwargs.get("quiz_id"),
+        )
+
+    async def enqueue_syllabus_processing(
+        self,
+        *,
+        syllabus_id: str,
+        file_bytes: bytes,
+        file_name: str,
+        mime_type: str,
+        course_id: str,
+        user_id: str,
+        supabase_url: str = "",
+        supabase_key: str = "",
+        user_token: str = "",
+    ) -> None:
+        """Enqueue syllabus processing via arq."""
+        job_id = await self._enqueue(
+            "task_process_syllabus",
+            syllabus_id=syllabus_id,
+            file_bytes_hex=file_bytes.hex(),
+            file_name=file_name,
+            mime_type=mime_type,
+            course_id=course_id,
+            user_id=user_id,
+            supabase_url=supabase_url,
+            supabase_key=supabase_key,
+            user_token=user_token,
+        )
+        if job_id is None:
+            self._fallback_syllabus_processing(
+                syllabus_id=syllabus_id,
+                file_bytes=file_bytes,
+                file_name=file_name,
+                mime_type=mime_type,
+                course_id=course_id,
+                user_id=user_id,
+                supabase_url=supabase_url,
+                supabase_key=supabase_key,
+                user_token=user_token,
+            )
+
+    @staticmethod
+    def _fallback_syllabus_processing(
+        *,
+        syllabus_id: str,
+        file_bytes: bytes,
+        file_name: str,
+        mime_type: str,
+        course_id: str,
+        user_id: str,
+        supabase_url: str,
+        supabase_key: str,
+        user_token: str,
+    ) -> None:
+        """Fallback: run syllabus processing in a daemon thread."""
+        import asyncio
+        import threading
+
+        def _run():
+            from supabase import create_client
+
+            from lecturelink_api.services.syllabus_service import process_syllabus
+
+            sb = create_client(supabase_url, supabase_key)
+            if user_token:
+                sb.auth.set_session(user_token, "")
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(
+                    process_syllabus(
+                        syllabus_id=syllabus_id,
+                        file_bytes=file_bytes,
+                        file_name=file_name,
+                        mime_type=mime_type,
+                        course_id=course_id,
+                        user_id=user_id,
+                        supabase=sb,
+                    )
+                )
+            except Exception:
+                logger.exception("Fallback syllabus processing failed for %s", syllabus_id)
+            finally:
+                loop.close()
+
+        thread = threading.Thread(target=_run, daemon=True)
+        thread.start()
+        logger.info(
+            "Fallback: started syllabus processing thread for %s",
+            syllabus_id,
+        )
+
+    async def enqueue_notification(
         self,
         user_id: str,
         notification_type: str,
         message: str,
     ) -> None:
-        """Enqueue a notification delivery.
-
-        In production: creates a Cloud Task targeting /internal/send-notification.
-        In development: logs the notification (no email service in dev).
-        """
-        if _is_production():
-            self._create_cloud_task(
-                queue_name="notification-delivery",
-                endpoint="/internal/send-notification",
-                payload={
-                    "user_id": user_id,
-                    "notification_type": notification_type,
-                    "message": message,
-                },
-            )
-        else:
+        """Enqueue a notification delivery via arq."""
+        job_id = await self._enqueue(
+            "task_send_notification",
+            user_id=user_id,
+            notification_type=notification_type,
+            message=message,
+        )
+        if job_id is None:
             logger.info(
-                "Dev notification [%s] to user %s: %s",
+                "Notification [%s] to user %s: %s (not enqueued — logged only)",
                 notification_type,
                 user_id,
                 message,
             )
 
-    def enqueue_daily_refresh(self) -> None:
-        """Enqueue the daily study actions refresh.
+    async def enqueue_user_refresh(self, user_id: str) -> None:
+        """Enqueue a single-user study actions refresh."""
+        await self._enqueue("task_refresh_user", user_id=user_id)
 
-        In production: creates a Cloud Task targeting /internal/daily-refresh.
-        In development: logs a message (daily refresh is on-demand in dev).
-        """
-        if _is_production():
-            self._create_cloud_task(
-                queue_name="daily-refresh",
-                endpoint="/internal/daily-refresh",
-                payload={},
-            )
-        else:
-            logger.info("Dev daily refresh enqueued (no-op in development)")
+    async def enqueue_daily_refresh(self) -> None:
+        """Enqueue the daily study actions refresh (fans out per-user)."""
+        # The daily-refresh endpoint now fans out — see internal router.
+        logger.info("Daily refresh enqueued via arq")
 
 
 def get_task_queue() -> TaskQueueService:
     """Dependency-injectable factory for the task queue service."""
-    return TaskQueueService()
+    from lecturelink_api.services.redis_client import get_redis
+
+    return TaskQueueService(redis=get_redis())

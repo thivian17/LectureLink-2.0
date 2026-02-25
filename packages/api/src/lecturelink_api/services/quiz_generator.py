@@ -5,21 +5,11 @@ from __future__ import annotations
 import json
 import logging
 
-from google import genai
+from .genai_client import get_genai_client as _get_client
 
 logger = logging.getLogger(__name__)
 
 GENERATOR_MODEL = "gemini-2.5-flash"
-
-_client = None
-
-
-def _get_client():
-    """Lazy singleton for the Gemini client."""
-    global _client
-    if _client is None:
-        _client = genai.Client()
-    return _client
 
 GENERATOR_SYSTEM_PROMPT = """\
 Generate quiz questions from lecture content.
@@ -74,11 +64,21 @@ async def generate_questions(
             for c in chunks
         ])
 
+        subconcepts = concept.get("subconcepts") or []
+        subconcept_text = ""
+        if subconcepts:
+            sc_lines = [
+                f"  - {sc['title']}: {sc.get('description', '')}"
+                for sc in subconcepts
+            ]
+            subconcept_text = "\nSubconcepts:\n" + "\n".join(sc_lines) + "\n"
+
         block = (
             f"### Concept: {concept['title']}\n"
             f"Category: {concept.get('category', 'concept')}\n"
             f"Concept ID: {concept['id']}\n"
-            f"Description: {concept.get('description', 'N/A')}\n\n"
+            f"Description: {concept.get('description', 'N/A')}\n"
+            f"{subconcept_text}\n"
             f"Source Material:\n{chunk_text}"
         )
         concept_blocks.append(block)

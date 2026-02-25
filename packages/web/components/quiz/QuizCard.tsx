@@ -57,10 +57,10 @@ export const QuizCard = React.memo(function QuizCard({ quiz, courseId }: QuizCar
 
   return (
     <Link href={href}>
-      <Card className="h-full transition-colors hover:bg-accent/50">
+      <Card className="h-full overflow-hidden transition-colors hover:bg-accent/50">
         <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-2">
-            <CardTitle className="text-base leading-tight truncate">
+          <div className="flex items-start justify-between gap-2 overflow-hidden">
+            <CardTitle className="text-base leading-tight truncate min-w-0">
               {quiz.title}
             </CardTitle>
             <Badge

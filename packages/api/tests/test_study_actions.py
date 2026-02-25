@@ -4,18 +4,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
 from lecturelink_api.services.study_actions import (
-    LectureGap,
-    StudyAction,
     compute_expected_meetings,
     compute_lecture_gap,
     get_study_actions,
 )
-
 
 # ---------------------------------------------------------------------------
 # Schedule computation

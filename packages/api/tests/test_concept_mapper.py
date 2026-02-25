@@ -10,7 +10,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
 import pytest
-
 from lecturelink_api.agents.concept_mapper import (
     _embedding_fallback_mapping,
     _get_syllabus_schedule,
@@ -338,7 +337,7 @@ class TestGetSyllabusSchedule:
         sb = MagicMock()
         schedule = [{"week": 1, "topics": ["Intro"]}, {"week": 2, "topics": ["Chapter 1"]}]
         sb.table.return_value.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
-            data=[{"extracted_data": {"schedule": schedule}}]
+            data=[{"raw_extraction": {"schedule": schedule}}]
         )
 
         result = _get_syllabus_schedule(sb, "course-001")

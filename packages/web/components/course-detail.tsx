@@ -5,7 +5,14 @@ import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import Link from "next/link";
-import { CalendarDays, Pencil, Scale, Trash2, UploadCloud } from "lucide-react";
+import {
+  CalendarDays,
+  GraduationCap,
+  Pencil,
+  Scale,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -41,7 +48,14 @@ import { SearchPageClient } from "@/components/search/search-page-client";
 import { FloatingQAButton } from "@/components/chat/floating-qa-button";
 import { StudyCoachTab } from "@/components/study-coach/StudyCoachTab";
 import { CourseActionBanner } from "@/components/study-hub/CourseActionBanner";
-import { deleteCourse, getAssessments } from "@/lib/api";
+import {
+  deleteCourse,
+  deleteAssessment,
+  getAssessments,
+  updateAssessment,
+} from "@/lib/api";
+import type { UpdateAssessmentInput } from "@/lib/api";
+import { AssessmentEditDialog } from "@/components/syllabus-review/assessment-edit-dialog";
 import type { Assessment, Course, Syllabus } from "@/types/database";
 
 const GRADE_MAP: Record<string, string> = {
@@ -198,6 +212,30 @@ export function CourseDetail({
 
       {/* Smart action banner */}
       <CourseActionBanner courseId={course.id} />
+
+      {/* Study Tutor CTA */}
+      <Card className="border-primary/30 bg-gradient-to-r from-primary/5 to-primary/10">
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                <GraduationCap className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-semibold">Study Tutor</p>
+                <p className="text-sm text-muted-foreground">
+                  Interactive AI lessons tailored to your weak spots
+                </p>
+              </div>
+            </div>
+            <Button asChild>
+              <Link href={`/dashboard/courses/${course.id}/tutor`}>
+                Start Studying
+              </Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Tabs */}
       <Tabs defaultValue="overview">
@@ -534,6 +572,11 @@ function CourseCalendarTab({ course }: { course: Course }) {
 function CourseAssessmentsTab({ courseId }: { courseId: string }) {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingAssessment, setEditingAssessment] = useState<Assessment | null>(
+    null,
+  );
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -553,6 +596,33 @@ function CourseAssessmentsTab({ courseId }: { courseId: string }) {
       cancelled = true;
     };
   }, [courseId]);
+
+  async function handleSave(updates: UpdateAssessmentInput) {
+    if (!editingAssessment) return;
+    try {
+      const updated = await updateAssessment(editingAssessment.id, updates);
+      setAssessments((prev) =>
+        prev.map((a) => (a.id === updated.id ? updated : a)),
+      );
+      toast.success("Assessment updated");
+    } catch {
+      toast.error("Failed to update assessment");
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    try {
+      await deleteAssessment(id);
+      setAssessments((prev) => prev.filter((a) => a.id !== id));
+      toast.success("Assessment deleted");
+    } catch {
+      toast.error("Failed to delete assessment");
+    } finally {
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+    }
+  }
 
   if (loading) {
     return (
@@ -584,49 +654,109 @@ function CourseAssessmentsTab({ courseId }: { courseId: string }) {
   }
 
   return (
-    <div className="space-y-3">
-      {assessments.map((a) => (
-        <Card key={a.id}>
-          <CardContent className="pt-6">
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-1 min-w-0">
-                <p className="font-medium leading-tight">{a.title}</p>
-                <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                  <Badge variant="outline" className="text-xs capitalize">
-                    {a.type}
-                  </Badge>
-                  {a.weight_percent != null && (
-                    <span className="flex items-center gap-1">
-                      <Scale className="h-3 w-3" />
-                      {a.weight_percent}%
-                    </span>
-                  )}
-                  {a.due_date && (
-                    <span className="flex items-center gap-1">
-                      <CalendarDays className="h-3 w-3" />
-                      {format(parseLocalDate(a.due_date), "MMM d, yyyy")}
-                      {a.is_date_ambiguous && (
-                        <span className="text-yellow-600" title="Date may be ambiguous">
-                          ?
-                        </span>
-                      )}
-                    </span>
+    <>
+      <div className="space-y-3">
+        {assessments.map((a) => (
+          <Card key={a.id}>
+            <CardContent className="pt-6">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1 min-w-0">
+                  <p className="font-medium leading-tight">{a.title}</p>
+                  <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                    <Badge variant="outline" className="text-xs capitalize">
+                      {a.type}
+                    </Badge>
+                    {a.weight_percent != null && (
+                      <span className="flex items-center gap-1">
+                        <Scale className="h-3 w-3" />
+                        {a.weight_percent}%
+                      </span>
+                    )}
+                    {a.due_date && (
+                      <span className="flex items-center gap-1">
+                        <CalendarDays className="h-3 w-3" />
+                        {format(parseLocalDate(a.due_date), "MMM d, yyyy")}
+                        {a.is_date_ambiguous && (
+                          <span
+                            className="text-yellow-600"
+                            title="Date may be ambiguous"
+                          >
+                            ?
+                          </span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                  {a.topics && a.topics.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      {a.topics.map((topic) => (
+                        <Badge
+                          key={topic}
+                          variant="secondary"
+                          className="text-xs"
+                        >
+                          {topic}
+                        </Badge>
+                      ))}
+                    </div>
                   )}
                 </div>
-                {a.topics && a.topics.length > 0 && (
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {a.topics.map((topic) => (
-                      <Badge key={topic} variant="secondary" className="text-xs">
-                        {topic}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setEditingAssessment(a)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  {confirmDeleteId === a.id ? (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-8 text-xs"
+                        disabled={deletingId === a.id}
+                        onClick={() => handleDelete(a.id)}
+                      >
+                        {deletingId === a.id ? "..." : "Confirm"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={() => setConfirmDeleteId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => setConfirmDeleteId(a.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {editingAssessment && (
+        <AssessmentEditDialog
+          open={!!editingAssessment}
+          onOpenChange={(open) => {
+            if (!open) setEditingAssessment(null);
+          }}
+          assessment={editingAssessment}
+          onSave={handleSave}
+        />
+      )}
+    </>
   );
 }

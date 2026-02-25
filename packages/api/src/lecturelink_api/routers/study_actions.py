@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -46,7 +46,33 @@ async def get_all_study_actions(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    """Get prioritized study actions across all courses."""
+    """Fast deterministic study actions across all courses."""
+    sb = _sb(user, settings)
+
+    from lecturelink_api.services.study_actions import get_study_actions
+
+    try:
+        actions = await get_study_actions(sb, user["id"])
+    except Exception:
+        logger.exception("Failed to compute study actions for user %s", user["id"])
+        actions = []
+
+    return StudyActionsListResponse(
+        actions=[StudyActionResponse(**a.model_dump()) for a in actions],
+        generated_at=datetime.now(UTC).isoformat(),
+    )
+
+
+@router.get("/study-actions/enhanced", response_model=StudyActionsListResponse)
+async def get_enhanced_study_actions(
+    user: dict = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    """LLM-enhanced study actions with personalized language.
+
+    Slower (Gemini round-trip) but produces more natural, motivating text.
+    Intended as a progressive upgrade after the fast endpoint has loaded.
+    """
     sb = _sb(user, settings)
 
     from lecturelink_api.services.study_actions_llm import get_study_actions_llm
@@ -54,12 +80,12 @@ async def get_all_study_actions(
     try:
         actions = await get_study_actions_llm(sb, user["id"])
     except Exception:
-        logger.exception("Failed to compute study actions for user %s", user["id"])
+        logger.exception("Failed to compute enhanced study actions for user %s", user["id"])
         actions = []
 
     return StudyActionsListResponse(
         actions=[StudyActionResponse(**a.model_dump()) for a in actions],
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
     )
 
 
@@ -72,7 +98,11 @@ async def get_course_study_actions(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    """Get prioritized study actions for a single course."""
+    """Get prioritized study actions for a single course.
+
+    Uses the fast deterministic engine (no LLM call) since
+    cross-course prioritization isn't needed for a single course.
+    """
     sb = _sb(user, settings)
 
     # Verify course ownership
@@ -88,10 +118,10 @@ async def get_course_study_actions(
             status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
         )
 
-    from lecturelink_api.services.study_actions_llm import get_study_actions_llm
+    from lecturelink_api.services.study_actions import get_study_actions
 
     try:
-        actions = await get_study_actions_llm(sb, user["id"], course_id=course_id)
+        actions = await get_study_actions(sb, user["id"], course_id=course_id)
     except Exception:
         logger.exception(
             "Failed to compute study actions for course %s", course_id
@@ -100,5 +130,5 @@ async def get_course_study_actions(
 
     return StudyActionsListResponse(
         actions=[StudyActionResponse(**a.model_dump()) for a in actions],
-        generated_at=datetime.now(timezone.utc).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
     )

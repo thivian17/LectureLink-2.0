@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tests.integration.conftest import FAKE_USER_ID, mock_chain
+from tests.integration.conftest import mock_chain
 
 
 class TestSyllabusStatusProgression:

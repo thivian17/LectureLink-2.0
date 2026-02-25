@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -14,9 +15,13 @@ from pydantic import BaseModel, Field
 class CourseCreate(BaseModel):
     name: str
     code: str | None = None
-    semester_start: date
-    semester_end: date
-    meeting_days: list[str] | None = None
+    professor: str | None = None
+    color: str | None = None
+    description: str | None = None
+    semester: str | None = None
+    semester_start: date | None = None
+    semester_end: date | None = None
+    meeting_days: list[str] = Field(min_length=1)
     meeting_time: str | None = None
     holidays: list[dict] | None = None
     target_grade: float = Field(default=0.8, ge=0.0, le=1.0)
@@ -25,6 +30,10 @@ class CourseCreate(BaseModel):
 class CourseUpdate(BaseModel):
     name: str | None = None
     code: str | None = None
+    professor: str | None = None
+    color: str | None = None
+    description: str | None = None
+    semester: str | None = None
     semester_start: date | None = None
     semester_end: date | None = None
     meeting_days: list[str] | None = None
@@ -38,14 +47,23 @@ class CourseResponse(BaseModel):
     user_id: str
     name: str
     code: str | None = None
-    semester_start: date
-    semester_end: date
+    professor: str | None = None
+    color: str | None = None
+    description: str | None = None
+    semester: str | None = None
+    semester_start: date | None = None
+    semester_end: date | None = None
     meeting_days: list[str] = Field(default_factory=list)
     meeting_time: str | None = None
     holidays: list = Field(default_factory=list)
     target_grade: float = 0.8
     created_at: datetime
-    updated_at: datetime
+
+
+class CourseCreateResponse(CourseResponse):
+    needs_onboarding: bool = True
+    is_first_course: bool = False
+    onboarding_completed_at: datetime | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -91,31 +109,50 @@ class AssessmentResponse(BaseModel):
     id: str
     course_id: str
     syllabus_id: str | None = None
+    user_id: str | None = None
     title: str
     type: str
-    due_date: date | None = None
+    due_date: datetime | None = None
     due_date_raw: str | None = None
     is_date_ambiguous: bool = False
     weight_percent: float | None = None
+    student_score: float | None = None
+    completed: bool = False
     topics: list[str] = Field(default_factory=list)
+    description: str | None = None
     created_at: datetime
+    updated_at: datetime | None = None
 
 
 class AssessmentUpdate(BaseModel):
     title: str | None = None
     type: str | None = None
-    due_date: date | None = None
+    due_date: datetime | None = None
     due_date_raw: str | None = None
     is_date_ambiguous: bool | None = None
     weight_percent: float | None = None
+    completed: bool | None = None
     topics: list[str] | None = None
+
+
+class AssessmentResultRequest(BaseModel):
+    score_percent: float = Field(ge=0.0, le=100.0)
+
+
+class AssessmentResultResponse(BaseModel):
+    id: str
+    title: str
+    type: str
+    due_date: datetime | None = None
+    weight_percent: float | None = None
+    student_score: float | None = None
 
 
 class PriorityResponse(BaseModel):
     assessment_id: str
     title: str
     course_id: str
-    due_date: date | None = None
+    due_date: datetime | None = None
     weight_percent: float | None = None
     priority_score: float
 
@@ -180,6 +217,7 @@ class QuizQuestionResponse(BaseModel):
     correct_answer: str | None = None
     correct_option_index: int | None = None
     explanation: str | None = None
+    code_metadata: dict | None = None
 
 class QuizSubmissionResult(BaseModel):
     score: float
@@ -196,6 +234,12 @@ class TranscriptSegmentResponse(BaseModel):
     source: str = "chunk"
 
 
+class SubconceptResponse(BaseModel):
+    title: str
+    description: str = ""
+    difficulty_estimate: float = 0.5
+
+
 class ConceptDetailResponse(BaseModel):
     id: str
     title: str
@@ -204,6 +248,7 @@ class ConceptDetailResponse(BaseModel):
     difficulty_estimate: float = 0.5
     linked_assessments: list[dict] = Field(default_factory=list)
     segment_indices: list[int] = Field(default_factory=list)
+    subconcepts: list[SubconceptResponse] = Field(default_factory=list)
 
 
 class LectureDetailResponse(BaseModel):
@@ -235,6 +280,7 @@ class ConceptResponse(BaseModel):
     difficulty_estimate: float
     linked_assessments: list[dict]  # [{assessment_id, title, relevance_score}]
     lecture_title: str
+    subconcepts: list[SubconceptResponse] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -266,6 +312,10 @@ class QuizGenerateRequest(BaseModel):
     lecture_ids: list[str] | None = None
     question_count: int = Field(default=10, ge=1, le=30)
     difficulty: str = "mixed"
+    include_coding: bool = False
+    coding_ratio: float = Field(default=0.3, ge=0.0, le=1.0)
+    coding_language: str = "python"
+    coding_only: bool = False
 
 
 class QuizAnswer(BaseModel):
@@ -276,3 +326,69 @@ class QuizAnswer(BaseModel):
 
 class QuizSubmitRequest(BaseModel):
     answers: list[QuizAnswer]
+
+
+# ---------------------------------------------------------------------------
+# Onboarding
+# ---------------------------------------------------------------------------
+
+
+class OnboardingStartResponse(BaseModel):
+    status: str
+    step: str
+
+
+class OnboardingStatusResponse(BaseModel):
+    path: str | None
+    step: str | None
+    completed_at: str | None
+    welcome_message: dict | None
+
+
+class SetPathRequest(BaseModel):
+    path: Literal["just_starting", "mid_semester", "course_complete"]
+
+
+class SetPathResponse(BaseModel):
+    path: str
+    mode: str
+    suggested_path: str
+
+
+class PersonalizedMessageRequest(BaseModel):
+    force_regenerate: bool = False
+
+
+class PersonalizedMessageResponse(BaseModel):
+    message: str
+    generated_at: str
+    path: str
+
+
+class LectureChecklistItem(BaseModel):
+    lecture_number: int
+    expected_date: str
+    week_number: int
+    topic_hint: str | None
+    day_of_week: str
+    status: str
+
+
+class SemesterProgressResponse(BaseModel):
+    status: str
+    progress_pct: int
+    weeks_elapsed: int
+    estimated_lectures_passed: int
+    days_remaining: int
+    past_assessments: list[dict]
+    upcoming_assessments: list[dict]
+    next_assessment: dict | None
+
+
+class StepUpdateRequest(BaseModel):
+    step: str
+
+
+class OnboardingCompleteResponse(BaseModel):
+    completed_at: str
+    mastery_scores_seeded: int

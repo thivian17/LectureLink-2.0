@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from lecturelink_api.agents.syllabus_processor import (
     GradingOutput,
     InfoOutput,

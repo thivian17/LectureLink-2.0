@@ -8,7 +8,6 @@ from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from lecturelink_api.services.study_actions import LectureGap, StudyAction
 from lecturelink_api.services.study_actions_llm import (
     VALID_ACTION_TYPES,
@@ -126,7 +125,7 @@ class TestBuildLLMContext:
         assert "upload_syllabus" in cta
         assert "review_syllabus" in cta
         assert "upload_lectures" in cta
-        assert "quiz" in cta
+        assert "study" in cta
         assert COURSE_A in cta["upload_syllabus"]
 
     def test_includes_lecture_gap(self):

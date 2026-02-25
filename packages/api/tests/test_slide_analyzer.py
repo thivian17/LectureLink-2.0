@@ -7,14 +7,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from google.genai import types
-
 from lecturelink_api.agents.slide_analyzer import (
     SlideAnalysisError,
     analyze_slides,
     get_slide_mime_type,
     validate_slide_analysis,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -181,9 +179,8 @@ class TestAnalyzeSlides:
         ), patch(
             "lecturelink_api.agents.slide_analyzer.asyncio.sleep",
             new_callable=AsyncMock,
-        ):
-            with pytest.raises(SlideAnalysisError, match="after 3 retries"):
-                await analyze_slides("lecture.pdf")
+        ), pytest.raises(SlideAnalysisError, match="after 3 retries"):
+            await analyze_slides("lecture.pdf")
 
     @pytest.mark.asyncio
     async def test_slide_analysis_error_not_retried(self):
@@ -192,9 +189,8 @@ class TestAnalyzeSlides:
             "lecturelink_api.agents.slide_analyzer._call_gemini",
             new_callable=AsyncMock,
             side_effect=SlideAnalysisError("Bad JSON"),
-        ):
-            with pytest.raises(SlideAnalysisError, match="Bad JSON"):
-                await analyze_slides("lecture.pdf")
+        ), pytest.raises(SlideAnalysisError, match="Bad JSON"):
+            await analyze_slides("lecture.pdf")
 
 
 class TestCallGemini:
@@ -259,9 +255,8 @@ class TestCallGemini:
         ), patch(
             "lecturelink_api.agents.slide_analyzer._file_part",
             return_value=MagicMock(spec=types.Part),
-        ):
-            with pytest.raises(SlideAnalysisError, match="Failed to parse"):
-                await _call_gemini("lecture.pdf")
+        ), pytest.raises(SlideAnalysisError, match="Failed to parse"):
+            await _call_gemini("lecture.pdf")
 
     @pytest.mark.asyncio
     async def test_non_array_raises_error(self):
@@ -275,6 +270,5 @@ class TestCallGemini:
         ), patch(
             "lecturelink_api.agents.slide_analyzer._file_part",
             return_value=MagicMock(spec=types.Part),
-        ):
-            with pytest.raises(SlideAnalysisError, match="did not return"):
-                await _call_gemini("lecture.pdf")
+        ), pytest.raises(SlideAnalysisError, match="did not return"):
+            await _call_gemini("lecture.pdf")
