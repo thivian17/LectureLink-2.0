@@ -51,6 +51,7 @@ interface AssessmentTableProps {
   dbAssessments: Assessment[];
   onUpdate: (index: number, updates: UpdateAssessmentInput) => void;
   onAcceptRow: (index: number) => void;
+  hideConfidence?: boolean;
 }
 
 function parseLocalDate(dateStr: string): Date {
@@ -88,6 +89,7 @@ export function AssessmentTable({
   dbAssessments,
   onUpdate,
   onAcceptRow,
+  hideConfidence,
 }: AssessmentTableProps) {
   const [editingCell, setEditingCell] = useState<EditingCell>(null);
   const [editValue, setEditValue] = useState("");
@@ -152,7 +154,7 @@ export function AssessmentTable({
               <TableHead className="w-28">Type</TableHead>
               <TableHead className="w-36">Due Date</TableHead>
               <TableHead className="w-24">Weight</TableHead>
-              <TableHead className="w-28">Confidence</TableHead>
+              {!hideConfidence && <TableHead className="w-28">Confidence</TableHead>}
               <TableHead className="w-20">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -163,12 +165,12 @@ export function AssessmentTable({
 
               const minConf = getRowMinConfidence(a);
               const level = getConfidenceLevel(minConf);
-              const rowColor = getConfidenceColor(level);
+              const rowColor = hideConfidence ? "" : getConfidenceColor(level);
               const isAmbiguous = db.is_date_ambiguous;
               const ongoing = isOngoing(db);
 
               return (
-                <TableRow key={db.id} className={cn("border-l-4", rowColor)}>
+                <TableRow key={db.id} className={cn(!hideConfidence && "border-l-4", rowColor)}>
                   {/* Title */}
                   <TableCell>
                     {editingCell?.row === i && editingCell.col === "title" ? (
@@ -192,7 +194,7 @@ export function AssessmentTable({
                         >
                           {db.title}
                         </span>
-                        {a.title.source_text && (
+                        {!hideConfidence && a.title.source_text && (
                           <ConfidenceIndicator
                             confidence={a.title.confidence}
                             sourceText={a.title.source_text}
@@ -320,12 +322,14 @@ export function AssessmentTable({
                   </TableCell>
 
                   {/* Confidence */}
-                  <TableCell>
-                    <ConfidenceIndicator
-                      confidence={minConf}
-                      sourceText={a.title.source_text}
-                    />
-                  </TableCell>
+                  {!hideConfidence && (
+                    <TableCell>
+                      <ConfidenceIndicator
+                        confidence={minConf}
+                        sourceText={a.title.source_text}
+                      />
+                    </TableCell>
+                  )}
 
                   {/* Actions */}
                   <TableCell>

@@ -81,8 +81,8 @@ def _signed_urls_from_lecture(sb_admin, lecture: dict) -> list[str]:
 @router.post("/lectures/upload", status_code=status.HTTP_200_OK)
 async def upload_lecture(
     course_id: str = Form(...),
-    title: str = Form(...),
-    lecture_number: int | None = Form(default=None),
+    title: str = Form(default=""),
+    lecture_number: int = Form(...),
     lecture_date: str | None = Form(default=None),
     files: list[UploadFile] = File(...),
     user: dict = Depends(get_current_user),
@@ -175,15 +175,18 @@ async def upload_lecture(
         file_urls.append(signed["signedURL"])
 
     # Create lecture record
+    effective_title = title.strip() if title else ""
+    if not effective_title:
+        effective_title = f"Lecture {lecture_number}"
+
     insert_data = {
         "course_id": course_id,
         "user_id": user["id"],
-        "title": title,
+        "title": effective_title,
+        "lecture_number": lecture_number,
         "processing_status": "pending",
         "processing_progress": 0.0,
     }
-    if lecture_number is not None:
-        insert_data["lecture_number"] = lecture_number
     if lecture_date is not None:
         insert_data["lecture_date"] = lecture_date
     if audio_storage_path:

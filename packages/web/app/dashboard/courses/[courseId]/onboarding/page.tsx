@@ -87,8 +87,8 @@ export default function OnboardingPage() {
         // Check existing status first
         const status = await getOnboardingStatus(courseId);
         if (status.completed_at) {
-          // Already completed — redirect to course page
-          router.replace(`/dashboard/courses/${courseId}`);
+          // Already completed — redirect to Study Hub
+          router.replace('/dashboard');
           return;
         }
         if (status.path) {
@@ -138,8 +138,8 @@ export default function OnboardingPage() {
   }, [stepIndex, steps, goToStep]);
 
   const handleOnboardingComplete = useCallback(() => {
-    router.replace(`/dashboard/courses/${courseId}`);
-  }, [router, courseId]);
+    router.replace('/dashboard');
+  }, [router]);
 
   if (loading) {
     return (
@@ -265,6 +265,7 @@ export default function OnboardingPage() {
       totalSteps={steps.length}
       stepLabels={labels}
       onBack={stepIndex > 0 ? goBack : undefined}
+      wide={currentStepKey === "extraction_review"}
     >
       {renderStep()}
     </OnboardingShell>

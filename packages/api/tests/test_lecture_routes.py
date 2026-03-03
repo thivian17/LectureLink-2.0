@@ -144,7 +144,7 @@ class TestLectureUpload:
                 "/api/lectures/upload",
                 data={
                     "course_id": course_id,
-                    "title": "Lecture 1",
+                    "lecture_number": "1",
                 },
                 files={"files": ("lecture.mp3", b"fake-audio", "audio/mpeg")},
             )
@@ -166,7 +166,7 @@ class TestLectureUpload:
 
             resp = await client.post(
                 "/api/lectures/upload",
-                data={"course_id": "c1", "title": "Lecture 1"},
+                data={"course_id": "c1", "lecture_number": "1"},
                 files={"files": ("notes.txt", b"hello", "text/plain")},
             )
 
@@ -187,7 +187,7 @@ class TestLectureUpload:
             big_file = b"x" * (51 * 1024 * 1024)
             resp = await client.post(
                 "/api/lectures/upload",
-                data={"course_id": "c1", "title": "Lecture 1"},
+                data={"course_id": "c1", "lecture_number": "1"},
                 files={"files": ("slides.pdf", big_file, "application/pdf")},
             )
 
@@ -209,7 +209,7 @@ class TestLectureUpload:
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             resp = await ac.post(
                 "/api/lectures/upload",
-                data={"course_id": "c1", "title": "L1"},
+                data={"course_id": "c1", "lecture_number": "1"},
                 files={"files": ("a.mp3", b"x", "audio/mpeg")},
             )
 
@@ -236,7 +236,7 @@ class TestLectureUpload:
 
             resp = await client.post(
                 "/api/lectures/upload",
-                data={"course_id": "c1", "title": "L1"},
+                data={"course_id": "c1", "lecture_number": "1"},
                 files={"files": ("a.mp3", b"x", "audio/mpeg")},
             )
 

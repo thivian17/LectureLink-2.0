@@ -21,6 +21,8 @@ async def get_redis_pool(redis_url: str) -> Redis:
             redis_url,
             decode_responses=True,
             max_connections=20,
+            socket_connect_timeout=3,
+            socket_timeout=3,
         )
         # Verify connectivity before storing
         await r.ping()

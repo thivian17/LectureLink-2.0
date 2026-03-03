@@ -29,11 +29,12 @@ interface GradeBreakdownProps {
     field: "name" | "weight_percent" | "drop_policy",
     value: string | number | null,
   ) => void;
+  hideConfidence?: boolean;
 }
 
 type EditingCell = { row: number; col: string } | null;
 
-export function GradeBreakdown({ components, onChange }: GradeBreakdownProps) {
+export function GradeBreakdown({ components, onChange, hideConfidence }: GradeBreakdownProps) {
   const [editingCell, setEditingCell] = useState<EditingCell>(null);
   const [editValue, setEditValue] = useState("");
 
@@ -88,15 +89,15 @@ export function GradeBreakdown({ components, onChange }: GradeBreakdownProps) {
               <TableHead>Component</TableHead>
               <TableHead className="w-24">Weight %</TableHead>
               <TableHead>Drop Policy</TableHead>
-              <TableHead className="w-28">Confidence</TableHead>
+              {!hideConfidence && <TableHead className="w-28">Confidence</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {components.map((comp, i) => {
               const level = getConfidenceLevel(comp.weight_percent.confidence);
-              const rowColor = getConfidenceColor(level);
+              const rowColor = hideConfidence ? "" : getConfidenceColor(level);
               return (
-                <TableRow key={i} className={cn("border-l-4", rowColor)}>
+                <TableRow key={i} className={cn(!hideConfidence && "border-l-4", rowColor)}>
                   {/* Name */}
                   <TableCell>
                     {editingCell?.row === i && editingCell?.col === "name" ? (
@@ -175,12 +176,14 @@ export function GradeBreakdown({ components, onChange }: GradeBreakdownProps) {
                     )}
                   </TableCell>
                   {/* Confidence */}
-                  <TableCell>
-                    <ConfidenceIndicator
-                      confidence={comp.weight_percent.confidence}
-                      sourceText={comp.weight_percent.source_text}
-                    />
-                  </TableCell>
+                  {!hideConfidence && (
+                    <TableCell>
+                      <ConfidenceIndicator
+                        confidence={comp.weight_percent.confidence}
+                        sourceText={comp.weight_percent.source_text}
+                      />
+                    </TableCell>
+                  )}
                 </TableRow>
               );
             })}
@@ -194,7 +197,7 @@ export function GradeBreakdown({ components, onChange }: GradeBreakdownProps) {
                 {totalWeight.toFixed(1)}%
               </TableCell>
               <TableCell />
-              <TableCell />
+              {!hideConfidence && <TableCell />}
             </TableRow>
           </TableFooter>
         </Table>

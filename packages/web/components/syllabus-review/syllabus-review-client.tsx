@@ -29,6 +29,7 @@ interface SyllabusReviewClientProps {
   extraction: SyllabusExtraction;
   assessments: Assessment[];
   pdfUrl: string | null;
+  hideConfidence?: boolean;
 }
 
 export function SyllabusReviewClient({
@@ -37,6 +38,7 @@ export function SyllabusReviewClient({
   extraction: initialExtraction,
   assessments: initialAssessments,
   pdfUrl,
+  hideConfidence,
 }: SyllabusReviewClientProps) {
   const router = useRouter();
   const [extraction, setExtraction] =
@@ -270,50 +272,56 @@ export function SyllabusReviewClient({
           Review Syllabus Extraction
         </h1>
         <p className="text-sm text-muted-foreground">
-          AI-extracted data is shown below with confidence scores. Review, edit,
-          and accept the results.
+          {hideConfidence
+            ? "Review the extracted data below. Edit anything that looks incorrect."
+            : "AI-extracted data is shown below with confidence scores. Review, edit, and accept the results."}
         </p>
       </div>
 
       {/* Overall confidence */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <Badge variant="outline" className="text-sm">
-          Overall confidence:{" "}
-          {Math.round(extraction.extraction_confidence * 100)}%
-        </Badge>
-        {extraction.missing_sections.length > 0 && (
-          <Badge
-            variant="outline"
-            className="text-amber-700 border-amber-300 bg-amber-50"
-          >
-            <AlertTriangle className="mr-1 h-3 w-3" />
-            Missing: {extraction.missing_sections.join(", ")}
+      {!hideConfidence && (
+        <div className="flex items-center gap-3 flex-wrap">
+          <Badge variant="outline" className="text-sm">
+            Overall confidence:{" "}
+            {Math.round(extraction.extraction_confidence * 100)}%
           </Badge>
-        )}
-      </div>
+          {extraction.missing_sections.length > 0 && (
+            <Badge
+              variant="outline"
+              className="text-amber-700 border-amber-300 bg-amber-50"
+            >
+              <AlertTriangle className="mr-1 h-3 w-3" />
+              Missing: {extraction.missing_sections.join(", ")}
+            </Badge>
+          )}
+        </div>
+      )}
 
       {/* Two-column layout */}
-      <div className="flex flex-col lg:flex-row gap-6 pb-24">
+      <div className="flex flex-col lg:flex-row gap-6 pb-24 overflow-hidden">
         {/* LEFT: Editable data */}
         <div className="flex-1 space-y-6 min-w-0">
           <CourseInfo
             extraction={extraction}
             onChange={handleCourseInfoChange}
+            hideConfidence={hideConfidence}
           />
           <GradeBreakdown
             components={extraction.grade_breakdown}
             onChange={handleGradeChange}
+            hideConfidence={hideConfidence}
           />
           <AssessmentTable
             assessments={extraction.assessments}
             dbAssessments={assessments}
             onUpdate={handleAssessmentUpdate}
             onAcceptRow={handleAcceptRow}
+            hideConfidence={hideConfidence}
           />
         </div>
 
         {/* RIGHT: PDF viewer (desktop only) */}
-        <div className="hidden lg:block lg:w-[45%] lg:shrink-0">
+        <div className="hidden lg:block lg:w-[40%] lg:shrink-0 lg:min-w-0">
           <div className="sticky top-4">
             {pdfUrl && isPdf ? (
               <iframe
@@ -350,6 +358,7 @@ export function SyllabusReviewClient({
         onAcceptHighConfidence={handleAcceptAllHigh}
         onSave={handleSave}
         onReExtract={handleReExtract}
+        hideConfidence={hideConfidence}
       />
     </div>
   );

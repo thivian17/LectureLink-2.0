@@ -93,7 +93,6 @@ export function LectureCatchUpStep({
       try {
         const formData = new FormData();
         formData.append("files", file);
-        formData.append("title", `Lecture ${lectureNumber}`);
         formData.append("lecture_number", String(lectureNumber));
 
         await uploadLecture(courseId, formData);
@@ -162,7 +161,6 @@ export function LectureCatchUpStep({
       const batchPromises = batch.map(async (bf) => {
         const formData = new FormData();
         formData.append("files", bf.file);
-        formData.append("title", `Lecture ${bf.assignedLecture}`);
         formData.append("lecture_number", String(bf.assignedLecture));
         await uploadLecture(courseId, formData);
 

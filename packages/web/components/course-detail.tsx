@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import Link from "next/link";
 import {
+  ArrowLeft,
   CalendarDays,
   GraduationCap,
   Pencil,
@@ -125,6 +126,15 @@ export function CourseDetail({
 
   return (
     <div className="space-y-6">
+      {/* Back to Study Hub */}
+      <Link
+        href="/dashboard"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Study Hub
+      </Link>
+
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>

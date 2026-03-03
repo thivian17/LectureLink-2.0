@@ -25,6 +25,7 @@ from ..agents.concept_mapper import map_concepts_to_assessments
 from ..agents.content_aligner import align_content
 from ..agents.input_router import route_input
 from ..agents.slide_analyzer import SlideAnalysisError, analyze_slides
+from ..agents.title_generator import generate_title
 from ..services.lecture_storage import cleanup_lecture_data, store_chunks, store_concepts
 from ..services.processing import STAGE_PROGRESS, update_processing_status
 
@@ -112,6 +113,17 @@ async def process_lecture(
         )
         aligned_segments = await align_content(transcript_segments, slide_analysis)
         logger.info("Lecture %s: aligned %d segments", lecture_id, len(aligned_segments))
+
+        # ── Title Generation (runs within alignment window) ──
+        generated_title = await generate_title(aligned_segments)
+        if generated_title:
+            logger.info("Lecture %s: generated title %r", lecture_id, generated_title)
+            (
+                supabase.table("lectures")
+                .update({"title": generated_title})
+                .eq("id", lecture_id)
+                .execute()
+            )
 
         # Calculate duration from transcript timestamps
         duration_seconds = None
@@ -209,6 +221,8 @@ async def process_lecture(
             "processing_error": None,
             "transcript": transcript_json,
         }
+        if generated_title:
+            update_data["title"] = generated_title
         if duration_seconds:
             update_data["duration_seconds"] = int(duration_seconds)
 

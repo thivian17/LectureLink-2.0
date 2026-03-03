@@ -80,9 +80,15 @@ export function MaterialUploadStep({
     setUploading(true);
 
     // Upload with concurrency limit of 3
+    // Calculate starting lecture number based on upload order
+    const pendingIndices = entries.reduce<number[]>((acc, e, idx) => {
+      if (e.status === "pending") acc.push(idx);
+      return acc;
+    }, []);
+
     for (let i = 0; i < pending.length; i += 3) {
       const batch = pending.slice(i, i + 3);
-      const promises = batch.map(async (entry) => {
+      const promises = batch.map(async (entry, batchIdx) => {
         setEntries((prev) =>
           prev.map((e) =>
             e.file.name === entry.file.name
@@ -91,10 +97,11 @@ export function MaterialUploadStep({
           ),
         );
 
+        const lectureNumber = i + batchIdx + 1;
         try {
           const formData = new FormData();
           formData.append("files", entry.file);
-          formData.append("title", entry.file.name.replace(/\.[^.]+$/, ""));
+          formData.append("lecture_number", String(lectureNumber));
           await uploadLecture(courseId, formData);
 
           setEntries((prev) =>

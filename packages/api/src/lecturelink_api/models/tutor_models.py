@@ -106,6 +106,7 @@ class ConceptReadiness(BaseModel):
     concept_id: str | None = None
     title: str
     mastery: float
+    total_attempts: int = 0  # 0 means never assessed
     covered: bool
     teaching_approach: str  # foundational/application/synthesis
     lecture_title: str | None = None

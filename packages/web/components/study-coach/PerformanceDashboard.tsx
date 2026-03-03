@@ -34,7 +34,7 @@ export function PerformanceDashboard({ performance }: PerformanceDashboardProps)
         <MetricCard
           icon={<Brain className="h-4 w-4" />}
           label="Concepts Mastered"
-          value={`${performance.strong_concepts.length}/${concepts.length}`}
+          value={`${performance.strong_concepts.length}/${concepts.filter((c) => c.total_attempts > 0).length}`}
         />
         <MetricCard
           icon={<TrendingUp className="h-4 w-4" />}
@@ -85,6 +85,7 @@ function MetricCard({
 
 function ConceptMasteryBar({ concept }: { concept: ConceptMastery }) {
   const pct = Math.round(concept.mastery * 100);
+  const hasAttempts = concept.total_attempts > 0;
   const trendConfig: Record<string, { label: string; cls: string }> = {
     improving: { label: "Improving", cls: "text-green-600 border-green-300" },
     declining: { label: "Declining", cls: "text-red-600 border-red-300" },
@@ -94,18 +95,24 @@ function ConceptMasteryBar({ concept }: { concept: ConceptMastery }) {
   const trend = trendConfig[concept.trend] ?? trendConfig.new;
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-sm truncate">{concept.title}</span>
-          <div className="flex items-center gap-2 shrink-0 ml-2">
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-sm">
+        <span className="flex-1 min-w-0 truncate">{concept.title}</span>
+        <div className="flex items-center gap-2">
+          {hasAttempts && trend && (
             <Badge variant="outline" className={cn("text-xs", trend.cls)}>
               {trend.label}
             </Badge>
-            <span className="text-xs text-muted-foreground">{pct}%</span>
-          </div>
+          )}
+          {hasAttempts ? (
+            <span className="text-muted-foreground w-10 text-right">{pct}%</span>
+          ) : (
+            <span className="text-xs text-muted-foreground italic">Not yet assessed</span>
+          )}
         </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+      </div>
+      {hasAttempts && (
+        <div className="h-1.5 w-full rounded-full bg-secondary">
           <div
             className={cn(
               "h-full rounded-full transition-all",
@@ -117,7 +124,7 @@ function ConceptMasteryBar({ concept }: { concept: ConceptMastery }) {
             style={{ width: `${pct}%` }}
           />
         </div>
-      </div>
+      )}
     </div>
   );
 }

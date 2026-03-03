@@ -84,7 +84,7 @@ export function ExtractionReviewStep({
           Here&apos;s what I found in your syllabus
         </h2>
         <p className="text-sm text-muted-foreground">
-          Green items look good — yellow and red items need a quick check.
+          Review the extracted information and make any corrections.
         </p>
       </div>
 
@@ -94,6 +94,7 @@ export function ExtractionReviewStep({
         extraction={extraction}
         assessments={assessments}
         pdfUrl={pdfUrl}
+        hideConfidence
       />
 
       <div className="flex justify-end pt-4">

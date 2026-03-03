@@ -34,6 +34,17 @@ import type {
   DiagnosticResult,
   SessionSummary,
   ContentBlock,
+  GamificationState,
+  GamificationReadiness,
+  CourseReadinessSummary,
+  GradeProjection,
+  BadgeInfo,
+  WeeklyProgress,
+  LearnStartSessionResponse,
+  ConceptBrief,
+  QuizAnswerResult,
+  PowerQuizQuestion,
+  LearnSessionComplete,
 } from "@/types/database";
 import {
   ApiError,
@@ -88,8 +99,10 @@ async function fetchWithAuth(
   options: RequestInit = {},
 ): Promise<Response> {
   const headers = await getAuthHeaders();
+  const signal = options.signal ?? AbortSignal.timeout(15_000);
   const resp = await fetch(url, {
     ...options,
+    signal,
     headers: { ...headers, ...(options.headers as Record<string, string>) },
   });
 
@@ -105,6 +118,7 @@ async function fetchWithAuth(
     const freshHeaders = await getAuthHeaders();
     const retryResp = await fetch(url, {
       ...options,
+      signal,
       headers: { ...freshHeaders, ...(options.headers as Record<string, string>) },
     });
     if (retryResp.ok) return retryResp;
@@ -906,6 +920,198 @@ export async function getAssessmentReadiness(
 ): Promise<AssessmentReadiness> {
   const resp = await fetchWithAuth(
     `${API_BASE}/api/tutor/${courseId}/assessment/${assessmentId}/readiness`,
+  );
+  return resp.json();
+}
+
+// ---------------------------------------------------------------------------
+// Gamification (Track A backend)
+// ---------------------------------------------------------------------------
+
+export async function getGamificationState(): Promise<GamificationState> {
+  const resp = await fetchWithAuth(`${API_BASE}/api/gamification/state`);
+  return resp.json();
+}
+
+export async function getGamificationReadiness(
+  courseId?: string,
+): Promise<GamificationReadiness[]> {
+  const url = courseId
+    ? `${API_BASE}/api/gamification/readiness?course_id=${courseId}`
+    : `${API_BASE}/api/gamification/readiness`;
+  const resp = await fetchWithAuth(url);
+  return resp.json();
+}
+
+export async function getCourseReadiness(
+  courseId: string,
+): Promise<CourseReadinessSummary> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/gamification/courses/${courseId}/readiness`,
+  );
+  return resp.json();
+}
+
+export async function getGradeProjection(
+  courseId: string,
+): Promise<GradeProjection> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/gamification/courses/${courseId}/grade-projection`,
+  );
+  return resp.json();
+}
+
+export async function getUserBadges(): Promise<{
+  earned: BadgeInfo[];
+  available: BadgeInfo[];
+}> {
+  const resp = await fetchWithAuth(`${API_BASE}/api/gamification/badges`);
+  return resp.json();
+}
+
+export async function useStreakFreeze(): Promise<{
+  success: boolean;
+  freezes_remaining: number;
+}> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/gamification/streak/freeze`,
+    { method: "POST" },
+  );
+  return resp.json();
+}
+
+export async function getWeeklyProgress(): Promise<WeeklyProgress> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/gamification/weekly-progress`,
+  );
+  return resp.json();
+}
+
+// ---------------------------------------------------------------------------
+// Learn Mode (Track B backend)
+// ---------------------------------------------------------------------------
+
+export async function startLearnSession(
+  courseId: string,
+  timeBudget: number,
+): Promise<LearnStartSessionResponse> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/learn/${courseId}/session/start`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ time_budget_minutes: timeBudget }),
+    },
+  );
+  return resp.json();
+}
+
+export async function submitFlashReview(
+  sessionId: string,
+  cardId: string,
+  answerIndex: number,
+  timeMs: number,
+): Promise<{ correct: boolean; correct_answer: string; xp_earned: number }> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/learn/session/${sessionId}/flash-review`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        card_id: cardId,
+        answer_index: answerIndex,
+        time_ms: timeMs,
+      }),
+    },
+  );
+  return resp.json();
+}
+
+export async function getConceptBrief(
+  sessionId: string,
+  conceptIndex: number,
+): Promise<ConceptBrief> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/learn/session/${sessionId}/concept/${conceptIndex}`,
+  );
+  return resp.json();
+}
+
+export async function submitGutCheck(
+  sessionId: string,
+  conceptId: string,
+  answerIndex: number,
+): Promise<{
+  correct: boolean;
+  explanation: string;
+  clarification: string | null;
+  xp_earned: number;
+}> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/learn/session/${sessionId}/gut-check`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ concept_id: conceptId, answer_index: answerIndex }),
+    },
+  );
+  return resp.json();
+}
+
+export async function getPowerQuiz(
+  sessionId: string,
+): Promise<{ quiz_id: string; questions: PowerQuizQuestion[] }> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/learn/session/${sessionId}/quiz`,
+  );
+  return resp.json();
+}
+
+export async function submitLearnQuizAnswer(
+  sessionId: string,
+  questionId: string,
+  answerIndex: number,
+  timeMs: number,
+): Promise<QuizAnswerResult> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/learn/session/${sessionId}/quiz/answer`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question_id: questionId,
+        answer_index: answerIndex,
+        time_ms: timeMs,
+      }),
+    },
+  );
+  return resp.json();
+}
+
+export async function completeLearnSession(
+  sessionId: string,
+): Promise<LearnSessionComplete> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/learn/session/${sessionId}/complete`,
+    { method: "PUT" },
+  );
+  return resp.json();
+}
+
+export async function abandonLearnSession(
+  sessionId: string,
+): Promise<void> {
+  await fetchWithAuth(
+    `${API_BASE}/api/learn/session/${sessionId}/abandon`,
+    { method: "PUT" },
+  );
+}
+
+export async function getLearnSessionState(
+  sessionId: string,
+): Promise<LearnStartSessionResponse> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/learn/session/${sessionId}`,
   );
   return resp.json();
 }

@@ -15,6 +15,7 @@ interface CourseInfoProps {
     office_hours: ExtractedField<string | null> | null;
   };
   onChange: (field: string, value: string) => void;
+  hideConfidence?: boolean;
 }
 
 interface FieldRowProps {
@@ -22,9 +23,10 @@ interface FieldRowProps {
   field: ExtractedField<string | null> | null;
   fieldKey: string;
   onChange: (field: string, value: string) => void;
+  hideConfidence?: boolean;
 }
 
-function FieldRow({ label, field, fieldKey, onChange }: FieldRowProps) {
+function FieldRow({ label, field, fieldKey, onChange, hideConfidence }: FieldRowProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
 
@@ -72,16 +74,18 @@ function FieldRow({ label, field, fieldKey, onChange }: FieldRowProps) {
           </p>
         )}
       </div>
-      <ConfidenceIndicator
-        confidence={field.confidence}
-        sourceText={field.source_text}
-        className="mt-5 shrink-0"
-      />
+      {!hideConfidence && (
+        <ConfidenceIndicator
+          confidence={field.confidence}
+          sourceText={field.source_text}
+          className="mt-5 shrink-0"
+        />
+      )}
     </div>
   );
 }
 
-export function CourseInfo({ extraction, onChange }: CourseInfoProps) {
+export function CourseInfo({ extraction, onChange, hideConfidence }: CourseInfoProps) {
   return (
     <Card>
       <CardHeader>
@@ -94,30 +98,35 @@ export function CourseInfo({ extraction, onChange }: CourseInfoProps) {
             field={extraction.course_name}
             fieldKey="course_name"
             onChange={onChange}
+            hideConfidence={hideConfidence}
           />
           <FieldRow
             label="Course Code"
             field={extraction.course_code}
             fieldKey="course_code"
             onChange={onChange}
+            hideConfidence={hideConfidence}
           />
           <FieldRow
             label="Instructor"
             field={extraction.instructor_name}
             fieldKey="instructor_name"
             onChange={onChange}
+            hideConfidence={hideConfidence}
           />
           <FieldRow
             label="Email"
             field={extraction.instructor_email}
             fieldKey="instructor_email"
             onChange={onChange}
+            hideConfidence={hideConfidence}
           />
           <FieldRow
             label="Office Hours"
             field={extraction.office_hours}
             fieldKey="office_hours"
             onChange={onChange}
+            hideConfidence={hideConfidence}
           />
         </div>
       </CardContent>

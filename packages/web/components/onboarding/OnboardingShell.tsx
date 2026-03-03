@@ -13,6 +13,7 @@ interface OnboardingShellProps {
   stepLabels: string[];
   children: React.ReactNode;
   onBack?: () => void;
+  wide?: boolean;
 }
 
 export function OnboardingShell({
@@ -21,11 +22,12 @@ export function OnboardingShell({
   stepLabels,
   children,
   onBack,
+  wide,
 }: OnboardingShellProps) {
   const progressPct = totalSteps > 1 ? (currentStep / (totalSteps - 1)) * 100 : 0;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 py-6">
+    <div className={cn("mx-auto space-y-6 py-6", wide ? "max-w-6xl" : "max-w-2xl")}>
       {/* Progress bar */}
       <div className="space-y-3">
         <div className="flex items-center justify-between text-xs text-muted-foreground">

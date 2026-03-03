@@ -591,6 +591,7 @@ export interface ConceptReadiness {
   concept_id: string | null;
   title: string;
   mastery: number;
+  total_attempts: number;
   covered: boolean;
   teaching_approach: "foundational" | "application" | "synthesis";
   lecture_title: string | null;
@@ -617,6 +618,191 @@ export interface DiagnosticResult {
   }[];
   identified_gaps: string[];
   recommended_focus: (string | { concept_title: string; approach: string })[];
+}
+
+// ---------------------------------------------------------------------------
+// Gamification (Track A)
+// ---------------------------------------------------------------------------
+
+export interface StreakInfo {
+  current_streak: number;
+  longest_streak: number;
+  studied_today: boolean;
+  freeze_available: boolean;
+  streak_milestone: number | null;
+}
+
+export interface LevelInfo {
+  current_level: number;
+  total_xp: number;
+  xp_to_next_level: number;
+  progress_percent: number;
+}
+
+export interface BadgeInfo {
+  badge_id: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  earned_at?: string;
+  progress?: number;
+  target?: number;
+}
+
+export interface GamificationState {
+  streak: StreakInfo;
+  level: LevelInfo;
+  today_xp: number;
+  badges_count: number;
+  recent_badges: BadgeInfo[];
+}
+
+export interface GamificationReadiness {
+  assessment_id: string;
+  title: string;
+  due_date: string | null;
+  weight_percent: number | null;
+  type: string;
+  readiness_score: number;
+  days_until_due: number | null;
+  urgency: "danger" | "building" | "strong" | "ready";
+  trend: number;
+  concept_scores: Array<{
+    concept_id: string;
+    title: string;
+    mastery: number;
+    relevance: number;
+  }>;
+}
+
+export interface CourseReadinessSummary {
+  course_id: string;
+  course_name: string;
+  overall_readiness: number;
+  next_assessment: {
+    title: string;
+    due_date: string | null;
+    readiness: number;
+    days_until: number | null;
+  } | null;
+  concepts_mastered: number;
+  concepts_total: number;
+}
+
+export interface GradeProjection {
+  projected_grade_low: number;
+  projected_grade_high: number;
+  grade_letter: string;
+}
+
+export interface WeeklyProgress {
+  sessions_count: number;
+  concepts_improved: number;
+  total_xp: number;
+  xp_by_day: Array<{ date: string; xp: number }>;
+}
+
+// ---------------------------------------------------------------------------
+// Learn Mode (Track B)
+// ---------------------------------------------------------------------------
+
+export interface DailyBriefing {
+  course_name: string;
+  focus_description: string;
+  assessment_context: string | null;
+  time_budget: number;
+  concepts_planned: Array<{
+    concept_id: string;
+    title: string;
+    mastery: number;
+  }>;
+}
+
+export interface FlashReviewCard {
+  card_id: string;
+  concept_id: string;
+  concept_title: string;
+  question_text: string;
+  options: string[];
+  correct_index?: number;
+  source_lecture_title: string;
+}
+
+export interface ConceptBrief {
+  concept_id: string;
+  concept_title: string;
+  sections: {
+    what_is_this: string;
+    why_it_matters: string;
+    key_relationship: string;
+  };
+  gut_check: {
+    question_text: string;
+    options: string[];
+    correct_index?: number;
+    explanation: string;
+  };
+  sources: Array<{
+    lecture_title: string;
+    timestamp_seconds: number | null;
+  }>;
+  mastery_tier: string;
+}
+
+export interface PowerQuizQuestion {
+  question_id: string;
+  question_text: string;
+  options: string[];
+  concept_id: string;
+  concept_title: string;
+}
+
+export interface QuizAnswerResult {
+  correct: boolean;
+  correct_answer: string;
+  explanation: string;
+  source_citation: string;
+  xp_earned: number;
+  combo_count: number;
+  combo_multiplier: number;
+}
+
+export interface LearnSessionComplete {
+  session_summary: {
+    duration_minutes: number;
+    concepts_covered: Array<{
+      title: string;
+      mastery_before: number;
+      mastery_after: number;
+      delta: number;
+    }>;
+    quiz_score: { correct: number; total: number; accuracy: number };
+    combo_max: number;
+  };
+  xp_summary: {
+    total_earned: number;
+    breakdown: Array<{ source: string; amount: number }>;
+    level_before: number;
+    level_after: number;
+    leveled_up: boolean;
+  };
+  streak: StreakInfo;
+  badges_earned: BadgeInfo[];
+  tomorrow_preview: string;
+}
+
+export type LearnSessionStep =
+  | "briefing"
+  | "flash_review"
+  | "concept_brief"
+  | "power_quiz"
+  | "celebration";
+
+export interface LearnStartSessionResponse {
+  session_id: string;
+  daily_briefing: DailyBriefing;
+  flash_review_cards: FlashReviewCard[];
 }
 
 export interface SessionSummary {

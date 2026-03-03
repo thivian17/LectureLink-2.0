@@ -302,16 +302,19 @@ def _consolidate_by_topics(
                 concept_id=None,
                 title=topic_name,
                 mastery=0.0,
+                total_attempts=0,
                 covered=False,
                 teaching_approach="foundational",
             ))
             continue
         avg_mastery = sum(e["mastery"] for e in entries) / len(entries)
+        total_attempts = sum(e.get("total_attempts", 0) for e in entries)
         any_covered = any(e["title"] in covered_titles for e in entries)
         results.append(ConceptReadiness(
             concept_id=None,
             title=topic_name,
             mastery=round(avg_mastery, 4),
+            total_attempts=total_attempts,
             covered=any_covered,
             teaching_approach=_teaching_approach(avg_mastery),
         ))
@@ -1048,6 +1051,7 @@ async def get_assessment_readiness(
                 "concept_id": m["concept_id"],
                 "title": m["concept_title"],
                 "mastery": mastery,
+                "total_attempts": attempts,
                 "lecture_id": m.get("lecture_id"),
             }
     except Exception:
@@ -1123,12 +1127,14 @@ async def get_assessment_readiness(
 
         for lid, entries in by_lecture.items():
             avg_mastery = sum(e["mastery"] for e in entries) / len(entries)
+            total_attempts = sum(e.get("total_attempts", 0) for e in entries)
             any_covered = any(e["title"] in covered_titles for e in entries)
             title = lecture_title_map.get(lid, entries[0]["title"])
             concepts.append(ConceptReadiness(
                 concept_id=lid,
                 title=title,
                 mastery=round(avg_mastery, 4),
+                total_attempts=total_attempts,
                 covered=any_covered,
                 teaching_approach=_teaching_approach(avg_mastery),
             ))
@@ -1137,6 +1143,7 @@ async def get_assessment_readiness(
                 concept_id=entry["concept_id"],
                 title=entry["title"],
                 mastery=entry["mastery"],
+                total_attempts=entry.get("total_attempts", 0),
                 covered=entry["title"] in covered_titles,
                 teaching_approach=_teaching_approach(entry["mastery"]),
             ))
@@ -1148,6 +1155,7 @@ async def get_assessment_readiness(
                 concept_id=None,
                 title=topic,
                 mastery=0.0,
+                total_attempts=0,
                 covered=topic in covered_titles,
                 teaching_approach="foundational",
             ))

@@ -42,13 +42,13 @@ export function LectureUploadForm({
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("form");
   const [files, setFiles] = useState<File[]>([]);
-  const [title, setTitle] = useState("");
   const [lectureNumber, setLectureNumber] = useState("");
   const [lectureDate, setLectureDate] = useState<Date | undefined>(new Date());
   const [uploading, setUploading] = useState(false);
   const [lectureId, setLectureId] = useState<string | null>(null);
 
-  const canSubmit = files.length > 0 && title.trim().length > 0 && !uploading;
+  const canSubmit =
+    files.length > 0 && lectureNumber.trim().length > 0 && !uploading;
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -61,10 +61,7 @@ export function LectureUploadForm({
       try {
         const formData = new FormData();
         files.forEach((f) => formData.append("files", f));
-        formData.append("title", title.trim());
-        if (lectureNumber) {
-          formData.append("lecture_number", lectureNumber);
-        }
+        formData.append("lecture_number", lectureNumber);
         if (lectureDate) {
           formData.append("lecture_date", format(lectureDate, "yyyy-MM-dd"));
         }
@@ -93,7 +90,7 @@ export function LectureUploadForm({
         setUploading(false);
       }
     },
-    [canSubmit, files, title, lectureNumber, lectureDate, courseId, router],
+    [canSubmit, files, lectureNumber, lectureDate, courseId, router],
   );
 
   // Show processing status after upload
@@ -102,7 +99,9 @@ export function LectureUploadForm({
       <div className="space-y-6">
         <div>
           <h2 className="text-lg font-semibold">Processing Lecture</h2>
-          <p className="text-sm text-muted-foreground">{title}</p>
+          <p className="text-sm text-muted-foreground">
+            Lecture {lectureNumber}
+          </p>
         </div>
         <LectureProcessingStatus lectureId={lectureId} courseId={courseId} />
       </div>
@@ -149,20 +148,9 @@ export function LectureUploadForm({
             <CardTitle className="text-base">Lecture Details</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="title">Title *</Label>
-              <Input
-                id="title"
-                placeholder="e.g., Lecture 5: Introduction to Entropy"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-              />
-            </div>
-
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="lectureNumber">Lecture Number</Label>
+                <Label htmlFor="lectureNumber">Lecture Number *</Label>
                 <Input
                   id="lectureNumber"
                   type="number"
@@ -170,7 +158,11 @@ export function LectureUploadForm({
                   placeholder="e.g., 5"
                   value={lectureNumber}
                   onChange={(e) => setLectureNumber(e.target.value)}
+                  required
                 />
+                <p className="text-xs text-muted-foreground">
+                  A title will be auto-generated from the content.
+                </p>
               </div>
 
               <div className="space-y-2">

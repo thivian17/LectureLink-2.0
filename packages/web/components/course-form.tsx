@@ -299,7 +299,11 @@ export function CourseForm({ course, onSuccess }: CourseFormProps) {
               <FormItem>
                 <FormLabel>Meeting Time</FormLabel>
                 <FormControl>
-                  <Input placeholder="2:00 PM - 3:15 PM" {...field} />
+                  <Input
+                    placeholder="2:00 PM - 3:15 PM"
+                    autoComplete="off"
+                    {...field}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -366,7 +370,11 @@ export function CourseForm({ course, onSuccess }: CourseFormProps) {
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Spring Break" {...field} />
+                      <Input
+                        placeholder="Spring Break"
+                        autoComplete="off"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

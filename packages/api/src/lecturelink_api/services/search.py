@@ -36,6 +36,9 @@ async def search_lectures(
         start_time, end_time, slide_number, score, metadata
     """
     # 1. Generate query embedding
+    if not query or not query.strip():
+        return []
+
     query_embedding = await embed_query(query)
 
     # 2. Call the SQL hybrid_search function via RPC

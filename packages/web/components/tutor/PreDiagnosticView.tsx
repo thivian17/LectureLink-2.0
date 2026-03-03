@@ -66,7 +66,8 @@ export function PreDiagnosticView({
     );
   }
 
-  const readyCount = readiness.concepts.filter((c) => c.mastery >= 0.7).length;
+  const attemptedConcepts = readiness.concepts.filter((c) => c.total_attempts > 0);
+  const readyCount = attemptedConcepts.filter((c) => c.mastery >= 0.7).length;
 
   return (
     <div className="space-y-4 max-w-2xl mx-auto">
@@ -89,13 +90,17 @@ export function PreDiagnosticView({
         <CardContent className="space-y-4">
           {/* Summary */}
           <p className="text-sm text-muted-foreground">
-            {readyCount} of {readiness.concepts.length} concepts at 70%+ mastery
+            {attemptedConcepts.length === 0
+              ? `${readiness.concepts.length} concepts to cover — none assessed yet`
+              : `${readyCount} of ${attemptedConcepts.length} assessed concepts at 70%+ mastery (${readiness.concepts.length} total)`
+            }
           </p>
 
           {/* Concept table */}
           <div className="space-y-3">
             {readiness.concepts.map((concept, i) => {
               const masteryPct = Math.round(concept.mastery * 100);
+              const hasAttempts = concept.total_attempts > 0;
               return (
                 <div key={i} className="space-y-1">
                   <div className="flex items-center justify-between text-sm">
@@ -106,21 +111,27 @@ export function PreDiagnosticView({
                       <Badge variant="outline" className="text-[10px]">
                         {concept.teaching_approach}
                       </Badge>
-                      <span className="text-muted-foreground w-10 text-right">
-                        {masteryPct}%
-                      </span>
+                      {hasAttempts ? (
+                        <span className="text-muted-foreground w-10 text-right">
+                          {masteryPct}%
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground w-10 text-right italic">—</span>
+                      )}
                     </div>
                   </div>
-                  <Progress
-                    value={masteryPct}
-                    className={`h-1.5 ${
-                      masteryPct >= 70
-                        ? "[&>div]:bg-green-500"
-                        : masteryPct >= 40
-                          ? "[&>div]:bg-amber-500"
-                          : "[&>div]:bg-red-500"
-                    }`}
-                  />
+                  {hasAttempts && (
+                    <Progress
+                      value={masteryPct}
+                      className={`h-1.5 ${
+                        masteryPct >= 70
+                          ? "[&>div]:bg-green-500"
+                          : masteryPct >= 40
+                            ? "[&>div]:bg-amber-500"
+                            : "[&>div]:bg-red-500"
+                      }`}
+                    />
+                  )}
                 </div>
               );
             })}

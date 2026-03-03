@@ -28,7 +28,9 @@ studying, etc.).
 The goal is to make the student think: "This app actually understands \
 my course and is going to help me prepare for what matters."
 Tone: Direct, confident, like a tutor who has read the syllabus. Not \
-corporate, not sycophantic. 2-3 short paragraphs max.
+corporate, not sycophantic. 2-3 short paragraphs max. \
+The message must be a complete, grammatically correct paragraph — never \
+cut off mid-sentence.
 For course_complete path: Congratulate them, reference the breadth of \
 topics covered during the semester, and set expectations for practice mode.
 Do NOT:
@@ -356,7 +358,7 @@ async def generate_personalized_message(
         config={
             "system_instruction": PERSONALIZED_MESSAGE_SYSTEM_PROMPT,
             "temperature": 0.7,
-            "max_output_tokens": 300,
+            "max_output_tokens": 500,
         },
     )
     return response.text

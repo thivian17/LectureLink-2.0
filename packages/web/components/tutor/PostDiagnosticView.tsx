@@ -125,6 +125,7 @@ export function PostDiagnosticView({
                   concept.title.toLowerCase().trim(),
                 );
                 const masteryPct = Math.round(concept.mastery * 100);
+                const hasAttempts = concept.total_attempts > 0;
                 return (
                   <div key={i} className="space-y-1">
                     <div className="flex items-center gap-2 text-sm">
@@ -148,21 +149,27 @@ export function PostDiagnosticView({
                         >
                           {tested ? "Tested" : "Not Tested"}
                         </Badge>
-                        <span className="text-muted-foreground w-10 text-right">
-                          {masteryPct}%
-                        </span>
+                        {hasAttempts ? (
+                          <span className="text-muted-foreground w-10 text-right">
+                            {masteryPct}%
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground w-10 text-right italic">—</span>
+                        )}
                       </div>
                     </div>
-                    <Progress
-                      value={masteryPct}
-                      className={`h-1.5 ${
-                        masteryPct >= 70
-                          ? "[&>div]:bg-green-500"
-                          : masteryPct >= 40
-                            ? "[&>div]:bg-amber-500"
-                            : "[&>div]:bg-red-500"
-                      }`}
-                    />
+                    {hasAttempts && (
+                      <Progress
+                        value={masteryPct}
+                        className={`h-1.5 ${
+                          masteryPct >= 70
+                            ? "[&>div]:bg-green-500"
+                            : masteryPct >= 40
+                              ? "[&>div]:bg-amber-500"
+                              : "[&>div]:bg-red-500"
+                        }`}
+                      />
+                    )}
                   </div>
                 );
               })}

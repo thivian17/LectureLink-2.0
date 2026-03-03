@@ -38,12 +38,17 @@ function groupByLecture(concepts: ConceptReadiness[]): LectureGroup[] {
   }
 
   return Array.from(groups.entries())
-    .map(([lectureTitle, concepts]) => ({
-      lectureTitle,
-      concepts: concepts.sort((a, b) => a.mastery - b.mastery),
-      avgMastery:
-        concepts.reduce((s, c) => s + c.mastery, 0) / concepts.length,
-    }))
+    .map(([lectureTitle, concepts]) => {
+      const attempted = concepts.filter((c) => c.total_attempts > 0);
+      return {
+        lectureTitle,
+        concepts: concepts.sort((a, b) => a.mastery - b.mastery),
+        avgMastery:
+          attempted.length > 0
+            ? attempted.reduce((s, c) => s + c.mastery, 0) / attempted.length
+            : 0,
+      };
+    })
     .sort((a, b) => a.avgMastery - b.avgMastery);
 }
 
@@ -82,7 +87,8 @@ export function AssessmentConceptsPanel({
 
   if (!readiness) return null;
 
-  const readyCount = readiness.concepts.filter((c) => c.mastery >= 0.7).length;
+  const attemptedCount = readiness.concepts.filter((c) => c.total_attempts > 0).length;
+  const readyCount = readiness.concepts.filter((c) => c.mastery >= 0.7 && c.total_attempts > 0).length;
   const hasLectureGroups = readiness.concepts.some((c) => c.lecture_title);
   const groups = hasLectureGroups
     ? groupByLecture(readiness.concepts)
@@ -120,6 +126,7 @@ export function AssessmentConceptsPanel({
 
   function renderConcept(concept: ConceptReadiness) {
     const masteryPct = Math.round(concept.mastery * 100);
+    const hasAttempts = concept.total_attempts > 0;
     const key = concept.concept_id ?? concept.title;
     const isHighlighted = highlightedIds?.has(key);
     const isDimmed =
@@ -150,21 +157,29 @@ export function AssessmentConceptsPanel({
                 Included
               </Badge>
             )}
-            <Badge
-              variant="outline"
-              className={statusColor(concept.mastery)}
-            >
-              {statusLabel(concept.mastery)}
-            </Badge>
-            <span className="text-muted-foreground w-10 text-right">
-              {masteryPct}%
-            </span>
+            {hasAttempts ? (
+              <>
+                <Badge
+                  variant="outline"
+                  className={statusColor(concept.mastery)}
+                >
+                  {statusLabel(concept.mastery)}
+                </Badge>
+                <span className="text-muted-foreground w-10 text-right">
+                  {masteryPct}%
+                </span>
+              </>
+            ) : (
+              <span className="text-xs text-muted-foreground italic">Not yet assessed</span>
+            )}
           </div>
         </div>
-        <Progress
-          value={masteryPct}
-          className={`h-1.5 ${barColor(masteryPct)}`}
-        />
+        {hasAttempts && (
+          <Progress
+            value={masteryPct}
+            className={`h-1.5 ${barColor(masteryPct)}`}
+          />
+        )}
       </div>
     );
   }
@@ -254,7 +269,10 @@ export function AssessmentConceptsPanel({
         )}
 
         <p className="text-sm text-muted-foreground text-center pt-1">
-          {readyCount} of {readiness.concepts.length} concepts at 70%+ mastery
+          {attemptedCount === 0
+            ? `${readiness.concepts.length} concepts to cover — none assessed yet`
+            : `${readyCount} of ${attemptedCount} assessed concepts at 70%+ mastery (${readiness.concepts.length} total)`
+          }
         </p>
       </CardContent>
     </Card>
