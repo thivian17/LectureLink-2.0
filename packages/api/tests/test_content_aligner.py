@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from lecturelink_api.agents.content_aligner import (
-    _heuristic_align,
+    _alignment_failed_passthrough,
     _slide_to_text,
     align_content,
     validate_alignment,
@@ -171,7 +171,7 @@ class TestAlignContent:
             await align_content([], [])
 
     @pytest.mark.asyncio
-    async def test_gemini_failure_falls_back_to_heuristic(self):
+    async def test_gemini_failure_returns_unaligned_passthrough(self):
         mock_client = MagicMock()
         mock_client.aio.models.generate_content = AsyncMock(
             side_effect=RuntimeError("API error")
@@ -185,8 +185,9 @@ class TestAlignContent:
 
         assert len(result) == 4
         for seg in result:
-            assert seg["source"] == "aligned"
-            assert seg["slide_number"] is not None
+            assert seg["source"] == "unaligned"
+            assert seg["slide_number"] is None
+        assert result[0]["text"] == "Welcome to thermodynamics."
 
     @pytest.mark.asyncio
     async def test_default_speaker(self):
@@ -197,53 +198,34 @@ class TestAlignContent:
 
 
 # ---------------------------------------------------------------------------
-# _heuristic_align
+# _alignment_failed_passthrough
 # ---------------------------------------------------------------------------
 
 
-class TestHeuristicAlign:
-    def test_distributes_evenly(self):
-        """4 segments over 120s with 3 slides → ~40s per slide."""
-        result = _heuristic_align(SAMPLE_TRANSCRIPT, SAMPLE_SLIDES)
+class TestAlignmentFailedPassthrough:
+    def test_returns_unaligned_segments(self):
+        result = _alignment_failed_passthrough(SAMPLE_TRANSCRIPT)
 
         assert len(result) == 4
-        # First segment (0.0s) → slide 1
-        assert result[0]["slide_number"] == 1
-        # Second segment (15.5s) → slide 1 (15.5/40 = 0.38 → idx 0)
-        assert result[1]["slide_number"] == 1
-        # Third segment (45.2s) → slide 2 (45.2/40 = 1.13 → idx 1)
-        assert result[2]["slide_number"] == 2
-        # Fourth segment (90.0s) → slide 3 (90/40 = 2.25 → idx 2)
-        assert result[3]["slide_number"] == 3
-
-    def test_all_segments_get_aligned_source(self):
-        result = _heuristic_align(SAMPLE_TRANSCRIPT, SAMPLE_SLIDES)
         for seg in result:
-            assert seg["source"] == "aligned"
+            assert seg["source"] == "unaligned"
+            assert seg["slide_number"] is None
+
+    def test_preserves_timing_and_text(self):
+        result = _alignment_failed_passthrough(SAMPLE_TRANSCRIPT)
+
+        assert result[0]["start"] == 0.0
+        assert result[0]["end"] == 15.5
+        assert result[0]["text"] == "Welcome to thermodynamics."
+        assert result[0]["speaker"] == "professor"
 
     def test_empty_transcript_returns_empty(self):
-        assert _heuristic_align([], SAMPLE_SLIDES) == []
+        assert _alignment_failed_passthrough([]) == []
 
-    def test_empty_slides_returns_raw_transcript(self):
-        """With no slides to align to, returns raw transcript as-is."""
-        result = _heuristic_align(SAMPLE_TRANSCRIPT, [])
-        assert len(result) == len(SAMPLE_TRANSCRIPT)
-
-    def test_single_slide(self):
-        """All segments map to the single slide."""
-        one_slide = [SAMPLE_SLIDES[0]]
-        result = _heuristic_align(SAMPLE_TRANSCRIPT, one_slide)
-        for seg in result:
-            assert seg["slide_number"] == 1
-
-    def test_zero_duration_uses_fallback(self):
-        """When all segments have start=0, uses 60s default per slide."""
-        zero_transcript = [
-            {"start": 0, "end": 0, "text": "Test", "speaker": "professor"}
-        ]
-        result = _heuristic_align(zero_transcript, SAMPLE_SLIDES)
-        assert len(result) == 1
-        assert result[0]["slide_number"] == 1
+    def test_missing_speaker_defaults_to_professor(self):
+        transcript = [{"start": 0, "end": 10, "text": "Hello"}]
+        result = _alignment_failed_passthrough(transcript)
+        assert result[0]["speaker"] == "professor"
 
 
 # ---------------------------------------------------------------------------
@@ -294,6 +276,25 @@ class TestValidateAlignment:
         assert result[0]["speaker"] == "professor"
         assert result[0]["source"] == "aligned"
         assert result[0]["slide_number"] is None
+
+    def test_empty_text_segments_skipped(self):
+        segments = [
+            {"start": 0.0, "end": 5.0, "text": "", "slide_number": 1},
+            {"start": 5.0, "end": 10.0, "text": "   ", "slide_number": 1},
+            {"start": 10.0, "end": 15.0, "text": "Real content", "slide_number": 2},
+        ]
+        result = validate_alignment(segments, total_slides=3)
+        assert len(result) == 1
+        assert result[0]["text"] == "Real content"
+
+    def test_missing_text_segments_skipped(self):
+        segments = [
+            {"start": 0.0, "end": 5.0, "slide_number": 1},
+            {"start": 5.0, "end": 10.0, "text": "Has text", "slide_number": 2},
+        ]
+        result = validate_alignment(segments, total_slides=3)
+        assert len(result) == 1
+        assert result[0]["text"] == "Has text"
 
 
 # ---------------------------------------------------------------------------

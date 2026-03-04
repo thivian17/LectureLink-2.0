@@ -141,45 +141,42 @@ async def _align_with_gemini(
         return validate_alignment(aligned, len(slides))
 
     except Exception as e:
-        logger.error("Alignment failed: %s. Falling back to heuristic.", e)
-        return _heuristic_align(transcript, slides)
+        logger.warning("Alignment failed: %s. Returning unaligned transcript.", e)
+        return _alignment_failed_passthrough(transcript)
 
 
-def _heuristic_align(
-    transcript: list[dict], slides: list[dict]
-) -> list[dict]:
-    """Fallback: distribute transcript segments evenly across slides.
+def _alignment_failed_passthrough(transcript: list[dict]) -> list[dict]:
+    """Return transcript segments with no slide alignment.
 
-    Used when Gemini alignment fails. Simple but better than no alignment.
+    Used when Gemini alignment fails — honestly reports "no results"
+    instead of fabricating slide assignments.
     """
-    if not transcript or not slides:
-        return transcript or []
-
-    total_duration = (
-        transcript[-1].get("end", 0) - transcript[0].get("start", 0)
-    )
-    slide_duration = total_duration / len(slides) if total_duration > 0 else 60
-
-    aligned = []
-    for seg in transcript:
-        seg_time = seg.get("start", 0)
-        slide_idx = min(int(seg_time / slide_duration), len(slides) - 1)
-        aligned.append(
-            {
-                **seg,
-                "slide_number": slides[slide_idx]["slide_number"],
-                "source": "aligned",
-            }
-        )
-    return aligned
+    return [
+        {
+            "start": seg.get("start"),
+            "end": seg.get("end"),
+            "text": seg.get("text", ""),
+            "speaker": seg.get("speaker", "professor"),
+            "slide_number": None,
+            "source": "unaligned",
+        }
+        for seg in transcript
+    ]
 
 
 def validate_alignment(
     segments: list[dict], total_slides: int
 ) -> list[dict]:
-    """Validate aligned segments have valid slide numbers and required fields."""
+    """Validate aligned segments have valid slide numbers and required fields.
+
+    Segments with empty or whitespace-only text are skipped.
+    """
     validated = []
     for seg in segments:
+        text = seg.get("text", "")
+        if not text or not text.strip():
+            continue
+
         slide_num = seg.get("slide_number")
         if slide_num is not None:
             slide_num = max(1, min(int(slide_num), total_slides))
@@ -188,7 +185,7 @@ def validate_alignment(
             {
                 "start": seg.get("start"),
                 "end": seg.get("end"),
-                "text": seg.get("text", ""),
+                "text": text,
                 "speaker": seg.get("speaker", "professor"),
                 "slide_number": slide_num,
                 "source": seg.get("source", "aligned"),

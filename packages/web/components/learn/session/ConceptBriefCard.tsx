@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { XPPopup } from "./XPPopup";
+import { MarkdownContent } from "@/components/tutor/MarkdownContent";
 import { submitGutCheck } from "@/lib/api";
 import type { ConceptBrief } from "@/types/database";
 
@@ -74,9 +75,9 @@ export function ConceptBriefCard({ concept, sessionId, onComplete }: ConceptBrie
             <BookOpen className="h-4 w-4 text-blue-500" />
             What is this?
           </div>
-          <div
-            className="text-sm text-muted-foreground prose-sm"
-            dangerouslySetInnerHTML={{ __html: concept.sections.what_is_this }}
+          <MarkdownContent
+            content={concept.sections.what_is_this}
+            className="text-sm text-muted-foreground prose prose-sm max-w-none dark:prose-invert"
           />
         </CardContent>
       </Card>
@@ -88,9 +89,9 @@ export function ConceptBriefCard({ concept, sessionId, onComplete }: ConceptBrie
             <Lightbulb className="h-4 w-4 text-amber-500" />
             Why it matters
           </div>
-          <div
-            className="text-sm text-muted-foreground prose-sm"
-            dangerouslySetInnerHTML={{ __html: concept.sections.why_it_matters }}
+          <MarkdownContent
+            content={concept.sections.why_it_matters}
+            className="text-sm text-muted-foreground prose prose-sm max-w-none dark:prose-invert"
           />
         </CardContent>
       </Card>
@@ -102,29 +103,32 @@ export function ConceptBriefCard({ concept, sessionId, onComplete }: ConceptBrie
             <Link2 className="h-4 w-4 text-purple-500" />
             Key relationship
           </div>
-          <div
-            className="text-sm text-muted-foreground prose-sm"
-            dangerouslySetInnerHTML={{ __html: concept.sections.key_relationship }}
+          <MarkdownContent
+            content={concept.sections.key_relationship}
+            className="text-sm text-muted-foreground prose prose-sm max-w-none dark:prose-invert"
           />
         </CardContent>
       </Card>
 
-      {/* Sources */}
-      {concept.sources.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {concept.sources.map((src, i) => (
-            <Badge key={i} variant="secondary" className="text-[10px]">
-              <FileText className="h-3 w-3 mr-1" />
-              {src.lecture_title}
-              {src.timestamp_seconds != null && (
-                <span className="ml-1 text-muted-foreground">
-                  @{Math.floor(src.timestamp_seconds / 60)}:{String(src.timestamp_seconds % 60).padStart(2, "0")}
-                </span>
-              )}
-            </Badge>
-          ))}
-        </div>
-      )}
+      {/* Sources (deduplicated by lecture title) */}
+      {concept.sources.length > 0 && (() => {
+        const seen = new Set<string>();
+        const unique = concept.sources.filter((src) => {
+          if (seen.has(src.lecture_title)) return false;
+          seen.add(src.lecture_title);
+          return true;
+        });
+        return (
+          <div className="flex flex-wrap gap-1.5">
+            {unique.map((src, i) => (
+              <Badge key={i} variant="secondary" className="text-[10px]">
+                <FileText className="h-3 w-3 mr-1" />
+                {src.lecture_title}
+              </Badge>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Gut check MCQ */}
       <Card className="relative overflow-hidden">

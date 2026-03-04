@@ -275,7 +275,7 @@ class TestSessionEndpoints:
             },
             "streak": {"current": 3, "longest": 5, "milestone_hit": False},
             "badges_earned": [],
-            "tomorrow_preview": "Tomorrow: Thermodynamics (45% mastery)",
+            "tomorrow_preview": "Continue preparing for Thermodynamics",
         }
 
         with (
@@ -293,7 +293,7 @@ class TestSessionEndpoints:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["tomorrow_preview"].startswith("Tomorrow:")
+        assert data["tomorrow_preview"] == "Continue preparing for Thermodynamics"
 
     @pytest.mark.asyncio
     async def test_abandon_session(self, client):

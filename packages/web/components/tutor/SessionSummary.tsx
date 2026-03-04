@@ -96,24 +96,31 @@ export function SessionSummary({
           {summary.mastery_changes && summary.mastery_changes.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium">Mastery Changes</p>
-              {summary.mastery_changes.map((mc, i) => (
-                <div key={i} className="space-y-1">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="truncate flex-1 mr-2">{mc.concept}</span>
-                    <span className="text-muted-foreground shrink-0">
-                      {Math.round(mc.before * 100)}% &rarr;{" "}
-                      {Math.round(mc.after * 100)}%
-                    </span>
+              {summary.mastery_changes.map((mc, i) => {
+                const wasAssessed = mc.before > 0;
+                return (
+                  <div key={i} className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="truncate flex-1 mr-2">{mc.concept}</span>
+                      <span className="text-muted-foreground shrink-0">
+                        {wasAssessed
+                          ? `${Math.round(mc.before * 100)}%`
+                          : "New"}{" "}
+                        &rarr; {Math.round(mc.after * 100)}%
+                      </span>
+                    </div>
+                    <div className="flex gap-1 items-center">
+                      {wasAssessed && (
+                        <Progress
+                          value={mc.before * 100}
+                          className="h-1 flex-1 opacity-40"
+                        />
+                      )}
+                      <Progress value={mc.after * 100} className="h-1.5 flex-1" />
+                    </div>
                   </div>
-                  <div className="flex gap-1 items-center">
-                    <Progress
-                      value={mc.before * 100}
-                      className="h-1 flex-1 opacity-40"
-                    />
-                    <Progress value={mc.after * 100} className="h-1.5 flex-1" />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

@@ -90,6 +90,35 @@ async def _check_badges(supabase, user_id: str) -> list[dict]:
         return []
 
 
+async def _resolve_concept_titles(
+    supabase, concepts_planned: list[dict]
+) -> list[dict]:
+    """Fill in missing titles from the concepts table and drop unresolvable ones."""
+    missing = [c for c in concepts_planned if not c.get("title")]
+    if not missing:
+        return concepts_planned
+
+    try:
+        ids = [c["concept_id"] for c in missing]
+        result = (
+            supabase.table("concepts")
+            .select("id, title")
+            .in_("id", ids)
+            .execute()
+        )
+        title_map = {r["id"]: r["title"] for r in (result.data or [])}
+        for c in missing:
+            c["title"] = title_map.get(c["concept_id"], "")
+    except Exception:
+        logger.warning("Failed to resolve concept titles on resume", exc_info=True)
+
+    resolved = [c for c in concepts_planned if c.get("title")]
+    dropped = len(concepts_planned) - len(resolved)
+    if dropped:
+        logger.warning("Dropped %d concepts with no title from session", dropped)
+    return resolved
+
+
 async def start_learn_session(
     supabase,
     user_id: str,
@@ -113,12 +142,19 @@ async def start_learn_session(
         )
         if existing.data:
             session = existing.data[0]
+            daily_briefing = session.get("session_data", {}).get("daily_briefing", {})
+
+            # Resolve any missing titles from a previous session
+            daily_briefing["concepts_planned"] = await _resolve_concept_titles(
+                supabase, daily_briefing.get("concepts_planned", [])
+            )
+
             flash_cards = await get_flash_review_cards(
                 supabase, user_id, course_id, count=5
             )
             return {
                 "session_id": session["id"],
-                "daily_briefing": session.get("session_data", {}).get("daily_briefing", {}),
+                "daily_briefing": daily_briefing,
                 "flash_review_cards": flash_cards,
             }
     except Exception:
@@ -136,6 +172,23 @@ async def start_learn_session(
         assessments = result.data or []
     except Exception:
         logger.warning("get_study_priorities RPC failed", exc_info=True)
+
+    # Filter out past-due assessments so we never target one that already passed
+    now = datetime.now(UTC)
+    future_assessments = []
+    for a in assessments:
+        dd = a.get("due_date")
+        if dd:
+            try:
+                due = datetime.fromisoformat(str(dd))
+                if due.tzinfo is None:
+                    due = due.replace(tzinfo=UTC)
+                if due.date() < now.date():
+                    continue
+            except Exception:
+                pass
+        future_assessments.append(a)
+    assessments = future_assessments
 
     # 2b. Get concepts linked to the top-priority assessment
     linked_concepts = []
@@ -181,6 +234,7 @@ async def start_learn_session(
                 "concept_id": cid,
                 "concept_title": m_data.get("concept_title", ""),
                 "mastery_score": mastery,
+                "total_attempts": m_data.get("total_attempts", 0),
                 "priority_score": link.get("relevance_score", 0.5),
             })
         # Fill in missing titles from concepts table
@@ -198,7 +252,11 @@ async def start_learn_session(
                 for s in missing:
                     s["concept_title"] = title_map.get(s["concept_id"], "")
             except Exception:
-                pass
+                logger.warning(
+                    "Failed to fetch concept titles for %d concepts",
+                    len(missing),
+                    exc_info=True,
+                )
     else:
         # Fallback: get concepts directly
         try:
@@ -214,6 +272,7 @@ async def start_learn_session(
                     "concept_id": c["id"],
                     "concept_title": c.get("title", ""),
                     "mastery_score": 0.0,
+                    "total_attempts": 0,
                     "priority_score": 0.5,
                 }
                 for c in (concepts_result.data or [])
@@ -223,10 +282,18 @@ async def start_learn_session(
 
     concepts_planned = []
     for p in selected:
+        title = p.get("concept_title") or p.get("title") or ""
+        if not title:
+            logger.warning(
+                "Dropping concept %s from session — no title resolved",
+                p.get("concept_id", "?"),
+            )
+            continue
         concepts_planned.append({
             "concept_id": p.get("concept_id", p.get("id", "")),
-            "title": p.get("concept_title", p.get("title", "")),
+            "title": title,
             "mastery": p.get("mastery_score", 0.0),
+            "total_attempts": p.get("total_attempts", 0),
         })
 
     # 4. Get course name for briefing
@@ -278,13 +345,17 @@ async def start_learn_session(
 
     # 7. Get flash review cards (before DB insert so we can store them in session_data)
     session_id = str(uuid.uuid4())
-    flash_cards = await get_flash_review_cards(
-        supabase, user_id, course_id, count=5,
-        session_concepts=[
-            {"concept_id": c["concept_id"], "concept_title": c["title"]}
-            for c in concepts_planned
-        ],
-    )
+    try:
+        flash_cards = await get_flash_review_cards(
+            supabase, user_id, course_id, count=5,
+            session_concepts=[
+                {"concept_id": c["concept_id"], "concept_title": c["title"]}
+                for c in concepts_planned
+            ],
+        )
+    except Exception:
+        logger.warning("Flash review card generation failed, starting without cards", exc_info=True)
+        flash_cards = []
 
     session_data = {
         "daily_briefing": daily_briefing,
@@ -934,7 +1005,7 @@ async def complete_learn_session(
         if result.data:
             p = result.data[0]
             title = p.get("title", "Review")
-            tomorrow_preview = f"Tomorrow: Continue preparing for {title}"
+            tomorrow_preview = f"Continue preparing for {title}"
         else:
             tomorrow_preview = "Keep your streak going tomorrow!"
     except Exception:

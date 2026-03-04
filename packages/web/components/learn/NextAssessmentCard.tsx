@@ -71,12 +71,9 @@ export function NextAssessmentCard({ assessment, loading }: NextAssessmentCardPr
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
-        <div className="flex items-center gap-2">
-          <Progress value={assessment.readiness_score} className={cn("h-3 flex-1", style.progress)} />
-          <span className={cn("text-sm font-semibold tabular-nums", style.text)}>
-            {Math.round(assessment.readiness_score)}%
-          </span>
-        </div>
+        <span className={cn("text-sm font-semibold tabular-nums", style.text)}>
+          {Math.round(assessment.readiness_score)}% readiness
+        </span>
         {assessment.trend !== 0 && (
           <div className="flex items-center gap-1 text-xs text-emerald-600">
             <TrendingUp className="h-3 w-3" />
@@ -94,15 +91,24 @@ export function NextAssessmentCard({ assessment, loading }: NextAssessmentCardPr
         )}
         {expanded && (
           <div className="space-y-1.5 pt-1">
-            {assessment.concept_scores.map((c) => (
-              <div key={c.concept_id} className="flex items-center gap-2 text-xs">
-                <span className="flex-1 truncate">{c.title}</span>
-                <Progress value={c.mastery * 100} className="h-1.5 w-16" />
-                <span className="tabular-nums text-muted-foreground w-8 text-right">
-                  {Math.round(c.mastery * 100)}%
-                </span>
-              </div>
-            ))}
+            {assessment.concept_scores.map((c) => {
+              const hasAttempts = c.total_attempts > 0;
+              return (
+                <div key={c.concept_id} className="flex items-center gap-2 text-xs">
+                  <span className="flex-1 truncate">{c.title}</span>
+                  {hasAttempts ? (
+                    <>
+                      <Progress value={c.mastery * 100} className="h-1.5 w-16" />
+                      <span className="tabular-nums text-muted-foreground w-8 text-right">
+                        {Math.round(c.mastery * 100)}%
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground italic">Not Yet Assessed</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </CardContent>

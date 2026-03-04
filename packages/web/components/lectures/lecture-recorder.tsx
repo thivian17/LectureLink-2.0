@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -28,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { UploadDropzone } from "@/components/lectures/upload-dropzone";
 import { LectureProcessingStatus } from "@/components/lectures/processing-status";
 import { uploadLecture, getCourses, AuthError, RateLimitError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -66,6 +68,9 @@ export function LectureRecorder() {
   // Recorded audio
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+
+  // Slide files
+  const [slideFiles, setSlideFiles] = useState<File[]>([]);
 
   // Upload result
   const [lectureId, setLectureId] = useState<string | null>(null);
@@ -177,6 +182,7 @@ export function LectureRecorder() {
 
       const formData = new FormData();
       formData.append("files", file);
+      slideFiles.forEach((sf) => formData.append("files", sf));
       formData.append("lecture_number", lectureNumber);
       if (lectureDate) {
         formData.append("lecture_date", format(lectureDate, "yyyy-MM-dd"));
@@ -203,7 +209,7 @@ export function LectureRecorder() {
         err instanceof Error ? err.message : "Failed to upload recording",
       );
     }
-  }, [audioBlob, selectedCourseId, lectureNumber, lectureDate, router]);
+  }, [audioBlob, slideFiles, selectedCourseId, lectureNumber, lectureDate, router]);
 
   const canSubmit =
     phase === "recorded" &&
@@ -296,6 +302,23 @@ export function LectureRecorder() {
               <p className="text-sm text-muted-foreground">Uploading recording...</p>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Lecture slides (optional) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Lecture Slides</CardTitle>
+          <CardDescription>
+            Optionally upload slide decks to align with the recording.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <UploadDropzone
+            files={slideFiles}
+            onFilesChange={setSlideFiles}
+            accept="slides"
+          />
         </CardContent>
       </Card>
 

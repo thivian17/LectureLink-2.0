@@ -530,6 +530,7 @@ export interface LessonConcept {
   concept_id: string | null;
   title: string;
   mastery: number;
+  total_attempts?: number;
   priority_score: number;
   teaching_approach: "foundational" | "application" | "synthesis";
   estimated_minutes: number;
@@ -672,6 +673,7 @@ export interface GamificationReadiness {
     concept_id: string;
     title: string;
     mastery: number;
+    total_attempts: number;
     relevance: number;
   }>;
 }
@@ -716,6 +718,7 @@ export interface DailyBriefing {
     concept_id: string;
     title: string;
     mastery: number;
+    total_attempts?: number;
   }>;
 }
 

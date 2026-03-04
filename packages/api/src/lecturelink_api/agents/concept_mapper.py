@@ -2,7 +2,7 @@
 
 Uses three signals: schedule match (50%), semantic similarity (30%),
 and explicit coverage (20%) to determine which assessments each concept
-is relevant to. Falls back to embedding-only similarity when Gemini fails.
+is relevant to.
 """
 
 from __future__ import annotations
@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import logging
 
-import numpy as np
 from google import genai
 from google.genai import types
 
@@ -162,10 +161,10 @@ async def map_concepts_to_assessments(
         mappings = json.loads(result_text)
 
     except Exception as e:
-        logger.error(
-            "Concept mapping via Gemini failed: %s. Using embedding-only fallback.", e,
+        logger.warning(
+            "Concept mapping via Gemini failed: %s. No mappings will be created.", e,
         )
-        mappings = await _embedding_fallback_mapping(concepts, assessments)
+        mappings = []
 
     # Store mappings in concept_assessment_links
     links = []
@@ -225,64 +224,3 @@ def _get_syllabus_schedule(supabase, course_id: str) -> list[dict]:
     return []
 
 
-async def _embedding_fallback_mapping(
-    concepts: list[dict],
-    assessments: list[dict],
-) -> list[dict]:
-    """Fallback: map concepts to assessments using embedding similarity only.
-
-    Used when Gemini mapping fails. Less accurate but provides basic mappings.
-    """
-    client = genai.Client()
-
-    assessment_texts = [
-        f"{a.get('title', '')} {' '.join(a.get('topics', []))}"
-        for a in assessments
-    ]
-
-    try:
-        assessment_embeddings = await client.aio.models.embed_content(
-            model="gemini-embedding-001",
-            contents=assessment_texts,
-            config={"task_type": "RETRIEVAL_DOCUMENT"},
-        )
-
-        mappings = []
-        for concept in concepts:
-            if not concept.get("embedding"):
-                continue
-
-            concept_emb = np.array(concept["embedding"])
-            concept_norm = np.linalg.norm(concept_emb)
-            if concept_norm < 1e-10:
-                continue
-
-            assessment_mappings = []
-            for i, a in enumerate(assessments):
-                a_emb = np.array(assessment_embeddings.embeddings[i].values)
-                a_norm = np.linalg.norm(a_emb)
-                if a_norm < 1e-10:
-                    continue
-
-                similarity = float(
-                    np.dot(concept_emb, a_emb) / (concept_norm * a_norm)
-                )
-
-                if similarity >= 0.5:
-                    assessment_mappings.append({
-                        "assessment_id": a["id"],
-                        "relevance_score": similarity,
-                        "reasoning": "Embedding similarity fallback",
-                    })
-
-            if assessment_mappings:
-                mappings.append({
-                    "concept_title": concept["title"],
-                    "assessment_mappings": assessment_mappings,
-                })
-
-        return mappings
-
-    except Exception as e:
-        logger.error("Embedding fallback mapping also failed: %s", e)
-        return []

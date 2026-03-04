@@ -7,6 +7,7 @@ previously studied concepts.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -91,26 +92,25 @@ async def get_flash_review_cards(
     if not source_concepts:
         return []
 
-    # 3. Build flash cards
-    cards: list[dict] = []
-    for concept_data in source_concepts:
-        if len(cards) >= count:
-            break
-
+    # 3. Build flash cards (parallel generation for speed)
+    async def _build_card(concept_data: dict) -> dict | None:
         concept_id = concept_data["concept_id"]
         concept_title = concept_data.get("concept_title", "Unknown")
+        try:
+            card = await _try_existing_question(supabase, concept_id, concept_title)
+            if card is None:
+                card = await _generate_card_for_concept(
+                    supabase, course_id, concept_id, concept_title
+                )
+            return card
+        except Exception:
+            logger.debug("Card generation failed for %s", concept_title, exc_info=True)
+            return None
 
-        # Try to pull an existing MCQ/true_false question from quiz_questions
-        card = await _try_existing_question(supabase, concept_id, concept_title)
-
-        if card is None:
-            # Generate via Gemini
-            card = await _generate_card_for_concept(
-                supabase, course_id, concept_id, concept_title
-            )
-
-        if card is not None:
-            cards.append(card)
+    results = await asyncio.gather(
+        *[_build_card(c) for c in source_concepts[:count]]
+    )
+    cards = [c for c in results if c is not None]
 
     return cards
 

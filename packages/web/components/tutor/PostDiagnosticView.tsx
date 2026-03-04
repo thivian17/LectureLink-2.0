@@ -154,7 +154,7 @@ export function PostDiagnosticView({
                             {masteryPct}%
                           </span>
                         ) : (
-                          <span className="text-xs text-muted-foreground w-10 text-right italic">—</span>
+                          <span className="text-xs text-muted-foreground italic">Not Yet Assessed</span>
                         )}
                       </div>
                     </div>

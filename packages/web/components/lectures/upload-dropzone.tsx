@@ -31,12 +31,28 @@ const ALL_ACCEPTED_EXTENSIONS = [
 ];
 const MAX_SIZE_BYTES = 500 * 1024 * 1024; // 500MB
 
-function validateFile(f: File): string | null {
+type AcceptMode = "audio" | "slides" | "all";
+
+function getAcceptedTypes(mode: AcceptMode) {
+  if (mode === "audio") return ACCEPTED_AUDIO_TYPES;
+  if (mode === "slides") return ACCEPTED_SLIDE_TYPES;
+  return [...ACCEPTED_AUDIO_TYPES, ...ACCEPTED_SLIDE_TYPES];
+}
+
+function getAcceptedExtensions(mode: AcceptMode) {
+  if (mode === "audio") return ACCEPTED_AUDIO_EXTENSIONS;
+  if (mode === "slides") return ACCEPTED_SLIDE_EXTENSIONS;
+  return ALL_ACCEPTED_EXTENSIONS;
+}
+
+function validateFile(f: File, mode: AcceptMode): string | null {
   const ext = "." + f.name.split(".").pop()?.toLowerCase();
-  const hasValidType = [...ACCEPTED_AUDIO_TYPES, ...ACCEPTED_SLIDE_TYPES].includes(f.type);
-  const hasValidExt = ALL_ACCEPTED_EXTENSIONS.includes(ext);
+  const acceptedTypes = getAcceptedTypes(mode);
+  const acceptedExts = getAcceptedExtensions(mode);
+  const hasValidType = acceptedTypes.includes(f.type);
+  const hasValidExt = acceptedExts.includes(ext);
   if (!hasValidType && !hasValidExt) {
-    return `Unsupported file type. Accepted: ${ALL_ACCEPTED_EXTENSIONS.join(", ")}`;
+    return `Unsupported file type. Accepted: ${acceptedExts.join(", ")}`;
   }
   if (f.size > MAX_SIZE_BYTES) {
     return `File too large. Maximum size is 500MB. This file is ${(f.size / (1024 * 1024)).toFixed(1)}MB.`;
@@ -61,17 +77,20 @@ function formatFileSize(bytes: number): string {
 interface UploadDropzoneProps {
   files: File[];
   onFilesChange: (files: File[]) => void;
+  accept?: AcceptMode;
 }
 
-export function UploadDropzone({ files, onFilesChange }: UploadDropzoneProps) {
+export function UploadDropzone({ files, onFilesChange, accept = "all" }: UploadDropzoneProps) {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const acceptedExts = getAcceptedExtensions(accept);
 
   const addFiles = useCallback(
     (newFiles: FileList | File[]) => {
       const toAdd: File[] = [];
       for (const f of Array.from(newFiles)) {
-        const err = validateFile(f);
+        const err = validateFile(f, accept);
         if (err) {
           toast.error(err);
           continue;
@@ -87,7 +106,7 @@ export function UploadDropzone({ files, onFilesChange }: UploadDropzoneProps) {
         onFilesChange([...files, ...toAdd]);
       }
     },
-    [files, onFilesChange],
+    [files, onFilesChange, accept],
   );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -132,12 +151,28 @@ export function UploadDropzone({ files, onFilesChange }: UploadDropzoneProps) {
     [files, onFilesChange],
   );
 
+  const labelText =
+    accept === "audio"
+      ? "Drag & drop audio files here or click to browse"
+      : accept === "slides"
+        ? "Drag & drop slide files here or click to browse"
+        : "Drag & drop files here or click to browse";
+
+  const hintText =
+    accept === "audio"
+      ? ".mp3, .wav, .m4a, .ogg, .webm, .flac"
+      : accept === "slides"
+        ? ".pdf, .pptx"
+        : null;
+
+  const Icon = accept === "slides" ? Presentation : accept === "audio" ? FileAudio : Upload;
+
   return (
     <div className="space-y-3">
       <div
         role="button"
         tabIndex={0}
-        aria-label="Upload files. Drag and drop or click to browse."
+        aria-label={labelText}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -155,17 +190,21 @@ export function UploadDropzone({ files, onFilesChange }: UploadDropzoneProps) {
             : "border-muted-foreground/25 hover:border-muted-foreground/50",
         )}
       >
-        <Upload className="h-8 w-8 text-muted-foreground" />
+        <Icon className="h-8 w-8 text-muted-foreground" />
         <div className="text-center">
-          <p className="text-sm font-medium">
-            Drag & drop files here or click to browse
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Audio: .mp3, .wav, .m4a, .ogg
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Slides: .pdf, .pptx
-          </p>
+          <p className="text-sm font-medium">{labelText}</p>
+          {accept === "all" ? (
+            <>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Audio: .mp3, .wav, .m4a, .ogg
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Slides: .pdf, .pptx
+              </p>
+            </>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground">{hintText}</p>
+          )}
           <p className="mt-1 text-xs text-muted-foreground">
             Max file size: 500MB
           </p>
@@ -185,7 +224,7 @@ export function UploadDropzone({ files, onFilesChange }: UploadDropzoneProps) {
           ref={fileInputRef}
           type="file"
           multiple
-          accept={ALL_ACCEPTED_EXTENSIONS.join(",")}
+          accept={acceptedExts.join(",")}
           className="hidden"
           onChange={handleFileSelect}
         />

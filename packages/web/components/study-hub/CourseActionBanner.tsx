@@ -76,8 +76,8 @@ export function CourseActionBanner({ courseId }: CourseActionBannerProps) {
   if (loading || !action || dismissed) return null;
 
   const Icon = ICON_MAP[action.action_type] ?? BookOpen;
-  const bgClass = BG_MAP[action.action_type] ?? "bg-gray-50 border-gray-200";
-  const iconColor = ICON_COLOR_MAP[action.action_type] ?? "text-gray-600";
+  const bgClass = BG_MAP[action.action_type] ?? "bg-primary/5 border-primary/20";
+  const iconColor = ICON_COLOR_MAP[action.action_type] ?? "text-primary";
 
   return (
     <div className={cn("flex items-start gap-3 rounded-lg border p-3", bgClass)}>

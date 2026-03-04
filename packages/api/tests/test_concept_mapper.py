@@ -1,6 +1,6 @@
 """Tests for the concept mapper agent.
 
-Tests concept-to-assessment mapping via Gemini and embedding fallback.
+Tests concept-to-assessment mapping via Gemini.
 """
 
 from __future__ import annotations
@@ -8,10 +8,8 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import numpy as np
 import pytest
 from lecturelink_api.agents.concept_mapper import (
-    _embedding_fallback_mapping,
     _get_syllabus_schedule,
     map_concepts_to_assessments,
 )
@@ -31,14 +29,12 @@ def _concepts_with_ids() -> list[dict]:
             "title": "First Law of Thermodynamics",
             "description": "Energy is conserved",
             "category": "theorem",
-            "embedding": np.random.randn(768).tolist(),
         },
         {
             "id": "concept-002",
             "title": "Heat Transfer",
             "description": "Movement of thermal energy",
             "category": "process",
-            "embedding": np.random.randn(768).tolist(),
         },
     ]
 
@@ -193,13 +189,13 @@ class TestNoAssessments:
 
 
 # ---------------------------------------------------------------------------
-# Test: Gemini failure → fallback
+# Test: Gemini failure → empty mappings (no fabrication)
 # ---------------------------------------------------------------------------
 
 
-class TestGeminiFallback:
+class TestGeminiFailure:
     @pytest.mark.asyncio
-    async def test_falls_back_to_embedding_mapping(self):
+    async def test_returns_empty_on_gemini_failure(self):
         sb = _build_mock_supabase()
 
         mock_client = MagicMock()
@@ -207,19 +203,7 @@ class TestGeminiFallback:
             side_effect=Exception("Gemini rate limited")
         )
 
-        mock_fallback = AsyncMock(return_value=[
-            {
-                "concept_title": "First Law of Thermodynamics",
-                "assessment_mappings": [
-                    {"assessment_id": "assess-001", "relevance_score": 0.75, "reasoning": "fallback"},
-                ],
-            }
-        ])
-
-        with (
-            patch(f"{_MOD}.genai.Client", return_value=mock_client),
-            patch(f"{_MOD}._embedding_fallback_mapping", mock_fallback),
-        ):
+        with patch(f"{_MOD}.genai.Client", return_value=mock_client):
             result = await map_concepts_to_assessments(
                 supabase=sb,
                 lecture_id="lec-001",
@@ -228,103 +212,8 @@ class TestGeminiFallback:
                 concepts=_concepts_with_ids(),
             )
 
-        mock_fallback.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# Test: Embedding fallback
-# ---------------------------------------------------------------------------
-
-
-class TestEmbeddingFallback:
-    @pytest.mark.asyncio
-    async def test_high_similarity_creates_links(self):
-        concepts = _concepts_with_ids()
-        # Make concept embedding match first assessment very well
-        concepts[0]["embedding"] = [1.0] + [0.0] * 767
-
-        assessments = _assessments()
-
-        # Mock embedding response to return matching embedding
-        mock_emb = MagicMock()
-        mock_emb.values = [1.0] + [0.0] * 767
-        mock_emb2 = MagicMock()
-        mock_emb2.values = [0.0, 1.0] + [0.0] * 766
-
-        mock_client = MagicMock()
-        mock_client.aio.models.embed_content = AsyncMock(
-            return_value=MagicMock(embeddings=[mock_emb, mock_emb2])
-        )
-
-        with patch(f"{_MOD}.genai.Client", return_value=mock_client):
-            mappings = await _embedding_fallback_mapping(concepts, assessments)
-
-        # First concept should match first assessment (cosine sim ≈ 1.0)
-        assert len(mappings) >= 1
-        first_mapping = mappings[0]
-        assert first_mapping["concept_title"] == "First Law of Thermodynamics"
-        assert any(
-            am["assessment_id"] == "assess-001"
-            for am in first_mapping["assessment_mappings"]
-        )
-
-    @pytest.mark.asyncio
-    async def test_low_similarity_no_links(self):
-        concepts = _concepts_with_ids()
-        # Orthogonal embedding
-        concepts[0]["embedding"] = [1.0] + [0.0] * 767
-        concepts[1]["embedding"] = [0.0, 1.0] + [0.0] * 766
-
-        assessments = _assessments()
-
-        # Assessment embeddings orthogonal to concepts
-        mock_emb1 = MagicMock()
-        mock_emb1.values = [0.0, 0.0, 1.0] + [0.0] * 765
-        mock_emb2 = MagicMock()
-        mock_emb2.values = [0.0, 0.0, 0.0, 1.0] + [0.0] * 764
-
-        mock_client = MagicMock()
-        mock_client.aio.models.embed_content = AsyncMock(
-            return_value=MagicMock(embeddings=[mock_emb1, mock_emb2])
-        )
-
-        with patch(f"{_MOD}.genai.Client", return_value=mock_client):
-            mappings = await _embedding_fallback_mapping(concepts, assessments)
-
-        # All similarities should be 0, so no mappings
-        assert mappings == []
-
-    @pytest.mark.asyncio
-    async def test_no_embedding_on_concept_skipped(self):
-        concepts = [{"title": "No Embedding", "description": "test"}]
-        assessments = _assessments()
-
-        mock_emb = MagicMock()
-        mock_emb.values = [1.0] + [0.0] * 767
-
-        mock_client = MagicMock()
-        mock_client.aio.models.embed_content = AsyncMock(
-            return_value=MagicMock(embeddings=[mock_emb, mock_emb])
-        )
-
-        with patch(f"{_MOD}.genai.Client", return_value=mock_client):
-            mappings = await _embedding_fallback_mapping(concepts, assessments)
-
-        assert mappings == []
-
-    @pytest.mark.asyncio
-    async def test_embedding_api_failure_returns_empty(self):
-        mock_client = MagicMock()
-        mock_client.aio.models.embed_content = AsyncMock(
-            side_effect=Exception("API down")
-        )
-
-        with patch(f"{_MOD}.genai.Client", return_value=mock_client):
-            mappings = await _embedding_fallback_mapping(
-                _concepts_with_ids(), _assessments(),
-            )
-
-        assert mappings == []
+        # No fabricated mappings — returns empty
+        assert result == []
 
 
 # ---------------------------------------------------------------------------

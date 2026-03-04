@@ -1,32 +1,39 @@
-# LectureLink V2 — Continuous Deployment to Google Cloud Run
+# LectureLink V2 — Production Deployment to Google Cloud Run
 #
-# Trigger: push to main branch only.
+# Trigger: push to main branch, or manual dispatch.
 #
 # Job chain:
-#   lint-and-test → build-and-push-api ──→ deploy-api ──→ notify
-#                 → build-and-push-web ──→ deploy-web ──↗
+#   lint-and-test → build-and-push-api ──→ deploy-api ───→ deploy-worker ──→ notify
+#                 → build-and-push-web ──→ deploy-web ──────────────────────↗
 #
 # Required GitHub Secrets:
-#   GCP_PROJECT_ID          — Google Cloud project ID (e.g. "lecturelink-prod")
-#   WIF_PROVIDER            — Workload Identity Federation provider resource name
-#   WIF_SERVICE_ACCOUNT     — Service account email for WIF (e.g. github-deployer@<project>.iam.gserviceaccount.com)
-#   NEXT_PUBLIC_SUPABASE_URL    — Supabase project URL (for frontend build-time env)
-#   NEXT_PUBLIC_SUPABASE_ANON_KEY — Supabase anon key (for frontend build-time env)
-#   NEXT_PUBLIC_API_URL     — Backend Cloud Run URL (for frontend build-time env)
+#   GCP_PROJECT_ID              — Google Cloud project ID
+#   WIF_PROVIDER                — Workload Identity Federation provider resource name
+#   WIF_SERVICE_ACCOUNT         — Deploy service account email
+#   RUNTIME_SERVICE_ACCOUNT     — Cloud Run runtime service account email
+#   NEXT_PUBLIC_SUPABASE_URL    — Supabase project URL (frontend build-time)
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY — Supabase anon key (frontend build-time)
+#   NEXT_PUBLIC_API_URL         — Production API URL (https://api.lecturelink.ca)
+#   MEMORYSTORE_IP              — Cloud Memorystore Redis IP
 
-name: Deploy to Cloud Run
+name: Deploy to Production
 
 on:
   push:
     branches: [main]
+  workflow_dispatch: {}
 
 concurrency:
-  group: deploy-${{ github.ref }}
+  group: deploy-production
   cancel-in-progress: false
 
 env:
   REGISTRY: us-central1-docker.pkg.dev
   REGION: us-central1
+  API_SERVICE: lecturelink-api-prod
+  WEB_SERVICE: lecturelink-web-prod
+  WORKER_SERVICE: lecturelink-worker-prod
+  VPC_CONNECTOR: lecturelink-connector
 
 permissions:
   contents: read
@@ -140,14 +147,6 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
 
-      # NOTE: The web Dockerfile needs these ARG declarations in the builder stage
-      # for the build-args to take effect:
-      #   ARG NEXT_PUBLIC_SUPABASE_URL
-      #   ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
-      #   ARG NEXT_PUBLIC_API_URL
-      #   ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
-      #   ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
-      #   ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
       - name: Build Web image
         run: |
           docker build \
@@ -183,7 +182,7 @@ jobs:
 
       - name: Deploy API (no traffic)
         run: |
-          gcloud run deploy lecturelink-api \
+          gcloud run deploy ${{ env.API_SERVICE }} \
             --image ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:${{ github.sha }} \
             --region ${{ env.REGION }} \
             --platform managed \
@@ -192,15 +191,17 @@ jobs:
             --min-instances 1 \
             --max-instances 10 \
             --timeout 60s \
+            --vpc-connector=${{ env.VPC_CONNECTOR }} \
+            --service-account=${{ secrets.RUNTIME_SERVICE_ACCOUNT }} \
             --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,GOOGLE_API_KEY=GEMINI_API_KEY:latest,INTERNAL_API_KEY=INTERNAL_API_KEY:latest" \
-            --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }}" \
+            --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},REDIS_URL=redis://${{ secrets.MEMORYSTORE_IP }}:6379,CORS_ORIGINS=https://lecturelink.ca" \
             --no-traffic \
             --allow-unauthenticated
 
       - name: Smoke test API
         run: |
           REVISION_URL=$(gcloud run revisions list \
-            --service=lecturelink-api \
+            --service=${{ env.API_SERVICE }} \
             --region=${{ env.REGION }} \
             --sort-by=~creationTimestamp \
             --limit=1 \
@@ -217,12 +218,47 @@ jobs:
 
       - name: Shift traffic to new revision
         run: |
-          gcloud run services update-traffic lecturelink-api \
+          gcloud run services update-traffic ${{ env.API_SERVICE }} \
             --to-latest \
             --region ${{ env.REGION }}
 
   # ---------------------------------------------------------------------------
-  # Job 3b: Deploy Web to Cloud Run
+  # Job 3b: Deploy Worker to Cloud Run (same image as API, different command)
+  # ---------------------------------------------------------------------------
+  deploy-worker:
+    name: Deploy Worker
+    needs: [build-and-push-api, deploy-api]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Worker
+        run: |
+          gcloud run deploy ${{ env.WORKER_SERVICE }} \
+            --image ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --command="python","-m","arq","lecturelink_api.worker.WorkerSettings" \
+            --memory 512Mi \
+            --cpu 1 \
+            --min-instances 1 \
+            --max-instances 3 \
+            --no-cpu-throttling \
+            --vpc-connector=${{ env.VPC_CONNECTOR }} \
+            --service-account=${{ secrets.RUNTIME_SERVICE_ACCOUNT }} \
+            --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,GOOGLE_API_KEY=GEMINI_API_KEY:latest" \
+            --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},REDIS_URL=redis://${{ secrets.MEMORYSTORE_IP }}:6379" \
+            --no-allow-unauthenticated
+
+  # ---------------------------------------------------------------------------
+  # Job 3c: Deploy Web to Cloud Run
   # ---------------------------------------------------------------------------
   deploy-web:
     name: Deploy Web
@@ -238,17 +274,9 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Get API service URL
-        id: api-url
-        run: |
-          API_URL=$(gcloud run services describe lecturelink-api \
-            --region=${{ env.REGION }} \
-            --format='value(status.url)')
-          echo "url=$API_URL" >> "$GITHUB_OUTPUT"
-
       - name: Deploy Web (no traffic)
         run: |
-          gcloud run deploy lecturelink-web \
+          gcloud run deploy ${{ env.WEB_SERVICE }} \
             --image ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/web:${{ github.sha }} \
             --region ${{ env.REGION }} \
             --platform managed \
@@ -257,14 +285,15 @@ jobs:
             --min-instances 1 \
             --max-instances 5 \
             --timeout 30s \
-            --set-env-vars="NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }},NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }},NEXT_PUBLIC_API_URL=${{ steps.api-url.outputs.url }}" \
+            --service-account=${{ secrets.RUNTIME_SERVICE_ACCOUNT }} \
+            --set-env-vars="NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}" \
             --no-traffic \
             --allow-unauthenticated
 
       - name: Smoke test Web
         run: |
           REVISION_URL=$(gcloud run revisions list \
-            --service=lecturelink-web \
+            --service=${{ env.WEB_SERVICE }} \
             --region=${{ env.REGION }} \
             --sort-by=~creationTimestamp \
             --limit=1 \
@@ -281,7 +310,7 @@ jobs:
 
       - name: Shift traffic to new revision
         run: |
-          gcloud run services update-traffic lecturelink-web \
+          gcloud run services update-traffic ${{ env.WEB_SERVICE }} \
             --to-latest \
             --region ${{ env.REGION }}
 
@@ -290,17 +319,23 @@ jobs:
   # ---------------------------------------------------------------------------
   notify:
     name: Notify
-    needs: [deploy-api, deploy-web]
+    needs: [deploy-api, deploy-worker, deploy-web]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Deployment result
         run: |
-          if [ "${{ needs.deploy-api.result }}" = "success" ] && [ "${{ needs.deploy-web.result }}" = "success" ]; then
+          if [ "${{ needs.deploy-api.result }}" = "success" ] && \
+             [ "${{ needs.deploy-worker.result }}" = "success" ] && \
+             [ "${{ needs.deploy-web.result }}" = "success" ]; then
             echo "SUCCESS: Deployed ${{ github.sha }} to production"
+            echo "  API:    https://api.lecturelink.ca"
+            echo "  Web:    https://lecturelink.ca"
+            echo "  Worker: running"
           else
             echo "FAILED: Deploy failed for ${{ github.sha }}"
-            echo "  API:  ${{ needs.deploy-api.result }}"
-            echo "  Web:  ${{ needs.deploy-web.result }}"
+            echo "  API:    ${{ needs.deploy-api.result }}"
+            echo "  Worker: ${{ needs.deploy-worker.result }}"
+            echo "  Web:    ${{ needs.deploy-web.result }}"
             exit 1
           fi

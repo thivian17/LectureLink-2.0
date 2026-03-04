@@ -224,11 +224,11 @@ export function CourseDetail({
       <CourseActionBanner courseId={course.id} />
 
       {/* Study Tutor CTA */}
-      <Card className="border-primary/30 bg-gradient-to-r from-primary/5 to-primary/10">
+      <Card className="border-primary/20 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 shadow-sm">
         <CardContent className="pt-6">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
                 <GraduationCap className="h-5 w-5 text-primary" />
               </div>
               <div>

@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Play, Clock } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Play, ArrowRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { GamificationReadiness } from "@/types/database";
 
@@ -14,7 +13,7 @@ interface StartSessionButtonProps {
 
 export function StartSessionButton({ topAssessment, courseId, loading }: StartSessionButtonProps) {
   if (loading) {
-    return <Skeleton className="h-14 w-full rounded-xl" />;
+    return <Skeleton className="h-20 w-full rounded-2xl" />;
   }
 
   if (!courseId) {
@@ -22,24 +21,24 @@ export function StartSessionButton({ topAssessment, courseId, loading }: StartSe
   }
 
   const label = topAssessment
-    ? `${topAssessment.title.split(":")[0]}`
+    ? `${topAssessment.title.split(":")[0]} prep`
     : "Today's Focus";
 
   return (
-    <Button
-      asChild
-      size="lg"
-      className="w-full h-14 text-base gap-2 rounded-xl shadow-md hover:shadow-lg transition-shadow"
+    <Link
+      href={`/dashboard/courses/${courseId}/learn`}
+      className="flex items-center gap-4 rounded-2xl bg-primary px-5 py-4 text-primary-foreground shadow-lg hover:opacity-95 transition-opacity"
     >
-      <Link href={`/dashboard/courses/${courseId}/learn`}>
-        <Play className="h-5 w-5" />
-        <span>Start Today&apos;s Session</span>
-        <span className="text-primary-foreground/70 flex items-center gap-1 ml-1">
-          <Clock className="h-3.5 w-3.5" />
-          15 min
-        </span>
-        <span className="text-primary-foreground/70 ml-1">· {label}</span>
-      </Link>
-    </Button>
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20">
+        <Play className="h-5 w-5 fill-current" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-lg font-semibold">Start Today&apos;s Session</p>
+        <p className="text-sm text-primary-foreground/70">
+          15 min &middot; {label}
+        </p>
+      </div>
+      <ArrowRight className="h-5 w-5 shrink-0 text-primary-foreground/70" />
+    </Link>
   );
 }

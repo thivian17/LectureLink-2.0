@@ -43,10 +43,10 @@ export function SecondaryActions({ actions }: SecondaryActionsProps) {
     <div className="grid gap-4 sm:grid-cols-2">
       {actions.map((action, i) => {
         const Icon = ICON_MAP[action.action_type] ?? BookOpen;
-        const iconColor = COLOR_MAP[action.action_type] ?? "text-gray-600";
+        const iconColor = COLOR_MAP[action.action_type] ?? "text-primary";
 
         return (
-          <Card key={i}>
+          <Card key={i} className="hover:border-primary/30 transition-colors">
             <CardContent className="flex items-start gap-3 py-4">
               <Icon className={cn("h-4 w-4 shrink-0 mt-0.5", iconColor)} />
               <div className="flex-1 min-w-0">

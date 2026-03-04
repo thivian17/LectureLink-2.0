@@ -15,6 +15,7 @@ from lecturelink_api.routers import (
     coach,
     courses,
     gamification,
+    google_calendar,
     internal,
     learn,
     lectures,
@@ -118,10 +119,9 @@ app = FastAPI(title="LectureLink V2 API", lifespan=lifespan)
 
 # CORS — allow the Next.js dev server + production origins
 _allowed_origins = ["http://localhost:3000"]
-if os.environ.get("ENVIRONMENT") == "production":
-    _prod_origin = os.environ.get("CORS_ORIGIN", "")
-    if _prod_origin:
-        _allowed_origins.append(_prod_origin)
+_extra_origins = os.environ.get("CORS_ORIGINS", "")
+if _extra_origins:
+    _allowed_origins.extend(o.strip() for o in _extra_origins.split(",") if o.strip())
 
 app.add_middleware(
     CORSMiddleware,
@@ -144,6 +144,7 @@ app.include_router(onboarding.router)
 app.include_router(tutor.router, prefix="/api/tutor")
 app.include_router(gamification.router)
 app.include_router(learn.router)
+app.include_router(google_calendar.router)
 app.include_router(internal.router)
 
 

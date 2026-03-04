@@ -150,6 +150,7 @@ async def get_assessment_readiness(
             "concept_id": cid,
             "title": m_data.get("concept_title", "Unknown"),
             "mastery": mastery,
+            "total_attempts": attempts,
             "relevance": relevance,
             "weighted_score": round(mastery * weight, 4),
         })

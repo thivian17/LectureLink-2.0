@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, BookOpen } from "lucide-react";
+import { Plus, BookOpen, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -12,14 +12,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { StreakDisplay } from "@/components/learn/StreakDisplay";
-import { LevelBadge } from "@/components/learn/LevelBadge";
-import { NextAssessmentCard } from "@/components/learn/NextAssessmentCard";
 import { StartSessionButton } from "@/components/learn/StartSessionButton";
 import { CourseReadinessCards } from "@/components/learn/CourseReadinessCards";
 import { UpcomingAssessmentTimeline } from "@/components/learn/UpcomingAssessmentTimeline";
-import { WeeklyProgressSummary } from "@/components/learn/WeeklyProgressSummary";
-import { ActivityFeed } from "@/components/learn/ActivityFeed";
 import {
   getCourses,
   getGamificationState,
@@ -69,7 +64,7 @@ export default function DashboardPage() {
       if (readiness.status === "fulfilled")
         setAssessments(
           readiness.value.filter(
-            (a) => a.type.toLowerCase() !== "ongoing",
+            (a) => a.type.toLowerCase() !== "ongoing" && a.due_date != null,
           ),
         );
       if (weekly.status === "fulfilled") setWeeklyProgress(weekly.value);
@@ -103,21 +98,16 @@ export default function DashboardPage() {
     : courses[0]?.id ?? null;
 
   return (
-    <div className="space-y-5">
-      {/* Top bar: Streak + Level + Add Course */}
+    <div className="space-y-6">
+      {/* Header: Study Hub title + Add Course */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <StreakDisplay
-            streak={gamification?.streak ?? null}
-            loading={loading}
-          />
-          <LevelBadge
-            level={gamification?.level ?? null}
-            todayXp={gamification?.today_xp}
-            loading={loading}
-          />
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Study Hub</h1>
+          <p className="text-sm text-muted-foreground">
+            Here&apos;s what to focus on today.
+          </p>
         </div>
-        <Button asChild size="sm" variant="outline">
+        <Button asChild size="sm">
           <Link href="/dashboard/courses/new">
             <Plus className="mr-1.5 h-3.5 w-3.5" />
             Add Course
@@ -128,8 +118,8 @@ export default function DashboardPage() {
       {!hasCourses && !loading ? (
         <Card className="flex flex-col items-center justify-center py-16">
           <CardHeader className="items-center text-center">
-            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-              <BookOpen className="h-6 w-6 text-muted-foreground" />
+            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+              <BookOpen className="h-6 w-6 text-primary" />
             </div>
             <CardTitle>No courses yet</CardTitle>
             <CardDescription>
@@ -145,44 +135,42 @@ export default function DashboardPage() {
         </Card>
       ) : (
         <>
-          {/* Next Assessment Card */}
-          <NextAssessmentCard assessment={topAssessment} loading={loading} />
-
-          {/* Primary CTA */}
+          {/* Primary CTA: Start Today's Session */}
           <StartSessionButton
             topAssessment={topAssessment}
             courseId={topCourseId}
             loading={loading}
           />
 
-          {/* Course readiness row */}
+          {/* Your Courses */}
           {(loading || courseReadiness.length > 0) && (
             <div>
-              <h2 className="text-sm font-semibold mb-2 text-muted-foreground">
-                Your Courses
-              </h2>
-              <CourseReadinessCards courses={courseReadiness} loading={loading} />
+              <h2 className="text-base font-semibold mb-3">Your Courses</h2>
+              <CourseReadinessCards
+                courses={courseReadiness}
+                allCourses={courses}
+                loading={loading}
+              />
             </div>
           )}
 
-          {/* Assessment timeline */}
+          {/* Upcoming Assessments */}
           {(loading || assessments.length > 0) && (
             <div>
-              <h2 className="text-sm font-semibold mb-2 text-muted-foreground">
-                Upcoming Assessments
-              </h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base font-semibold">
+                  Upcoming Assessments
+                </h2>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/dashboard/calendar">
+                    <Calendar className="mr-2 h-4 w-4" />
+                    View Calendar
+                  </Link>
+                </Button>
+              </div>
               <UpcomingAssessmentTimeline assessments={assessments} loading={loading} />
             </div>
           )}
-
-          {/* Bottom: Weekly Progress + Activity Feed */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <WeeklyProgressSummary progress={weeklyProgress} loading={loading} />
-            <ActivityFeed
-              recentBadges={gamification?.recent_badges ?? []}
-              loading={loading}
-            />
-          </div>
         </>
       )}
     </div>

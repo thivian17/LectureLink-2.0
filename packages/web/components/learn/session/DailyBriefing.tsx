@@ -51,9 +51,11 @@ export function DailyBriefing({
             <div className="flex flex-wrap gap-1.5">
               {briefing.concepts_planned.map((c) => (
                 <Badge key={c.concept_id} variant="secondary" className="text-xs">
-                  {c.title || "Untitled concept"}
+                  {c.title}
                   <span className="ml-1 text-muted-foreground">
-                    {Math.round(c.mastery * 100)}%
+                    {(c.total_attempts ?? 0) > 0
+                      ? `${Math.round(c.mastery * 100)}%`
+                      : "New"}
                   </span>
                 </Badge>
               ))}

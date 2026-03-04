@@ -69,9 +69,11 @@ export function WeakAreasPanel({
             <div className="min-w-0">
               <p className="font-medium truncate">{c.title}</p>
               <p className="text-xs text-muted-foreground">
-                Mastery: {Math.round(c.mastery * 100)}%
-                {c.total_attempts > 0 &&
-                  ` (${c.correct_attempts}/${c.total_attempts} correct)`}
+                {c.total_attempts > 0 ? (
+                  <>Mastery: {Math.round(c.mastery * 100)}% ({c.correct_attempts}/{c.total_attempts} correct)</>
+                ) : (
+                  <>Not Yet Assessed</>
+                )}
               </p>
               {c.linked_assessments.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">

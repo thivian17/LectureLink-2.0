@@ -41,14 +41,15 @@ export function LectureUploadForm({
 }: LectureUploadFormProps) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("form");
-  const [files, setFiles] = useState<File[]>([]);
+  const [audioFiles, setAudioFiles] = useState<File[]>([]);
+  const [slideFiles, setSlideFiles] = useState<File[]>([]);
   const [lectureNumber, setLectureNumber] = useState("");
   const [lectureDate, setLectureDate] = useState<Date | undefined>(new Date());
   const [uploading, setUploading] = useState(false);
   const [lectureId, setLectureId] = useState<string | null>(null);
 
   const canSubmit =
-    files.length > 0 && lectureNumber.trim().length > 0 && !uploading;
+    audioFiles.length > 0 && lectureNumber.trim().length > 0 && !uploading;
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -60,7 +61,7 @@ export function LectureUploadForm({
 
       try {
         const formData = new FormData();
-        files.forEach((f) => formData.append("files", f));
+        [...audioFiles, ...slideFiles].forEach((f) => formData.append("files", f));
         formData.append("lecture_number", lectureNumber);
         if (lectureDate) {
           formData.append("lecture_date", format(lectureDate, "yyyy-MM-dd"));
@@ -90,7 +91,7 @@ export function LectureUploadForm({
         setUploading(false);
       }
     },
-    [canSubmit, files, lectureNumber, lectureDate, courseId, router],
+    [canSubmit, audioFiles, slideFiles, lectureNumber, lectureDate, courseId, router],
   );
 
   // Show processing status after upload
@@ -124,21 +125,43 @@ export function LectureUploadForm({
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* File drop zone */}
+        {/* Audio recording */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Files</CardTitle>
+            <CardTitle className="text-base">Audio Recording *</CardTitle>
             <CardDescription>
-              Upload audio recordings and/or slide decks for this lecture.
+              Upload the lecture audio recording. At least one audio file is
+              required.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <UploadDropzone files={files} onFilesChange={setFiles} />
-            {files.length === 0 && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Please add at least one audio or slides file.
+            <UploadDropzone
+              files={audioFiles}
+              onFilesChange={setAudioFiles}
+              accept="audio"
+            />
+            {audioFiles.length === 0 && (
+              <p className="mt-2 text-xs text-destructive">
+                Please add at least one audio file.
               </p>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Lecture slides (optional) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Lecture Slides</CardTitle>
+            <CardDescription>
+              Optionally upload slide decks to align with the recording.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <UploadDropzone
+              files={slideFiles}
+              onFilesChange={setSlideFiles}
+              accept="slides"
+            />
           </CardContent>
         </Card>
 

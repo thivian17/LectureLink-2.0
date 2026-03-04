@@ -72,18 +72,27 @@ export function ReadinessDetail({ assessment }: ReadinessDetailProps) {
           <div className="space-y-2 pt-1">
             {assessment.concept_scores
               .sort((a, b) => a.mastery - b.mastery)
-              .map((c) => (
-                <div key={c.concept_id} className="flex items-center gap-2 text-xs">
-                  <span className="flex-1 truncate">{c.title}</span>
-                  <Progress
-                    value={c.mastery * 100}
-                    className={cn("h-1.5 w-20", masteryColor(c.mastery))}
-                  />
-                  <span className="tabular-nums text-muted-foreground w-8 text-right">
-                    {Math.round(c.mastery * 100)}%
-                  </span>
-                </div>
-              ))}
+              .map((c) => {
+                const hasAttempts = c.total_attempts > 0;
+                return (
+                  <div key={c.concept_id} className="flex items-center gap-2 text-xs">
+                    <span className="flex-1 truncate">{c.title}</span>
+                    {hasAttempts ? (
+                      <>
+                        <Progress
+                          value={c.mastery * 100}
+                          className={cn("h-1.5 w-20", masteryColor(c.mastery))}
+                        />
+                        <span className="tabular-nums text-muted-foreground w-8 text-right">
+                          {Math.round(c.mastery * 100)}%
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground italic">Not Yet Assessed</span>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         )}
       </CardContent>

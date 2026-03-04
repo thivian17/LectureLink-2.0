@@ -138,6 +138,7 @@ export function LessonPlanOverview({
         <CardContent className="space-y-4">
           {plan.concepts.map((concept, i) => {
             const masteryPct = Math.round(concept.mastery * 100);
+            const hasAttempts = (concept.total_attempts ?? 0) > 0;
             return (
               <div key={concept.concept_id ?? concept.title} className="space-y-2">
                 <div className="flex items-start gap-3">
@@ -155,15 +156,21 @@ export function LessonPlanOverview({
                     </div>
 
                     {/* Mastery bar */}
-                    <div className="flex items-center gap-2">
-                      <Progress
-                        value={masteryPct}
-                        className={`h-1.5 flex-1 ${masteryColor(concept.mastery)}`}
-                      />
-                      <span className="text-xs text-muted-foreground w-8 text-right">
-                        {masteryPct}%
+                    {hasAttempts ? (
+                      <div className="flex items-center gap-2">
+                        <Progress
+                          value={masteryPct}
+                          className={`h-1.5 flex-1 ${masteryColor(concept.mastery)}`}
+                        />
+                        <span className="text-xs text-muted-foreground w-8 text-right">
+                          {masteryPct}%
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground italic">
+                        Not Yet Assessed
                       </span>
-                    </div>
+                    )}
 
                     {/* Approach badge */}
                     <Badge
@@ -206,6 +213,7 @@ export function LessonPlanOverview({
               .sort((a, b) => a.mastery - b.mastery)
               .map((concept) => {
                 const masteryPct = Math.round(concept.mastery * 100);
+                const hasAttempts = concept.total_attempts > 0;
                 return (
                   <div
                     key={concept.concept_id ?? concept.title}
@@ -214,15 +222,23 @@ export function LessonPlanOverview({
                     <span className="flex-1 min-w-0 truncate">
                       {concept.title}
                     </span>
-                    <Badge
-                      variant="outline"
-                      className={`text-[10px] shrink-0 ${statusColor(concept.mastery)}`}
-                    >
-                      {statusLabel(concept.mastery)}
-                    </Badge>
-                    <span className="w-8 text-right text-xs shrink-0">
-                      {masteryPct}%
-                    </span>
+                    {hasAttempts ? (
+                      <>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] shrink-0 ${statusColor(concept.mastery)}`}
+                        >
+                          {statusLabel(concept.mastery)}
+                        </Badge>
+                        <span className="w-8 text-right text-xs shrink-0">
+                          {masteryPct}%
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-xs italic shrink-0">
+                        Not Yet Assessed
+                      </span>
+                    )}
                   </div>
                 );
               })}

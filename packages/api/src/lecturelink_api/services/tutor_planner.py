@@ -112,6 +112,7 @@ async def _get_concepts_from_tables(
             "concept_id": m["concept_id"],
             "title": m["concept_title"],
             "mastery": mastery,
+            "total_attempts": attempts,
             "difficulty": m.get("difficulty_estimate", 0.5),
         }
 
@@ -627,6 +628,7 @@ async def generate_lesson_plan(
                     "concept_id": c.get("concept_id"),
                     "title": c["title"],
                     "mastery": c["mastery"],
+                    "total_attempts": c.get("total_attempts", 0),
                     "priority_score": c["priority_score"],
                     "teaching_approach": c["teaching_approach"],
                     "estimated_minutes": 8,
@@ -647,6 +649,15 @@ async def generate_lesson_plan(
     except Exception:
         logger.error("Gemini lesson plan generation failed", exc_info=True)
         raise
+
+    # 4b. Merge total_attempts from input concepts (Gemini doesn't return it)
+    attempts_map = {c.get("concept_id"): c.get("total_attempts", 0) for c in concepts}
+    for pc in plan.get("concepts", []):
+        cid = pc.get("concept_id")
+        if "total_attempts" not in pc and cid in attempts_map:
+            pc["total_attempts"] = attempts_map[cid]
+        elif "total_attempts" not in pc:
+            pc["total_attempts"] = 0
 
     # 5. Pre-generate first concept's content
     if plan.get("concepts"):

@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     POSTHOG_API_KEY: str = ""
     LANGFUSE_SECRET_KEY: str = ""
     REDIS_URL: str = "redis://localhost:6379"
+    GOOGLE_OAUTH_CLIENT_ID: str = ""
+    GOOGLE_OAUTH_CLIENT_SECRET: str = ""
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

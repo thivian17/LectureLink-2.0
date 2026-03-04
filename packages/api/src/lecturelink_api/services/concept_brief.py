@@ -9,6 +9,7 @@ CRITICAL: "Why it matters" is framed as real-world relevance, NOT exam focus.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -115,7 +116,7 @@ async def generate_concept_brief(
     Returns a dict with sections (what_is_this, why_it_matters, key_relationship),
     a gut_check MCQ, source citations, and mastery tier.
     """
-    # 1. Get concept from DB
+    # 1. Get concept + course name (fast sync DB calls)
     try:
         concept_result = (
             supabase.table("concepts")
@@ -132,7 +133,6 @@ async def generate_concept_brief(
     concept_title = concept.get("title", "Unknown")
     concept_description = concept.get("description", "")
 
-    # 2. Get course name
     try:
         course_result = (
             supabase.table("courses")
@@ -145,54 +145,60 @@ async def generate_concept_brief(
     except Exception:
         course_name = ""
 
-    # 3. Get source chunks via search_lectures
-    search_query = f"{concept_title}: {concept_description}".strip().strip(":")
-    try:
-        if search_query.strip():
-            chunks = await search_lectures(
-                supabase=supabase,
-                course_id=course_id,
-                query=search_query,
-                limit=6,
+    # 2. Run search + assessment lookup concurrently (both need concept_id/title from step 1)
+    async def _fetch_chunks() -> list[dict]:
+        search_query = f"{concept_title}: {concept_description}".strip().strip(":")
+        try:
+            if search_query.strip():
+                return await search_lectures(
+                    supabase=supabase,
+                    course_id=course_id,
+                    query=search_query,
+                    limit=6,
+                )
+        except Exception:
+            logger.debug("Chunk retrieval failed for concept brief", exc_info=True)
+        return []
+
+    async def _fetch_assessment_context() -> str:
+        try:
+            links_result = await asyncio.to_thread(
+                lambda: (
+                    supabase.table("concept_assessment_links")
+                    .select("assessment_id, relevance_score")
+                    .eq("concept_id", concept_id)
+                    .execute()
+                )
             )
-        else:
-            chunks = []
-    except Exception:
-        logger.debug("Chunk retrieval failed for concept brief", exc_info=True)
-        chunks = []
+            if links_result.data:
+                assessment_ids = [lnk["assessment_id"] for lnk in links_result.data]
+                assessments_result = await asyncio.to_thread(
+                    lambda: (
+                        supabase.table("assessments")
+                        .select("id, title")
+                        .in_("id", assessment_ids)
+                        .execute()
+                    )
+                )
+                if assessments_result.data:
+                    return ", ".join(a["title"] for a in assessments_result.data)
+        except Exception:
+            logger.debug("Failed to fetch assessment links", exc_info=True)
+        return ""
+
+    chunks, assessment_context = await asyncio.gather(
+        _fetch_chunks(), _fetch_assessment_context()
+    )
 
     if chunks:
         source_chunks_text = format_chunks_for_context(chunks)
     else:
         source_chunks_text = "(No lecture content available)"
 
-    # 4. Get linked assessments
-    assessment_context = ""
-    try:
-        links_result = (
-            supabase.table("concept_assessment_links")
-            .select("assessment_id, relevance_score")
-            .eq("concept_id", concept_id)
-            .execute()
-        )
-        if links_result.data:
-            assessment_ids = [lnk["assessment_id"] for lnk in links_result.data]
-            assessments_result = (
-                supabase.table("assessments")
-                .select("id, title")
-                .in_("id", assessment_ids)
-                .execute()
-            )
-            if assessments_result.data:
-                titles = [a["title"] for a in assessments_result.data]
-                assessment_context = ", ".join(titles)
-    except Exception:
-        logger.debug("Failed to fetch assessment links", exc_info=True)
-
     if not assessment_context:
         assessment_context = "No specific assessments linked"
 
-    # 5. Determine mastery tier
+    # 3. Determine mastery tier
     tier = _mastery_tier(mastery_score)
 
     # 6. Call Gemini

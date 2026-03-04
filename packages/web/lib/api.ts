@@ -441,9 +441,13 @@ export async function searchLectures(
   query: string,
   lectureId?: string | null,
 ): Promise<SearchResponse> {
-  const params = new URLSearchParams({ course_id: courseId, q: query });
-  if (lectureId) params.set("lecture_id", lectureId);
-  const resp = await fetchWithAuth(`${API_BASE}/api/search?${params}`);
+  const body: Record<string, unknown> = { course_id: courseId, query };
+  if (lectureId) body.lecture_ids = [lectureId];
+  const resp = await fetchWithAuth(`${API_BASE}/api/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   return resp.json();
 }
 
@@ -1001,6 +1005,7 @@ export async function startLearnSession(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ time_budget_minutes: timeBudget }),
+      signal: AbortSignal.timeout(60_000),
     },
   );
   return resp.json();
@@ -1033,6 +1038,7 @@ export async function getConceptBrief(
 ): Promise<ConceptBrief> {
   const resp = await fetchWithAuth(
     `${API_BASE}/api/learn/session/${sessionId}/concept/${conceptIndex}`,
+    { signal: AbortSignal.timeout(60_000) },
   );
   return resp.json();
 }
@@ -1114,4 +1120,58 @@ export async function getLearnSessionState(
     `${API_BASE}/api/learn/session/${sessionId}`,
   );
   return resp.json();
+}
+
+// ---------------------------------------------------------------------------
+// Google Calendar Integration
+// ---------------------------------------------------------------------------
+
+export async function storeGoogleTokens(
+  accessToken: string,
+  refreshToken: string | null,
+): Promise<void> {
+  await fetchWithAuth(`${API_BASE}/api/google/tokens`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    }),
+  });
+}
+
+export async function getGoogleSyncStatus(): Promise<{
+  connected: boolean;
+  calendar_sync_enabled: boolean;
+  has_refresh_token: boolean;
+}> {
+  const resp = await fetchWithAuth(`${API_BASE}/api/google/sync/status`);
+  return resp.json();
+}
+
+export async function triggerCalendarSync(): Promise<{
+  created: number;
+  updated: number;
+  deleted: number;
+  errors: number;
+}> {
+  const resp = await fetchWithAuth(`${API_BASE}/api/google/sync`, {
+    method: "POST",
+    signal: AbortSignal.timeout(30_000),
+  });
+  return resp.json();
+}
+
+export async function toggleCalendarSync(enabled: boolean): Promise<void> {
+  await fetchWithAuth(`${API_BASE}/api/google/sync/toggle`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export async function disconnectGoogle(): Promise<void> {
+  await fetchWithAuth(`${API_BASE}/api/google/tokens`, {
+    method: "DELETE",
+  });
 }

@@ -236,15 +236,21 @@ export function AssessmentConceptsPanel({
                     <span className="font-medium flex-1 min-w-0 truncate">
                       {group.lectureTitle}
                     </span>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-[10px] shrink-0",
-                        statusColor(group.avgMastery),
-                      )}
-                    >
-                      {groupMasteryPct}%
-                    </Badge>
+                    {group.concepts.some((c) => c.total_attempts > 0) ? (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[10px] shrink-0",
+                          statusColor(group.avgMastery),
+                        )}
+                      >
+                        {groupMasteryPct}%
+                      </Badge>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground italic shrink-0">
+                        Not Yet Assessed
+                      </span>
+                    )}
                     <span className="text-xs text-muted-foreground shrink-0">
                       {group.concepts.length} concept
                       {group.concepts.length !== 1 ? "s" : ""}
