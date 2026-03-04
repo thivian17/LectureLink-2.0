@@ -122,7 +122,6 @@ async def upload_lecture(
 
         # Stream into a SpooledTemporaryFile (stays in memory up to 10MB,
         # spills to disk for larger files — avoids unbounded RAM usage).
-        import shutil
         import tempfile
 
         max_size = _max_size_for(f.content_type)

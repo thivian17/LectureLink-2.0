@@ -221,7 +221,7 @@ class TestFullAudioSlidesPath:
             patch(f"{_MOD}.update_processing_status", side_effect=mock_status),
             patch(f"{_MOD}.cleanup_lecture_data", MagicMock()),
         ):
-            result = await process_lecture(sb, LECTURE_ID, COURSE_ID, USER_ID, FILE_URLS)
+            await process_lecture(sb, LECTURE_ID, COURSE_ID, USER_ID, FILE_URLS)
 
         # Verify correct order (transcribe + analyze may interleave due to gather)
         assert "route_input" in call_order
@@ -504,7 +504,7 @@ class TestFailureHandling:
         with (
             patch(f"{_MOD}.route_input", AsyncMock(return_value=_mock_route_result("audio_only"))),
             patch(f"{_MOD}.transcribe_audio", AsyncMock(side_effect=TranscriptionError("Gemini timeout"))),
-            patch(f"{_MOD}.update_processing_status", MagicMock()) as mock_status,
+            patch(f"{_MOD}.update_processing_status", MagicMock()),
             patch(f"{_MOD}.cleanup_lecture_data", MagicMock()),
         ):
             with pytest.raises(LectureProcessingError) as exc_info:

@@ -138,7 +138,7 @@ async def _processing_loop(
             )
             await asyncio.sleep(backoff)
 
-        except Exception as e:
+        except Exception:
             # Unexpected error — don't retry, let it propagate so the
             # caller (run_lecture_processing) can mark it as failed.
             logger.exception(

@@ -8,6 +8,8 @@ import re
 
 from lecturelink_api.models.tutor_models import GradingResultResponse
 
+from .genai_client import get_genai_client as _get_client
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,8 +21,6 @@ def _parse_json_lenient(text: str) -> dict:
         # Strip trailing commas before } or ]
         cleaned = re.sub(r",\s*([}\]])", r"\1", text)
         return json.loads(cleaned)
-
-from .genai_client import get_genai_client as _get_client
 
 GRADING_MODEL = "gemini-2.5-flash"
 

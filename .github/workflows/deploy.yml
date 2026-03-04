@@ -60,7 +60,7 @@ jobs:
         run: uv sync --frozen --project packages/api
 
       - name: Ruff lint
-        run: uv run ruff check packages/api/src/ packages/api/tests/
+        run: uv run ruff check packages/api/src/ packages/api/tests/ --config packages/api/pyproject.toml
 
       - name: Pytest
         run: uv run pytest packages/api/tests/ -v --tb=short --ignore=packages/api/tests/integration

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 from datetime import date
 
@@ -133,10 +134,8 @@ def _grade_total_accuracy(extraction: dict) -> float:
         weight = comp.get("weight_percent")
         if isinstance(weight, dict):
             weight = weight.get("value")
-        try:
+        with contextlib.suppress(ValueError, TypeError):
             total += float(weight) if weight is not None else 0.0
-        except (ValueError, TypeError):
-            pass
     if total == 0:
         return 0.0
     return max(0.0, 1.0 - abs(total - 100.0) / 100.0)

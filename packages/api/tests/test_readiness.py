@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -82,13 +82,13 @@ class TestGradeLetter:
 class TestDaysUntil:
     def test_future_date(self):
         from lecturelink_api.services.readiness import _days_until
-        future = (datetime.now(timezone.utc) + timedelta(days=5)).isoformat()
+        future = (datetime.now(UTC) + timedelta(days=5)).isoformat()
         result = _days_until(future)
         assert result in (4, 5)  # allow for time-of-day rounding
 
     def test_past_date_returns_negative(self):
         from lecturelink_api.services.readiness import _days_until
-        past = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+        past = (datetime.now(UTC) - timedelta(days=5)).isoformat()
         result = _days_until(past)
         assert result in (-5, -6)  # allow for time-of-day rounding
 
@@ -195,7 +195,7 @@ class TestGetAllAssessmentReadiness:
     async def test_returns_sorted_list(self):
         from lecturelink_api.services.readiness import get_all_assessment_readiness
 
-        future = (datetime.now(timezone.utc) + timedelta(days=10)).isoformat()
+        future = (datetime.now(UTC) + timedelta(days=10)).isoformat()
         assessment_data = [
             {"id": "a1", "course_id": "c1", "title": "Midterm",
              "due_date": future, "weight_percent": 30.0, "type": "exam"},

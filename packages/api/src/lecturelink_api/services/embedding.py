@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 
-from .genai_client import get_genai_client as _get_client, reset_genai_client
+from .genai_client import get_genai_client as _get_client
+from .genai_client import reset_genai_client
 
 logger = logging.getLogger(__name__)
 

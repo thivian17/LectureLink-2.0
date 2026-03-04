@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -49,7 +49,7 @@ def get_user_credentials(
             {
                 "access_token": creds.token,
                 "token_expires_at": creds.expiry.isoformat() if creds.expiry else None,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
             }
         ).eq("user_id", user_id).execute()
 

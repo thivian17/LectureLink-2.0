@@ -40,10 +40,7 @@ def compute_priority_score(
     today = date.today()
     days_until = (due_date - today).days
 
-    if days_until < 0:
-        urgency_factor = 0.9
-    else:
-        urgency_factor = 1.0 / (1.0 + days_until)
+    urgency_factor = 0.9 if days_until < 0 else 1.0 / (1.0 + days_until)
 
     return weight_factor * 0.4 + urgency_factor * 0.6
 

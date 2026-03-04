@@ -8,6 +8,7 @@ Integrates with gamification services via try/except for parallel development.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import uuid
@@ -668,7 +669,7 @@ async def get_power_quiz(
                 .limit(3)
                 .execute()
             )
-            lecture_ids = [l["id"] for l in (lectures_result.data or [])]
+            lecture_ids = [lec["id"] for lec in (lectures_result.data or [])]
             if lecture_ids:
                 course_chunks = (
                     supabase.table("lecture_chunks")
@@ -699,12 +700,10 @@ async def get_power_quiz(
         session_data = session.get("session_data", {})
         session_data["power_quiz"] = {"quiz_id": quiz_id, "questions": []}
         session_data["combo_count"] = 0
-        try:
+        with contextlib.suppress(Exception):
             supabase.table("learn_sessions").update({
                 "session_data": session_data,
             }).eq("id", session_id).execute()
-        except Exception:
-            pass
         return {"quiz_id": quiz_id, "questions": []}
 
     # Build prompt for power quiz generation

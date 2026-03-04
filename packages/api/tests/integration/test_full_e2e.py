@@ -90,7 +90,7 @@ def supabase_client(_check_credentials):
     url = os.environ["SUPABASE_URL"]
     key = os.environ["SUPABASE_ANON_KEY"]
     client = create_client(url, key)
-    auth_resp = client.auth.sign_in_with_password(
+    client.auth.sign_in_with_password(
         {
             "email": os.environ["TEST_USER_EMAIL"],
             "password": os.environ["TEST_USER_PASSWORD"],
