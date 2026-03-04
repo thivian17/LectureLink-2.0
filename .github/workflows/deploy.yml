@@ -193,8 +193,8 @@ jobs:
             --timeout 60s \
             --vpc-connector=${{ env.VPC_CONNECTOR }} \
             --service-account=${{ secrets.RUNTIME_SERVICE_ACCOUNT }} \
-            --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,GOOGLE_API_KEY=GEMINI_API_KEY:latest,INTERNAL_API_KEY=INTERNAL_API_KEY:latest" \
-            --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},REDIS_URL=redis://${{ secrets.MEMORYSTORE_IP }}:6379,CORS_ORIGINS=https://lecturelink.ca" \
+            --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,INTERNAL_API_KEY=INTERNAL_API_KEY:latest" \
+            --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},REDIS_URL=redis://${{ secrets.MEMORYSTORE_IP }}:6379,CORS_ORIGINS=https://lecturelink.ca,GOOGLE_GENAI_USE_VERTEXAI=TRUE" \
             --no-traffic \
             --allow-unauthenticated
 
@@ -253,8 +253,8 @@ jobs:
             --no-cpu-throttling \
             --vpc-connector=${{ env.VPC_CONNECTOR }} \
             --service-account=${{ secrets.RUNTIME_SERVICE_ACCOUNT }} \
-            --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,GOOGLE_API_KEY=GEMINI_API_KEY:latest" \
-            --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},REDIS_URL=redis://${{ secrets.MEMORYSTORE_IP }}:6379" \
+            --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest" \
+            --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},REDIS_URL=redis://${{ secrets.MEMORYSTORE_IP }}:6379,GOOGLE_GENAI_USE_VERTEXAI=TRUE" \
             --no-allow-unauthenticated
 
   # ---------------------------------------------------------------------------
