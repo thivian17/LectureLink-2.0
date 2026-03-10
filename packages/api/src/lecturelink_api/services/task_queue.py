@@ -258,6 +258,69 @@ class TaskQueueService:
             syllabus_id,
         )
 
+    async def enqueue_material_processing(
+        self,
+        material_id: str,
+        course_id: str,
+        user_id: str,
+        file_url: str,
+        file_name: str,
+        material_type: str,
+        *,
+        title: str | None = None,
+        supabase_url: str = "",
+        supabase_key: str = "",
+        user_token: str = "",
+        is_reprocess: bool = False,
+    ) -> None:
+        """Enqueue material processing via arq."""
+        job_id = await self._enqueue(
+            "task_process_material",
+            material_id=material_id,
+            course_id=course_id,
+            user_id=user_id,
+            file_url=file_url,
+            file_name=file_name,
+            material_type=material_type,
+            title=title,
+            supabase_url=supabase_url,
+            supabase_key=supabase_key,
+            user_token=user_token,
+            is_reprocess=is_reprocess,
+        )
+        if job_id is None:
+            self._fallback_material_processing(
+                supabase_url=supabase_url,
+                supabase_key=supabase_key,
+                user_token=user_token,
+                material_id=material_id,
+                course_id=course_id,
+                user_id=user_id,
+                file_url=file_url,
+                file_name=file_name,
+                material_type=material_type,
+                title=title,
+                is_reprocess=is_reprocess,
+            )
+
+    @staticmethod
+    def _fallback_material_processing(**kwargs) -> None:
+        """Fallback: run material processing in a daemon thread."""
+        import threading
+
+        from lecturelink_api.pipeline.material_background import run_material_processing
+
+        thread = threading.Thread(
+            target=run_material_processing,
+            kwargs=kwargs,
+            daemon=True,
+        )
+        thread.start()
+        logger.info(
+            "Fallback: started material processing thread for %s",
+            kwargs.get("material_id"),
+        )
+
     async def enqueue_notification(
         self,
         user_id: str,

@@ -16,7 +16,7 @@ export default function Home() {
         focus on what matters most.
       </p>
       <div className="flex gap-3">
-        <Button asChild size="lg">
+        <Button asChild size="lg" className="bg-brand text-brand-foreground hover:bg-brand-hover">
           <Link href="/signup">Get Started</Link>
         </Button>
         <Button variant="outline" asChild size="lg">

@@ -6,6 +6,7 @@ All endpoints are protected by X-Internal-API-Key header validation.
 from __future__ import annotations
 
 import logging
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -116,6 +117,15 @@ async def daily_refresh_task(
         except Exception:
             logger.warning("Failed to enqueue refresh for user %s", user_id, exc_info=True)
 
+    # Clean up old rate limit events
+    rate_limit_cleaned = 0
+    try:
+        cleanup_result = sb.rpc("cleanup_old_rate_limit_events").execute()
+        rate_limit_cleaned = cleanup_result.data or 0
+        logger.info("Cleaned up %s old rate limit events", rate_limit_cleaned)
+    except Exception:
+        logger.warning("Rate limit cleanup failed", exc_info=True)
+
     # Clean up expired ADK sessions
     sessions_cleaned = 0
     try:
@@ -125,22 +135,138 @@ async def daily_refresh_task(
     except Exception:
         logger.warning("Session cleanup failed", exc_info=True)
 
+    # Zombie sweep: requeue lectures stuck in "processing" for > 15 minutes
+    zombies_requeued = 0
+    try:
+        zombie_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
+        zombie_result = (
+            sb.table("lectures")
+            .select("id, user_id, course_id")
+            .eq("processing_status", "processing")
+            .lt("updated_at", zombie_cutoff)
+            .execute()
+        )
+        for zombie in zombie_result.data or []:
+            try:
+                sb.table("lectures").update({
+                    "processing_status": "pending",
+                    "processing_stage": None,
+                    "processing_progress": 0.0,
+                    "processing_error": "Requeued by zombie sweep (worker crash detected)",
+                }).eq("id", zombie["id"]).execute()
+                zombies_requeued += 1
+                logger.warning(
+                    "Zombie sweep: requeued lecture %s for user %s",
+                    zombie["id"],
+                    zombie["user_id"],
+                )
+            except Exception:
+                logger.warning("Zombie sweep failed for lecture %s", zombie["id"], exc_info=True)
+    except Exception:
+        logger.warning("Zombie sweep query failed", exc_info=True)
+
+    # Assessment deadline reminders (48h window)
+    reminders_enqueued = 0
+    try:
+        tomorrow_48h = (date.today() + timedelta(days=2)).isoformat()
+        tomorrow_50h = (date.today() + timedelta(days=3)).isoformat()
+        upcoming_assessments = (
+            sb.table("assessments")
+            .select("id, title, due_date, weight_percent, course_id, user_id")
+            .gte("due_date", tomorrow_48h)
+            .lt("due_date", tomorrow_50h)
+            .execute()
+        )
+        for assessment in upcoming_assessments.data or []:
+            try:
+                await task_queue.enqueue_notification(
+                    user_id=assessment["user_id"],
+                    notification_type="assessment_reminder_48h",
+                    message=assessment["id"],
+                )
+                reminders_enqueued += 1
+            except Exception:
+                pass
+    except Exception:
+        logger.warning("Deadline reminder dispatch failed", exc_info=True)
+
+    logger.info(
+        "Daily refresh: %d zombies requeued, %d reminder notifications enqueued",
+        zombies_requeued,
+        reminders_enqueued,
+    )
+
     return {
         "status": "ok",
         "users_enqueued": enqueued,
         "users_total": len(user_ids),
         "sessions_cleaned": sessions_cleaned,
+        "rate_limit_cleaned": rate_limit_cleaned,
+        "zombies_requeued": zombies_requeued,
+        "reminders_enqueued": reminders_enqueued,
     }
 
 
 @router.post("/send-notification", dependencies=[Depends(verify_internal_api_key)])
-async def send_notification_task(body: SendNotificationRequest):
-    """Send a single notification — called by Cloud Tasks in production."""
-    # Placeholder: actual notification sending (email, push, etc.) would go here.
-    logger.info(
-        "Notification [%s] to user %s: %s",
-        body.notification_type,
-        body.user_id,
-        body.message,
+async def send_notification_task(
+    body: SendNotificationRequest,
+    settings: Settings = Depends(get_settings),
+):
+    """Send a notification — dispatches to email service based on type."""
+    sb = create_client(
+        settings.SUPABASE_URL,
+        settings.SUPABASE_SERVICE_KEY or settings.SUPABASE_ANON_KEY,
     )
-    return {"status": "sent", "user_id": body.user_id}
+
+    if body.notification_type == "assessment_reminder_48h":
+        from lecturelink_api.services.email import send_assessment_reminder
+
+        # body.message contains the assessment_id
+        try:
+            assessment_result = (
+                sb.table("assessments")
+                .select("id, title, due_date, weight_percent, course_id, user_id")
+                .eq("id", body.message)
+                .single()
+                .execute()
+            )
+        except Exception:
+            return {"status": "skipped", "reason": "assessment not found"}
+
+        if not assessment_result.data:
+            return {"status": "skipped", "reason": "assessment not found"}
+
+        # Get user email from Supabase Auth admin
+        try:
+            user_data = sb.auth.admin.get_user_by_id(body.user_id)
+            user_email = user_data.user.email
+            user_name = user_email.split("@")[0].title()
+        except Exception:
+            return {"status": "skipped", "reason": "user email unavailable"}
+
+        sent = await send_assessment_reminder(
+            supabase=sb,
+            user_id=body.user_id,
+            user_email=user_email,
+            user_name=user_name,
+            assessment=assessment_result.data,
+        )
+        return {"status": "sent" if sent else "skipped", "user_id": body.user_id}
+
+    logger.info("Unhandled notification type: %s", body.notification_type)
+    return {"status": "skipped", "reason": "unhandled type"}
+
+
+@router.get("/grading-feedback-report", dependencies=[Depends(verify_internal_api_key)])
+async def grading_feedback_report(
+    lookback_days: int = 30,
+    settings: Settings = Depends(get_settings),
+):
+    """Aggregate grading accuracy report for tutor calibration."""
+    sb = create_client(
+        settings.SUPABASE_URL,
+        settings.SUPABASE_SERVICE_KEY or settings.SUPABASE_ANON_KEY,
+    )
+    from lecturelink_api.services.grading_report import get_grading_feedback_report
+
+    return await get_grading_feedback_report(sb, lookback_days=lookback_days)

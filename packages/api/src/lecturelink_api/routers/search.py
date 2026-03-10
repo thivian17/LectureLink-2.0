@@ -73,6 +73,17 @@ async def search(
             )
         )
 
+    try:
+        from lecturelink_api.services.observability import track_event
+
+        track_event(user["id"], "search_performed", {
+            "course_id": body.course_id,
+            "result_count": len(results),
+            "search_type": "hybrid",
+        })
+    except Exception:
+        pass
+
     return results
 
 

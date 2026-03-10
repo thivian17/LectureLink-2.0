@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import uuid
 from datetime import UTC, datetime
 
 from .concept_brief import generate_concept_brief
 from .flash_review import get_flash_review_cards, grade_flash_review
 from .genai_client import get_genai_client as _get_client
+from .mastery import compute_mastery, record_learning_event
 from .search import format_chunks_for_context, search_lectures
 
 logger = logging.getLogger(__name__)
@@ -228,8 +230,7 @@ async def start_learn_session(
             m_data = mastery_map.get(cid, {})
             accuracy = m_data.get("accuracy", 0.0)
             recent = m_data.get("recent_accuracy", 0.0)
-            has_attempts = m_data.get("total_attempts", 0) > 0
-            mastery = accuracy * 0.6 + recent * 0.4 if has_attempts else 0.0
+            mastery = compute_mastery(accuracy, recent, m_data.get("total_attempts", 0))
             selected.append({
                 "concept_id": cid,
                 "concept_title": m_data.get("concept_title", ""),
@@ -467,6 +468,17 @@ async def submit_gut_check(
     else:
         xp_earned = 0
 
+    # Record learning event for mastery tracking
+    await record_learning_event(
+        supabase,
+        user_id=user_id,
+        course_id=session["course_id"],
+        concept_id=concept_id,
+        event_type="gut_check",
+        is_correct=is_correct,
+        student_answer=str(answer_index),
+    )
+
     return {
         "correct": is_correct,
         "xp_earned": xp_earned,
@@ -510,6 +522,18 @@ async def submit_flash_review_answer(
         result_entry["correct"] = is_correct
         result_entry["xp_earned"] = xp_result.get("amount", 0)
 
+        # Record learning event for mastery tracking
+        await record_learning_event(
+            supabase,
+            user_id=user_id,
+            course_id=session["course_id"],
+            concept_id=card.get("concept_id", ""),
+            event_type="flash_review",
+            is_correct=is_correct,
+            student_answer=str(answer_index),
+            time_ms=time_ms,
+        )
+
         flash_results.append(result_entry)
         session_data["flash_review_results"] = flash_results
 
@@ -538,6 +562,115 @@ async def submit_flash_review_answer(
         logger.warning("Failed to update flash review results", exc_info=True)
 
     return result_entry
+
+
+async def _try_reuse_power_quiz_questions(
+    supabase,
+    course_id: str,
+    concept_ids: list[str],
+    count: int,
+) -> list[dict]:
+    """Try to pull existing MCQ questions for Power Quiz reuse.
+
+    Prefers questions that have been shown least often.
+    Returns up to `count` questions formatted for Power Quiz, may return fewer.
+    """
+    if not concept_ids or count <= 0:
+        return []
+
+    try:
+        result = (
+            supabase.table("quiz_questions")
+            .select("id, question_text, options, correct_answer, explanation, concept_id")
+            .in_("concept_id", concept_ids)
+            .eq("question_type", "mcq")
+            .in_("source", ["standalone", "power_quiz"])
+            .order("times_shown", desc=False)
+            .limit(count * 2)
+            .execute()
+        )
+        candidates = result.data or []
+    except Exception:
+        logger.debug("Failed to fetch reusable questions", exc_info=True)
+        return []
+
+    if not candidates:
+        return []
+
+    random.shuffle(candidates)
+    selected = candidates[:count]
+
+    # Format for Power Quiz session data
+    formatted = []
+    for q in selected:
+        options_raw = q.get("options", [])
+        option_texts = []
+        for opt in options_raw:
+            if isinstance(opt, dict):
+                label = opt.get("label", "")
+                text = opt.get("text", str(opt))
+                option_texts.append(f"{label}) {text}" if label else text)
+            else:
+                option_texts.append(str(opt))
+
+        correct_answer = q.get("correct_answer", "A")
+        correct_index = _find_correct_index_for_reuse(option_texts, correct_answer)
+
+        formatted.append({
+            "question_id": str(uuid.uuid4()),
+            "question_text": q["question_text"],
+            "options": option_texts,
+            "concept_id": q.get("concept_id", ""),
+            "concept_title": "",  # filled from concept_info later
+            "_correct_answer": correct_answer,
+            "_correct_index": correct_index,
+            "_explanation": q.get("explanation", ""),
+            "_stored_question_id": q["id"],
+            "_source": "reused",
+        })
+
+    # Update times_shown for reused questions
+    reused_ids = [q["id"] for q in selected]
+    for qid in reused_ids:
+        try:
+            supabase.rpc(
+                "increment_question_correct",
+                {"p_question_id": qid, "p_is_correct": False},
+            ).execute()
+        except Exception:
+            # Fallback: direct update
+            try:
+                current = (
+                    supabase.table("quiz_questions")
+                    .select("times_shown")
+                    .eq("id", qid)
+                    .single()
+                    .execute()
+                )
+                supabase.table("quiz_questions").update({
+                    "times_shown": (current.data or {}).get("times_shown", 0) + 1,
+                    "last_shown_at": datetime.now(UTC).isoformat(),
+                }).eq("id", qid).execute()
+            except Exception:
+                logger.debug("Failed to update times_shown for %s", qid, exc_info=True)
+
+    return formatted
+
+
+def _find_correct_index_for_reuse(options: list[str], correct_answer: str) -> int:
+    """Find the correct option index from a correct_answer string."""
+    correct_lower = correct_answer.strip().lower()
+    for i, opt in enumerate(options):
+        opt_lower = opt.strip().lower()
+        if opt_lower == correct_lower:
+            return i
+        label = chr(65 + i)
+        if correct_lower == label.lower():
+            return i
+        if opt_lower.startswith(f"{label.lower()})"):
+            if correct_lower == label.lower():
+                return i
+    return 0
 
 
 async def get_power_quiz(
@@ -691,13 +824,31 @@ async def get_power_quiz(
         except Exception:
             logger.debug("Course-wide chunk fallback failed", exc_info=True)
 
-    # If we still have no lecture content, return an empty quiz rather than
-    # letting the LLM hallucinate questions from its own knowledge.
+    # --- Try reusing existing questions before Gemini call ---
+    concept_ids = [c["concept_id"] for c in concept_info if c.get("concept_id")]
+    reuse_count = min(num_questions // 2, 4)  # Reuse up to half, max 4
+    reused_questions = await _try_reuse_power_quiz_questions(
+        supabase, course_id, concept_ids, reuse_count,
+    )
+
+    # Fill concept_title for reused questions
+    for rq in reused_questions:
+        for ci in concept_info:
+            if ci["concept_id"] == rq.get("concept_id"):
+                rq["concept_title"] = ci.get("title", "")
+                break
+
+    remaining_needed = num_questions - len(reused_questions)
+
+    # If we still have no lecture content, return reused questions only
+    # (or empty quiz if none reused) rather than letting the LLM hallucinate.
     if not all_chunks:
-        logger.warning("Power quiz: no lecture content found for course %s — returning empty quiz", course_id)
+        if not reused_questions:
+            logger.warning("Power quiz: no lecture content found for course %s — returning empty quiz", course_id)
         quiz_id = str(uuid.uuid4())
+        questions = reused_questions
         session_data = session.get("session_data", {})
-        session_data["power_quiz"] = {"quiz_id": quiz_id, "questions": []}
+        session_data["power_quiz"] = {"quiz_id": quiz_id, "questions": questions}
         session_data["combo_count"] = 0
         try:
             supabase.table("learn_sessions").update({
@@ -705,79 +856,124 @@ async def get_power_quiz(
             }).eq("id", session_id).execute()
         except Exception:
             pass
-        return {"quiz_id": quiz_id, "questions": []}
-
-    # Build prompt for power quiz generation
-    context = format_chunks_for_context(all_chunks)
-    concept_list = ", ".join(c["title"] for c in concept_info if c["title"])
-    if not concept_list:
-        concept_list = "the topics covered in the lecture content below"
-
-    prompt = (
-        f"Generate exactly {num_questions} multiple-choice quiz questions.\n"
-        f"Concepts to cover: {concept_list}\n"
-        "Interleave questions across concepts (don't group by concept).\n\n"
-        f"Lecture Content:\n{context}\n\n"
-        "Rules:\n"
-        "- Each question must have exactly 4 options (A-D)\n"
-        "- One correct answer per question\n"
-        "- CRITICAL: Every question MUST be directly answerable from the lecture "
-        "content provided above. Do NOT use outside knowledge.\n"
-        "- Vary difficulty: some recognition, some application\n"
-        "- Include the concept_title for each question\n\n"
-        "Respond ONLY with valid JSON array:\n"
-        "[\n"
-        '  {\n'
-        '    "question_text": "...",\n'
-        '    "options": ["A) ...", "B) ...", "C) ...", "D) ..."],\n'
-        '    "correct_answer": "A",\n'
-        '    "correct_index": 0,\n'
-        '    "explanation": "...",\n'
-        '    "concept_title": "..."\n'
-        '  }\n'
-        "]"
-    )
+        client_questions = [
+            {
+                "question_id": q["question_id"],
+                "question_text": q["question_text"],
+                "options": q["options"],
+                "concept_id": q["concept_id"],
+                "concept_title": q["concept_title"],
+            }
+            for q in questions
+        ]
+        return {"quiz_id": quiz_id, "questions": client_questions}
 
     # Map concept titles to IDs
     title_to_id = {c["title"]: c["concept_id"] for c in concept_info}
 
-    try:
-        response = await _get_client().aio.models.generate_content(
-            model=QUIZ_MODEL,
-            contents=prompt,
-            config={
-                "temperature": 0.5,
-                "response_mime_type": "application/json",
-            },
+    # --- Generate remaining questions via Gemini ---
+    generated_questions: list[dict] = []
+    if remaining_needed > 0:
+        context = format_chunks_for_context(all_chunks)
+        concept_list = ", ".join(c["title"] for c in concept_info if c["title"])
+        if not concept_list:
+            concept_list = "the topics covered in the lecture content below"
+
+        prompt = (
+            f"Generate exactly {remaining_needed} multiple-choice quiz questions.\n"
+            f"Concepts to cover: {concept_list}\n"
+            "Interleave questions across concepts (don't group by concept).\n\n"
+            f"Lecture Content:\n{context}\n\n"
+            "Rules:\n"
+            "- Each question must have exactly 4 options (A-D)\n"
+            "- One correct answer per question\n"
+            "- CRITICAL: Every question MUST be directly answerable from the lecture "
+            "content provided above. Do NOT use outside knowledge.\n"
+            "- Vary difficulty: some recognition, some application\n"
+            "- Include the concept_title for each question\n\n"
+            "Respond ONLY with valid JSON array:\n"
+            "[\n"
+            '  {\n'
+            '    "question_text": "...",\n'
+            '    "options": ["A) ...", "B) ...", "C) ...", "D) ..."],\n'
+            '    "correct_answer": "A",\n'
+            '    "correct_index": 0,\n'
+            '    "explanation": "...",\n'
+            '    "concept_title": "..."\n'
+            '  }\n'
+            "]"
         )
-        raw_questions = json.loads(response.text)
-        if isinstance(raw_questions, dict):
-            raw_questions = raw_questions.get("questions", [])
-    except Exception:
-        logger.error("Power quiz generation failed", exc_info=True)
-        raw_questions = []
 
-    # Build question list with IDs
-    quiz_id = str(uuid.uuid4())
-    questions = []
-    for q in raw_questions[:num_questions]:
-        question_id = str(uuid.uuid4())
-        concept_title = q.get("concept_title", "")
-        concept_id = title_to_id.get(concept_title, "")
+        try:
+            response = await _get_client().aio.models.generate_content(
+                model=QUIZ_MODEL,
+                contents=prompt,
+                config={
+                    "temperature": 0.5,
+                    "response_mime_type": "application/json",
+                },
+            )
+            raw_questions = json.loads(response.text)
+            if isinstance(raw_questions, dict):
+                raw_questions = raw_questions.get("questions", [])
+        except Exception:
+            logger.error("Power quiz generation failed", exc_info=True)
+            raw_questions = []
 
-        questions.append({
-            "question_id": question_id,
-            "question_text": q.get("question_text", ""),
-            "options": q.get("options", []),
-            "concept_id": concept_id,
-            "concept_title": concept_title,
-            # Store correct answer in session data, not sent to client
-            "_correct_answer": q.get("correct_answer", "A"),
-            "_correct_index": q.get("correct_index", 0),
-            "_explanation": q.get("explanation", ""),
-        })
+        for q in raw_questions[:remaining_needed]:
+            question_id = str(uuid.uuid4())
+            concept_title = q.get("concept_title", "")
+            concept_id_for_q = title_to_id.get(concept_title, "")
+
+            generated_questions.append({
+                "question_id": question_id,
+                "question_text": q.get("question_text", ""),
+                "options": q.get("options", []),
+                "concept_id": concept_id_for_q,
+                "concept_title": concept_title,
+                "_correct_answer": q.get("correct_answer", "A"),
+                "_correct_index": q.get("correct_index", 0),
+                "_explanation": q.get("explanation", ""),
+                "_stored_question_id": None,
+                "_source": "generated",
+            })
+
+    # --- Persist newly generated questions to quiz_questions ---
+    for q in generated_questions:
+        record = {
+            "user_id": user_id,
+            "question_index": 0,
+            "question_type": "mcq",
+            "question_text": q["question_text"],
+            "options": [
+                {"label": chr(65 + i), "text": opt.lstrip("ABCD) ")}
+                for i, opt in enumerate(q["options"])
+            ],
+            "correct_answer": q["_correct_answer"],
+            "explanation": q.get("_explanation", ""),
+            "concept_id": q.get("concept_id") or title_to_id.get(q.get("concept_title", "")),
+            "source": "power_quiz",
+            "difficulty": 0.5,
+            "times_shown": 1,
+            "last_shown_at": datetime.now(UTC).isoformat(),
+        }
+        # Remove concept_id if empty to avoid FK violation
+        if not record["concept_id"]:
+            record.pop("concept_id", None)
+        try:
+            result = supabase.table("quiz_questions").insert(record).execute()
+            if result.data:
+                q["_stored_question_id"] = result.data[0]["id"]
+        except Exception:
+            logger.debug("Failed to persist power quiz question", exc_info=True)
+
+    # Merge reused + generated, shuffle
+    all_quiz_questions = reused_questions + generated_questions
+    random.shuffle(all_quiz_questions)
+    questions = all_quiz_questions[:num_questions]
 
     # Store quiz data in session
+    quiz_id = str(uuid.uuid4())
     session_data = session.get("session_data", {})
     session_data["power_quiz"] = {
         "quiz_id": quiz_id,
@@ -901,6 +1097,19 @@ async def submit_power_quiz_answer(
     except Exception:
         logger.warning("Failed to update quiz results", exc_info=True)
 
+    # Record learning event for mastery tracking
+    await record_learning_event(
+        supabase,
+        user_id=user_id,
+        course_id=session["course_id"],
+        concept_id=question.get("concept_id", ""),
+        event_type="power_quiz",
+        is_correct=is_correct,
+        student_answer=str(answer_index),
+        time_ms=time_ms,
+        metadata={"combo_count": combo_count, "speed_run": is_speed_run},
+    )
+
     return {
         "correct": is_correct,
         "correct_answer": correct_answer_text,
@@ -995,16 +1204,33 @@ async def complete_learn_session(
     # 7. Check badges
     badges_earned = await _check_badges(supabase, user_id)
 
-    # 8. Tomorrow preview
+    try:
+        from .observability import track_event
+
+        track_event(user_id, "learn_session_completed", {
+            "xp_earned": total_xp,
+            "combo_max": combo_max,
+            "concepts_completed": len(concepts_covered),
+        })
+    except Exception:
+        pass
+
+    # 8. Tomorrow preview — only show upcoming (future) assessments
     tomorrow_preview = ""
     try:
+        from datetime import date as _date
+
         result = supabase.rpc(
             "get_study_priorities",
             {"p_course_id": session["course_id"]},
         ).execute()
-        if result.data:
-            p = result.data[0]
-            title = p.get("title", "Review")
+        upcoming = [
+            p
+            for p in (result.data or [])
+            if p.get("due_date") and p["due_date"] >= str(_date.today())
+        ]
+        if upcoming:
+            title = upcoming[0].get("title", "Review")
             tomorrow_preview = f"Continue preparing for {title}"
         else:
             tomorrow_preview = "Keep your streak going tomorrow!"

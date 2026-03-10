@@ -259,7 +259,7 @@ export function CourseDetail({
             </TabsTrigger>
             <TabsTrigger value="calendar">Calendar</TabsTrigger>
             <TabsTrigger value="search">Search</TabsTrigger>
-            <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
+            <TabsTrigger value="quizzes">Practice Tests</TabsTrigger>
             <TabsTrigger value="coach">Study Coach</TabsTrigger>
           </TabsList>
         </div>

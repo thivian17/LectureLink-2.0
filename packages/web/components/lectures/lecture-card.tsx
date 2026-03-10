@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { Clock, RotateCcw } from "lucide-react";
+import { AlertTriangle, Clock, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -94,6 +94,15 @@ export const LectureCard = React.memo(function LectureCard({ lecture, courseId, 
               </Button>
             )}
           </div>
+          {lecture.processing_status === "completed" && lecture.low_concept_yield && (
+            <Badge
+              variant="outline"
+              className="gap-1 font-medium bg-amber-50 text-amber-700 border-amber-200"
+            >
+              <AlertTriangle className="h-3 w-3" />
+              Few concepts found
+            </Badge>
+          )}
           {lecture.processing_status === "completed" && lecture.summary && (
             <p className="text-sm text-muted-foreground line-clamp-2">
               {lecture.summary.length > 100

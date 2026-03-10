@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, AlertTriangle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -149,6 +149,23 @@ export function LectureDetailClient({
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
+      {/* Low concept yield warning */}
+      {lecture.low_concept_yield && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 mx-4 mt-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800">
+              Few concepts were extracted from this lecture
+            </p>
+            <p className="text-sm text-amber-700 mt-1">
+              This may be due to short recording length, audio quality, or highly abstract
+              content. Quiz generation and AI tutoring may be limited for this lecture.
+              Try uploading a longer recording or adding slides.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Summary header */}
       <LectureSummary
         title={lecture.title}

@@ -18,6 +18,7 @@ from lecturelink_api.models.tutor_models import (
 
 from . import tutor_prompts
 from .genai_client import get_genai_client as _get_client
+from .mastery import compute_mastery
 from .search import search_lectures
 
 logger = logging.getLogger(__name__)
@@ -107,7 +108,7 @@ async def _get_concepts_from_tables(
         accuracy = m.get("accuracy", 0.0)
         recent = m.get("recent_accuracy", 0.0)
         attempts = m.get("total_attempts", 0)
-        mastery = 0.0 if attempts == 0 else round(accuracy * 0.6 + recent * 0.4, 4)
+        mastery = compute_mastery(accuracy, recent, attempts)
         mastery_map[m["concept_id"]] = {
             "concept_id": m["concept_id"],
             "title": m["concept_title"],
@@ -1054,10 +1055,7 @@ async def get_assessment_readiness(
             accuracy = m.get("accuracy", 0.0)
             recent = m.get("recent_accuracy", 0.0)
             attempts = m.get("total_attempts", 0)
-            mastery = (
-                0.0 if attempts == 0
-                else round(accuracy * 0.6 + recent * 0.4, 4)
-            )
+            mastery = compute_mastery(accuracy, recent, attempts)
             mastery_map[m["concept_id"]] = {
                 "concept_id": m["concept_id"],
                 "title": m["concept_title"],

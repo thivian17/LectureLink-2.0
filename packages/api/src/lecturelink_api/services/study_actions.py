@@ -1,4 +1,15 @@
-"""Study Actions — deterministic, schedule-aware action recommendations."""
+"""Deterministic study action engine — primary study recommendation system.
+
+This module is the canonical source of study recommendations. It computes
+priorities based on due dates, concept mastery, and assessment weight without
+LLM cost. Used by:
+  - GET /api/study-actions (fast path, <100ms)
+  - GET /api/courses/{course_id}/study-actions
+  - Study Coach agent as context provider
+
+For LLM-enhanced natural language framing of these recommendations,
+see study_actions_llm.py (called only from /api/study-actions/enhanced).
+"""
 
 from __future__ import annotations
 

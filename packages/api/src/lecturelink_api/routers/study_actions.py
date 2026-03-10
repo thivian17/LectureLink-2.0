@@ -41,6 +41,8 @@ def _sb(user: dict, settings: Settings):
     return client
 
 
+# Fast path: deterministic, <100ms, no LLM cost.
+# Use this for dashboard widgets and coach context.
 @router.get("/study-actions", response_model=StudyActionsListResponse)
 async def get_all_study_actions(
     user: dict = Depends(get_current_user),
@@ -63,6 +65,8 @@ async def get_all_study_actions(
     )
 
 
+# Enhanced path: LLM-rephrased, ~1-3s, costs tokens.
+# Use this when displaying actions with motivating language to students.
 @router.get("/study-actions/enhanced", response_model=StudyActionsListResponse)
 async def get_enhanced_study_actions(
     user: dict = Depends(get_current_user),

@@ -78,11 +78,47 @@ export function SessionCelebration({ data }: SessionCelebrationProps) {
         </p>
       </div>
 
+      {/* Stats grid */}
+      <div className="grid grid-cols-3 gap-3 text-center">
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-2xl font-bold">{session_summary.concepts_covered.length}</p>
+          <p className="text-xs text-muted-foreground">Concepts</p>
+        </div>
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-2xl font-bold">
+            {session_summary.quiz_score.correct}/{session_summary.quiz_score.total}
+          </p>
+          <p className="text-xs text-muted-foreground">Quiz Score</p>
+        </div>
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="text-2xl font-bold text-primary">+{xp_summary.total_earned}</p>
+          <p className="text-xs text-muted-foreground">XP Earned</p>
+        </div>
+      </div>
+
+      {/* Level-up banner */}
+      {xp_summary.leveled_up && (
+        <div className="rounded-lg border border-primary/50 bg-primary/5 p-4 text-center animate-in zoom-in-95 fade-in duration-500">
+          <p className="text-lg font-bold text-primary">🎉 Level Up!</p>
+          <p className="text-sm text-muted-foreground">
+            You reached Level {xp_summary.level_after}
+          </p>
+        </div>
+      )}
+
+      {/* Streak display */}
+      {streak.current_streak > 0 && (
+        <div className="flex items-center justify-center gap-2 text-sm">
+          <span className="animate-bounce">🔥</span>
+          <span className="font-medium">{streak.current_streak}-day streak!</span>
+        </div>
+      )}
+
       {/* XP Summary */}
       <Card>
         <CardContent className="p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">XP Earned</span>
+            <span className="text-sm font-medium">XP Breakdown</span>
             <span className="text-xl font-bold text-emerald-600">+{xp_summary.total_earned}</span>
           </div>
           <div className="space-y-1">
@@ -93,11 +129,6 @@ export function SessionCelebration({ data }: SessionCelebrationProps) {
               </div>
             ))}
           </div>
-          {xp_summary.leveled_up && (
-            <div className="rounded-lg bg-primary/10 p-2 text-center text-sm font-medium text-primary">
-              Level Up! Lv {xp_summary.level_before} → Lv {xp_summary.level_after}
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -188,16 +219,16 @@ export function SessionCelebration({ data }: SessionCelebrationProps) {
       <div className="flex gap-3">
         <Button
           className="flex-1"
-          onClick={() => router.push("/dashboard")}
+          onClick={() => router.push(`/dashboard/courses/${params.courseId}/learn`)}
         >
-          Done
+          Study Again
         </Button>
         <Button
           variant="outline"
           className="flex-1"
-          onClick={() => router.push(`/dashboard/courses/${params.courseId}/tutor`)}
+          onClick={() => router.push("/dashboard")}
         >
-          Keep Learning
+          Done for Today
         </Button>
       </div>
     </div>

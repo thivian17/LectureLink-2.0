@@ -36,6 +36,7 @@ const mockLectures: Lecture[] = [
     summary:
       "Introduction to thermodynamic systems and energy transfer. Covers basic definitions, system boundaries, and the zeroth law of thermodynamics.",
     duration_seconds: 3000,
+    low_concept_yield: false,
     created_at: new Date().toISOString(),
   },
   {
@@ -49,6 +50,7 @@ const mockLectures: Lecture[] = [
     processing_progress: 0.6,
     summary: null,
     duration_seconds: null,
+    low_concept_yield: false,
     created_at: new Date().toISOString(),
   },
   {
@@ -62,6 +64,7 @@ const mockLectures: Lecture[] = [
     processing_progress: 0.0,
     summary: null,
     duration_seconds: null,
+    low_concept_yield: false,
     created_at: new Date().toISOString(),
   },
   {
@@ -75,6 +78,7 @@ const mockLectures: Lecture[] = [
     processing_progress: 0.3,
     summary: null,
     duration_seconds: null,
+    low_concept_yield: false,
     created_at: new Date().toISOString(),
   },
 ];

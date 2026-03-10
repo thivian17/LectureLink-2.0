@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertTriangle, FileText } from "lucide-react";
+import { AlertCircle, AlertTriangle, FileText } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -277,6 +277,24 @@ export function SyllabusReviewClient({
             : "AI-extracted data is shown below with confidence scores. Review, edit, and accept the results."}
         </p>
       </div>
+
+      {/* Low confidence warning */}
+      {!hideConfidence && (syllabus.extraction_confidence !== null && syllabus.extraction_confidence < 0.5) && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-red-800">
+              Low extraction confidence — please review carefully
+            </p>
+            <p className="text-sm text-red-700 mt-1">
+              The AI had difficulty reading this syllabus (confidence:{" "}
+              {Math.round((syllabus.extraction_confidence || 0) * 100)}%).
+              This often happens with scanned PDFs or image-based documents.
+              Please verify all dates, weights, and assessment titles before continuing.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Overall confidence */}
       {!hideConfidence && (

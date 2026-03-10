@@ -14,6 +14,7 @@ import json
 import logging
 
 from .genai_client import get_genai_client as _get_client
+from .mastery import mastery_tier
 from .search import format_chunks_for_context, search_lectures
 
 logger = logging.getLogger(__name__)
@@ -80,15 +81,7 @@ Be direct and efficient — no Socratic dialogue, just a clear correction ground
 the lecture content."""
 
 
-def _mastery_tier(score: float) -> str:
-    """Classify mastery score into a tier label."""
-    if score < 0.3:
-        return "novice"
-    if score < 0.6:
-        return "developing"
-    if score < 0.8:
-        return "proficient"
-    return "advanced"
+_mastery_tier = mastery_tier  # Use shared implementation
 
 
 def _parse_json_response(text: str) -> dict | list:

@@ -45,6 +45,12 @@ import type {
   QuizAnswerResult,
   PowerQuizQuestion,
   LearnSessionComplete,
+  Invite,
+  MaterialType,
+  CourseMaterial,
+  CourseMaterialDetail,
+  MaterialStatus,
+  MaterialListResponse,
 } from "@/types/database";
 import {
   ApiError,
@@ -593,6 +599,111 @@ export async function chatWithCoach(
     },
   );
   return resp.json();
+}
+
+// ---------------------------------------------------------------------------
+// Study Coach — Streaming
+// ---------------------------------------------------------------------------
+
+/**
+ * Stream study coach chat. Returns an async generator of text chunks.
+ * Usage: for await (const chunk of streamCoachChat(courseId, message)) { ... }
+ */
+export async function* streamCoachChat(
+  courseId: string,
+  message: string,
+  conversationHistory?: Array<{ role: string; content: string }>,
+): AsyncGenerator<string> {
+  const headers = await getAuthHeaders();
+  const response = await fetch(
+    `${API_BASE}/api/courses/${courseId}/study-coach/chat/stream`,
+    {
+      method: "POST",
+      headers: {
+        ...headers,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message,
+        conversation_history: conversationHistory,
+      }),
+    },
+  );
+
+  if (!response.ok) throw new ApiError("Stream failed", response.status);
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        try {
+          const parsed = JSON.parse(line.slice(6));
+          if (parsed.type === "chunk") yield parsed.content;
+          if (parsed.type === "done") return;
+        } catch {
+          /* ignore malformed chunks */
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Stream tutor chat. Returns an async generator of text chunks.
+ */
+export async function* streamTutorChat(
+  sessionId: string,
+  message: string,
+): AsyncGenerator<string> {
+  const headers = await getAuthHeaders();
+  const response = await fetch(
+    `${API_BASE}/api/tutor/session/${sessionId}/chat/stream`,
+    {
+      method: "POST",
+      headers: {
+        ...headers,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ message }),
+    },
+  );
+
+  if (!response.ok) throw new ApiError("Stream failed", response.status);
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        try {
+          const parsed = JSON.parse(line.slice(6));
+          if (parsed.type === "chunk") yield parsed.content;
+          if (parsed.type === "done") return;
+        } catch {
+          /* ignore malformed chunks */
+        }
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1174,4 +1285,200 @@ export async function disconnectGoogle(): Promise<void> {
   await fetchWithAuth(`${API_BASE}/api/google/tokens`, {
     method: "DELETE",
   });
+}
+
+// ---------------------------------------------------------------------------
+// Invites & Referrals
+// ---------------------------------------------------------------------------
+
+export async function createInvite(opts: {
+  email?: string;
+  max_uses?: number;
+}): Promise<Invite> {
+  const resp = await fetchWithAuth(`${API_BASE}/api/invites`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(opts),
+  });
+  return resp.json();
+}
+
+export async function listInvites(): Promise<Invite[]> {
+  const resp = await fetchWithAuth(`${API_BASE}/api/invites`);
+  return resp.json();
+}
+
+export async function validateInvite(
+  code: string,
+): Promise<{ valid: boolean }> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/invites/validate/${code}`,
+  );
+  return resp.json();
+}
+
+export async function createCourseShareToken(
+  courseId: string,
+): Promise<{ share_token: string; share_url: string }> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/invites/courses/${courseId}/share-token`,
+    { method: "POST" },
+  );
+  return resp.json();
+}
+
+// ---------------------------------------------------------------------------
+// Feedback
+// ---------------------------------------------------------------------------
+
+export interface FeedbackSubmission {
+  type: "bug" | "feature" | "ux" | "praise";
+  description: string;
+  page_url: string;
+  page_title?: string;
+  screenshot_storage_path?: string;
+  annotation_bounds?: { x: number; y: number; width: number; height: number };
+  browser_info?: {
+    user_agent: string;
+    viewport_width: number;
+    viewport_height: number;
+    platform: string;
+  };
+  console_errors?: string[];
+}
+
+export interface FeedbackResponse {
+  id: string;
+  github_issue_url?: string;
+  message: string;
+}
+
+export async function uploadFeedbackScreenshot(
+  blob: Blob,
+): Promise<{ storage_path: string }> {
+  const formData = new FormData();
+  formData.append("file", blob, "screenshot.png");
+  // Do NOT set Content-Type header — let the browser set multipart boundary
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/feedback/upload-screenshot`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+  return resp.json();
+}
+
+export async function submitFeedback(
+  data: FeedbackSubmission,
+): Promise<FeedbackResponse> {
+  const resp = await fetchWithAuth(`${API_BASE}/api/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return resp.json();
+}
+
+// ---------------------------------------------------------------------------
+// Course Materials
+// ---------------------------------------------------------------------------
+
+export async function uploadMaterial(
+  courseId: string,
+  file: File,
+  materialType: MaterialType,
+  options?: {
+    title?: string;
+    linkedAssessmentId?: string;
+    weekNumber?: number;
+    relevantDate?: string;
+  },
+): Promise<CourseMaterial> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("material_type", materialType);
+  if (options?.title) formData.append("title", options.title);
+  if (options?.linkedAssessmentId)
+    formData.append("linked_assessment_id", options.linkedAssessmentId);
+  if (options?.weekNumber)
+    formData.append("week_number", String(options.weekNumber));
+  if (options?.relevantDate)
+    formData.append("relevant_date", options.relevantDate);
+
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/materials/upload`,
+    {
+      method: "POST",
+      body: formData,
+      // Do NOT set Content-Type — browser sets it with boundary for FormData
+    },
+  );
+  return resp.json();
+}
+
+export async function listMaterials(
+  courseId: string,
+  materialType?: MaterialType,
+): Promise<MaterialListResponse> {
+  const params = new URLSearchParams();
+  if (materialType) params.set("material_type", materialType);
+  const qs = params.toString();
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/materials${qs ? `?${qs}` : ""}`,
+  );
+  return resp.json();
+}
+
+export async function getMaterial(
+  materialId: string,
+): Promise<CourseMaterialDetail> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/materials/${materialId}`,
+  );
+  return resp.json();
+}
+
+export async function getMaterialStatus(
+  materialId: string,
+): Promise<MaterialStatus> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/materials/${materialId}/status`,
+  );
+  return resp.json();
+}
+
+export async function deleteMaterial(materialId: string): Promise<void> {
+  await fetchWithAuth(`${API_BASE}/api/materials/${materialId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function retryMaterial(materialId: string): Promise<CourseMaterial> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/materials/${materialId}/retry`,
+    { method: "POST" },
+  );
+  return resp.json();
+}
+
+export async function updateMaterial(
+  materialId: string,
+  updates: {
+    title?: string;
+    material_type?: MaterialType;
+    linked_assessment_id?: string | null;
+    week_number?: number | null;
+    relevant_date?: string | null;
+  },
+): Promise<CourseMaterial> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/materials/${materialId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    },
+  );
+  return resp.json();
 }

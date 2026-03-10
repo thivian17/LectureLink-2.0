@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 
+from .mastery import compute_mastery
+
 logger = logging.getLogger(__name__)
 
 # Urgency bands
@@ -140,7 +142,7 @@ async def get_assessment_readiness(
         attempts = m_data.get("total_attempts", 0)
         accuracy = m_data.get("accuracy", 0.0)
         recent = m_data.get("recent_accuracy", 0.0)
-        mastery = 0.0 if attempts == 0 else round(accuracy * 0.6 + recent * 0.4, 4)
+        mastery = compute_mastery(accuracy, recent, attempts)
 
         weight = max(relevance, 0.1)
         total_weight += weight
@@ -236,7 +238,7 @@ async def get_course_readiness_summary(
         attempts = m.get("total_attempts", 0)
         accuracy = m.get("accuracy", 0.0)
         recent = m.get("recent_accuracy", 0.0)
-        mastery = 0.0 if attempts == 0 else accuracy * 0.6 + recent * 0.4
+        mastery = compute_mastery(accuracy, recent, attempts)
         mastery_sum += mastery
         if mastery >= 0.8:
             concepts_mastered += 1

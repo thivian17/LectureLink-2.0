@@ -38,10 +38,11 @@ AS $$
             ELSE
                 -- Active mode (default): original formula
                 -- priority = weight_factor * 0.4 + urgency_factor * 0.6
+                -- Past-due assessments get low urgency (0.05) so future ones rank higher
                 (
                     COALESCE(a.weight_percent, 0.0) / 100.0 * 0.4
                     + CASE
-                        WHEN a.due_date < CURRENT_DATE THEN 0.9
+                        WHEN a.due_date < CURRENT_DATE THEN 0.05
                         ELSE 1.0 / (1.0 + (a.due_date - CURRENT_DATE))
                       END * 0.6
                 )

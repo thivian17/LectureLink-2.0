@@ -45,46 +45,113 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
+  /* Brand colors */
+  --color-brand: var(--brand-primary);
+  --color-brand-hover: var(--brand-primary-hover);
+  --color-brand-light: var(--brand-primary-light);
+  --color-brand-foreground: var(--brand-primary-foreground);
+
+  /* Mastery state colors */
+  --color-mastery-learning: var(--mastery-learning);
+  --color-mastery-developing: var(--mastery-developing);
+  --color-mastery-proficient: var(--mastery-proficient);
+  --color-mastery-mastered: var(--mastery-mastered);
+
+  /* Assessment type colors */
+  --color-assessment-exam: var(--assessment-exam);
+  --color-assessment-quiz: var(--assessment-quiz);
+  --color-assessment-assignment: var(--assessment-assignment);
+
+  /* Status colors */
+  --color-status-processing: var(--status-processing);
+  --color-status-success: var(--status-success);
+  --color-status-error: var(--status-error);
+
+  /* Info color */
+  --color-info: var(--info);
 }
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(0.962 0.019 277);
-  --foreground: oklch(0.145 0 0);
+
+  /* Brand Primary */
+  --brand-primary: oklch(0.488 0.243 264.376);
+  --brand-primary-hover: oklch(0.423 0.229 264.376);
+  --brand-primary-light: oklch(0.932 0.068 264.376);
+  --brand-primary-foreground: oklch(0.985 0.002 264);
+
+  /* Surface + Background */
+  --background: oklch(0.985 0.002 264);
+  --surface: oklch(1 0 0);
+  --surface-muted: oklch(0.961 0.004 264);
+
+  /* Text */
+  --foreground: oklch(0.145 0.015 264);
+  --muted-foreground: oklch(0.556 0.015 264);
+
+  /* Border */
+  --border: oklch(0.879 0.015 264);
+
+  /* shadcn base tokens (mapped to brand) */
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.145 0.015 264);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.5460 0.2120 264.05);
-  --primary-foreground: oklch(0.985 0 0);
+  --popover-foreground: oklch(0.145 0.015 264);
+  --primary: oklch(0.488 0.243 264.376);
+  --primary-foreground: oklch(0.985 0.002 264);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.70 0.15 264.05);
-  --chart-1: oklch(0.5460 0.2120 264.05);
+  --input: oklch(0.879 0.015 264);
+  --ring: oklch(0.488 0.243 264.376);
+  --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.5460 0.2120 264.05);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar: oklch(0.985 0.002 264);
+  --sidebar-foreground: oklch(0.145 0.015 264);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0.002 264);
   --sidebar-accent: oklch(0.97 0.015 264.05);
   --sidebar-accent-foreground: oklch(0.36 0.155 264.05);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.70 0.15 264.05);
+  --sidebar-border: oklch(0.879 0.015 264);
+  --sidebar-ring: oklch(0.488 0.243 264.376);
+
+  /* Mastery states */
+  --mastery-learning: oklch(0.637 0.237 25.331);
+  --mastery-developing: oklch(0.769 0.189 75.334);
+  --mastery-proficient: oklch(0.672 0.194 142.495);
+  --mastery-mastered: oklch(0.488 0.229 264.376);
+
+  /* Assessment types */
+  --assessment-exam: oklch(0.488 0.243 264.376);
+  --assessment-quiz: oklch(0.609 0.228 293.745);
+  --assessment-assignment: oklch(0.672 0.194 142.495);
+
+  /* Status */
+  --status-processing: oklch(0.769 0.189 75.334);
+  --status-success: oklch(0.672 0.194 142.495);
+  --status-error: oklch(0.637 0.237 25.331);
+
+  /* Info/Sky — distinct from brand blue */
+  --info: oklch(0.651 0.202 219.0);
 }
 
 .dark {
+  --brand-primary: oklch(0.70 0.15 264.05);
+  --brand-primary-hover: oklch(0.65 0.17 264.05);
+  --brand-primary-light: oklch(0.27 0.04 264.05);
+  --brand-primary-foreground: oklch(0.205 0.02 264.05);
+
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
+  --surface: oklch(0.205 0 0);
+  --surface-muted: oklch(0.269 0 0);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
@@ -123,4 +190,101 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* ── Math / KaTeX formula highlighting ── */
+
+/* Display math blocks: highlighted with background + border */
+.katex-display {
+  background: oklch(0.97 0.01 264 / 60%);
+  border: 1px solid oklch(0.85 0.04 264);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+  overflow-x: auto;
+}
+.dark .katex-display {
+  background: oklch(0.22 0.02 264 / 50%);
+  border-color: oklch(0.35 0.04 264);
+}
+
+/* Inline math: subtle highlight so formulas don't blend into text */
+.katex:not(.katex-display .katex) {
+  background: oklch(0.95 0.015 264 / 50%);
+  padding: 0.1em 0.25em;
+  border-radius: 0.25rem;
+  font-size: 1.05em;
+}
+.dark .katex:not(.katex-display .katex) {
+  background: oklch(0.25 0.02 264 / 50%);
+}
+
+/* ── Better prose readability for learn/tutor content ── */
+
+/* Section headings inside content get a visual break */
+.ll-section-heading {
+  margin-top: 1.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid oklch(0.9 0.01 264);
+  font-weight: 600;
+  color: oklch(0.3 0.04 264);
+}
+.dark .ll-section-heading {
+  border-top-color: oklch(0.3 0.01 264);
+  color: oklch(0.85 0.04 264);
+}
+
+/* Numbered list steps: clear spacing between steps */
+.ll-steps {
+  counter-reset: step-counter;
+  list-style: none;
+  padding-left: 0;
+}
+.ll-steps > li {
+  counter-increment: step-counter;
+  position: relative;
+  padding-left: 2.25rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid oklch(0.93 0.005 264);
+}
+.dark .ll-steps > li {
+  border-bottom-color: oklch(0.25 0.005 264);
+}
+.ll-steps > li:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+.ll-steps > li::before {
+  content: counter(step-counter);
+  position: absolute;
+  left: 0;
+  top: 0.1em;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 9999px;
+  background: oklch(0.488 0.243 264.376);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Inline code (non-math) */
+.ll-inline-code {
+  background: oklch(0.95 0.005 264);
+  border: 1px solid oklch(0.88 0.01 264);
+  border-radius: 0.25rem;
+  padding: 0.15em 0.35em;
+  font-size: 0.875em;
+  font-family: var(--font-mono);
+  color: oklch(0.4 0.1 264);
+}
+.dark .ll-inline-code {
+  background: oklch(0.25 0.01 264);
+  border-color: oklch(0.35 0.02 264);
+  color: oklch(0.75 0.1 264);
 }

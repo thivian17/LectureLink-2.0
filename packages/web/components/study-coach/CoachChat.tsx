@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { chatWithCoach, AuthError, RateLimitError } from "@/lib/api";
+import { streamCoachChat, AuthError, RateLimitError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { CoachMessage } from "@/types/database";
 import { toast } from "sonner";
@@ -57,6 +57,8 @@ export function CoachChat({ courseId }: CoachChatProps) {
         created_at: new Date().toISOString(),
       };
 
+      const assistantMsgId = crypto.randomUUID();
+
       setMessages((prev) => [...prev, userMsg]);
       setInput("");
       setLoading(true);
@@ -67,16 +69,27 @@ export function CoachChat({ courseId }: CoachChatProps) {
           role: m.role,
           content: m.content,
         }));
-        const resp = await chatWithCoach(courseId, trimmed, history);
+
+        // Add a placeholder assistant message for streaming
         const assistantMsg: CoachMessage = {
-          id: crypto.randomUUID(),
+          id: assistantMsgId,
           role: "assistant",
-          content: resp.message,
-          recommendations: resp.recommendations,
-          suggested_quiz: resp.suggested_quiz,
+          content: "",
+          recommendations: [],
+          suggested_quiz: null,
           created_at: new Date().toISOString(),
         };
         setMessages((prev) => [...prev, assistantMsg]);
+
+        let accumulated = "";
+        for await (const chunk of streamCoachChat(courseId, trimmed, history)) {
+          accumulated += chunk;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantMsgId ? { ...m, content: accumulated } : m,
+            ),
+          );
+        }
       } catch (err) {
         if (err instanceof AuthError) {
           toast.error("Session expired. Please log in again.");

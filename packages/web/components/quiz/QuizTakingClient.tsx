@@ -76,7 +76,7 @@ export function QuizTakingClient({
           return;
         }
         toast.error(
-          err instanceof Error ? err.message : "Failed to load quiz questions",
+          err instanceof Error ? err.message : "Failed to load practice test questions",
         );
       } finally {
         if (!cancelled) setLoading(false);
@@ -205,7 +205,7 @@ export function QuizTakingClient({
         );
       } else {
         toast.error(
-          err instanceof Error ? err.message : "Failed to submit quiz",
+          err instanceof Error ? err.message : "Failed to submit practice test",
         );
       }
       setSubmitting(false);
@@ -222,7 +222,7 @@ export function QuizTakingClient({
   if (feedbackMode === null && !loading && questions.length > 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 space-y-6">
-        <h2 className="text-xl font-semibold">Choose your quiz mode</h2>
+        <h2 className="text-xl font-semibold">Choose your practice mode</h2>
         <div className="grid gap-4 sm:grid-cols-2 max-w-lg w-full">
           <Card
             className="cursor-pointer transition-colors hover:border-primary"
@@ -291,7 +291,7 @@ export function QuizTakingClient({
             router.push(`/dashboard/courses/${courseId}/quizzes`)
           }
         >
-          Back to Quizzes
+          Back to Practice Tests
         </Button>
       </div>
     );
@@ -384,7 +384,7 @@ export function QuizTakingClient({
               disabled={submitting}
             >
               <Send className="mr-1 h-4 w-4" />
-              Submit Quiz
+              Submit Practice Test
             </Button>
           )}
         </div>
@@ -406,7 +406,7 @@ export function QuizTakingClient({
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Submit Quiz?</DialogTitle>
+            <DialogTitle>Submit Practice Test?</DialogTitle>
             <DialogDescription>
               You answered {answeredCount} of {questions.length} questions.
               {answeredCount < questions.length && (

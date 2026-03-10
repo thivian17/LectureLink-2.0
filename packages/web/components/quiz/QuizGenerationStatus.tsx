@@ -27,7 +27,7 @@ import { getQuizGenerationStatus } from "@/lib/api";
 import type { QuizGenerationStatus as QuizGenStatus } from "@/types/database";
 
 const GENERATION_STAGES = [
-  { key: "planning", label: "Planning quiz...", icon: ClipboardList },
+  { key: "planning", label: "Planning practice test...", icon: ClipboardList },
   {
     key: "generating_questions",
     label: "Generating questions...",
@@ -85,7 +85,7 @@ export function QuizGenerationStatus({
           completedRef.current = true;
           stopPolling();
           if (result.status === "ready") {
-            toast.success("Quiz is ready!");
+            toast.success("Practice test is ready!");
             router.push(
               `/dashboard/courses/${courseId}/quiz/${quizId}`,
             );
@@ -132,16 +132,16 @@ export function QuizGenerationStatus({
       <CardHeader>
         <CardTitle className="text-base">
           {isReady
-            ? "Your quiz is ready!"
+            ? "Your practice test is ready!"
             : isFailed
               ? "Generation Failed"
-              : "Generating Quiz..."}
+              : "Generating Practice Test..."}
         </CardTitle>
         <CardDescription>
           {isReady
             ? "All generation stages completed successfully."
             : isFailed
-              ? "An error occurred during quiz generation."
+              ? "An error occurred during practice test generation."
               : "This usually takes about 30 seconds."}
         </CardDescription>
       </CardHeader>
@@ -232,7 +232,7 @@ export function QuizGenerationStatus({
             }
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Quizzes
+            Back to Practice Tests
           </Button>
         )}
       </CardContent>

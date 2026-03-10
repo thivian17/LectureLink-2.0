@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+from .mastery import compute_mastery
+
 logger = logging.getLogger(__name__)
 
 BADGE_DEFINITIONS = {
@@ -333,7 +335,7 @@ async def _check_mastery_badges(
                 attempts = m.get("total_attempts", 0)
                 accuracy = m.get("accuracy", 0.0)
                 recent = m.get("recent_accuracy", 0.0)
-                mastery = 0.0 if attempts == 0 else accuracy * 0.6 + recent * 0.4
+                mastery = compute_mastery(accuracy, recent, attempts)
                 if mastery >= 0.8:
                     mastered_count += 1
                 else:

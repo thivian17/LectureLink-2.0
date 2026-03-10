@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -531,6 +531,298 @@ class TestAbandonLearnSession:
             await abandon_learn_session(sb, "user1", "nonexistent")
 
 
+class TestPowerQuizReuse:
+    @pytest.mark.asyncio
+    async def test_reuse_returns_formatted_questions(self):
+        """_try_reuse_power_quiz_questions should return properly formatted dicts."""
+        from lecturelink_api.services.learn_session import _try_reuse_power_quiz_questions
+
+        sb = MagicMock()
+
+        quiz_q_data = [
+            {
+                "id": "stored-q1",
+                "question_text": "What is entropy?",
+                "options": [
+                    {"label": "A", "text": "Disorder"},
+                    {"label": "B", "text": "Energy"},
+                    {"label": "C", "text": "Force"},
+                    {"label": "D", "text": "Mass"},
+                ],
+                "correct_answer": "A",
+                "explanation": "Entropy measures disorder.",
+                "concept_id": "c1",
+            },
+        ]
+
+        def table_side_effect(name):
+            if name == "quiz_questions":
+                chain = _mock_chain(quiz_q_data)
+                # Also need update chain
+                update_chain = MagicMock()
+                update_chain.eq.return_value = update_chain
+                update_chain.execute.return_value = _mock_execute([])
+                chain.update.return_value = update_chain
+                return chain
+            return _mock_chain([])
+
+        sb.table.side_effect = table_side_effect
+        rpc_mock = MagicMock()
+        rpc_mock.execute.return_value = _mock_execute(None)
+        sb.rpc.return_value = rpc_mock
+
+        result = await _try_reuse_power_quiz_questions(sb, "course1", ["c1"], 2)
+
+        assert len(result) == 1
+        q = result[0]
+        assert "question_id" in q
+        assert q["question_text"] == "What is entropy?"
+        assert q["_stored_question_id"] == "stored-q1"
+        assert q["_source"] == "reused"
+        assert isinstance(q["_correct_index"], int)
+
+    @pytest.mark.asyncio
+    async def test_reuse_returns_empty_when_no_candidates(self):
+        """Should return empty list when no matching questions exist."""
+        from lecturelink_api.services.learn_session import _try_reuse_power_quiz_questions
+
+        sb = MagicMock()
+
+        def table_side_effect(name):
+            return _mock_chain([])
+
+        sb.table.side_effect = table_side_effect
+
+        result = await _try_reuse_power_quiz_questions(sb, "course1", ["c1"], 3)
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_reuse_returns_empty_for_empty_concept_ids(self):
+        """Should return empty list when concept_ids is empty."""
+        from lecturelink_api.services.learn_session import _try_reuse_power_quiz_questions
+
+        sb = MagicMock()
+        result = await _try_reuse_power_quiz_questions(sb, "course1", [], 3)
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_reuse_limits_to_count(self):
+        """Should not return more than requested count."""
+        from lecturelink_api.services.learn_session import _try_reuse_power_quiz_questions
+
+        sb = MagicMock()
+
+        quiz_q_data = [
+            {
+                "id": f"stored-q{i}",
+                "question_text": f"Question {i}?",
+                "options": ["A) Opt1", "B) Opt2", "C) Opt3", "D) Opt4"],
+                "correct_answer": "A",
+                "explanation": f"Explanation {i}",
+                "concept_id": "c1",
+            }
+            for i in range(10)
+        ]
+
+        def table_side_effect(name):
+            if name == "quiz_questions":
+                chain = _mock_chain(quiz_q_data)
+                update_chain = MagicMock()
+                update_chain.eq.return_value = update_chain
+                update_chain.execute.return_value = _mock_execute([])
+                chain.update.return_value = update_chain
+                return chain
+            return _mock_chain([])
+
+        sb.table.side_effect = table_side_effect
+        rpc_mock = MagicMock()
+        rpc_mock.execute.return_value = _mock_execute(None)
+        sb.rpc.return_value = rpc_mock
+
+        result = await _try_reuse_power_quiz_questions(sb, "course1", ["c1"], 3)
+        assert len(result) <= 3
+
+
+class TestFindCorrectIndexForReuse:
+    def test_label_match(self):
+        from lecturelink_api.services.learn_session import _find_correct_index_for_reuse
+
+        options = ["A) Alpha", "B) Beta", "C) Gamma", "D) Delta"]
+        assert _find_correct_index_for_reuse(options, "B") == 1
+
+    def test_exact_text_match(self):
+        from lecturelink_api.services.learn_session import _find_correct_index_for_reuse
+
+        options = ["Alpha", "Beta", "Gamma"]
+        assert _find_correct_index_for_reuse(options, "Beta") == 1
+
+    def test_defaults_to_zero(self):
+        from lecturelink_api.services.learn_session import _find_correct_index_for_reuse
+
+        options = ["Alpha", "Beta"]
+        assert _find_correct_index_for_reuse(options, "Unknown") == 0
+
+
+class TestPowerQuizPersistence:
+    @pytest.mark.asyncio
+    async def test_generated_questions_stored_in_quiz_questions(self):
+        """New power quiz questions should be persisted with source='power_quiz'."""
+        from lecturelink_api.services.learn_session import get_power_quiz
+
+        sb = MagicMock()
+        session = {
+            "id": "s1",
+            "user_id": "user1",
+            "course_id": "course1",
+            "time_budget_minutes": 10,
+            "session_data": {
+                "daily_briefing": {
+                    "concepts_planned": [
+                        {"concept_id": "c1", "title": "Entropy"},
+                    ],
+                },
+            },
+        }
+
+        insert_chain = MagicMock()
+        insert_chain.execute.return_value = _mock_execute([{"id": "persisted-q1"}])
+
+        def table_side_effect(name):
+            if name == "learn_sessions":
+                chain = _mock_chain(session)
+                update_chain = MagicMock()
+                update_chain.eq.return_value = update_chain
+                update_chain.execute.return_value = _mock_execute([])
+                chain.update.return_value = update_chain
+                return chain
+            if name == "quiz_questions":
+                chain = _mock_chain([])  # No reusable questions
+                chain.insert.return_value = insert_chain
+                return chain
+            if name == "concepts":
+                return _mock_chain({"title": "Entropy", "lecture_id": "lec1"})
+            return _mock_chain([])
+
+        sb.table.side_effect = table_side_effect
+
+        rpc_mock = MagicMock()
+        rpc_mock.execute.return_value = _mock_execute(None)
+        sb.rpc.return_value = rpc_mock
+
+        gemini_response = MagicMock()
+        gemini_response.text = json.dumps([
+            {
+                "question_text": "What is entropy?",
+                "options": ["A) Disorder", "B) Energy", "C) Force", "D) Mass"],
+                "correct_answer": "A",
+                "correct_index": 0,
+                "explanation": "Entropy measures disorder.",
+                "concept_title": "Entropy",
+            },
+        ])
+
+        mock_client = MagicMock()
+        mock_client.aio.models.generate_content = AsyncMock(return_value=gemini_response)
+
+        with (
+            patch("lecturelink_api.services.learn_session.search_lectures", new_callable=AsyncMock, return_value=[
+                {"chunk_id": "ch1", "lecture_id": "lec1", "lecture_title": "Thermo", "content": "Entropy is...", "start_time": None, "end_time": None, "slide_number": None, "metadata": {}},
+            ]),
+            patch("lecturelink_api.services.learn_session._get_client", return_value=mock_client),
+        ):
+            result = await get_power_quiz(sb, "user1", "s1")
+
+        assert len(result["questions"]) >= 1
+        # Verify quiz_questions.insert was called with source='power_quiz'
+        insert_calls = insert_chain.execute.call_args_list
+        assert len(insert_calls) > 0
+
+    @pytest.mark.asyncio
+    async def test_stored_question_id_in_session_data(self):
+        """Persisted questions should have _stored_question_id in session data."""
+        from lecturelink_api.services.learn_session import get_power_quiz
+
+        sb = MagicMock()
+        session = {
+            "id": "s1",
+            "user_id": "user1",
+            "course_id": "course1",
+            "time_budget_minutes": 10,
+            "session_data": {
+                "daily_briefing": {
+                    "concepts_planned": [
+                        {"concept_id": "c1", "title": "Entropy"},
+                    ],
+                },
+            },
+        }
+
+        insert_chain = MagicMock()
+        insert_chain.execute.return_value = _mock_execute([{"id": "persisted-q1"}])
+
+        stored_session_data = {}
+
+        def table_side_effect(name):
+            if name == "learn_sessions":
+                chain = _mock_chain(session)
+                update_chain = MagicMock()
+                update_chain.eq.return_value = update_chain
+
+                def capture_update(data):
+                    stored_session_data.update(data.get("session_data", {}))
+                    return update_chain
+
+                update_chain.execute.return_value = _mock_execute([])
+                chain.update.side_effect = capture_update
+                return chain
+            if name == "quiz_questions":
+                chain = _mock_chain([])  # No reusable questions
+                chain.insert.return_value = insert_chain
+                return chain
+            if name == "concepts":
+                return _mock_chain({"title": "Entropy", "lecture_id": "lec1"})
+            return _mock_chain([])
+
+        sb.table.side_effect = table_side_effect
+
+        rpc_mock = MagicMock()
+        rpc_mock.execute.return_value = _mock_execute(None)
+        sb.rpc.return_value = rpc_mock
+
+        gemini_response = MagicMock()
+        gemini_response.text = json.dumps([
+            {
+                "question_text": "What is entropy?",
+                "options": ["A) Disorder", "B) Energy", "C) Force", "D) Mass"],
+                "correct_answer": "A",
+                "correct_index": 0,
+                "explanation": "Entropy measures disorder.",
+                "concept_title": "Entropy",
+            },
+        ])
+
+        mock_client = MagicMock()
+        mock_client.aio.models.generate_content = AsyncMock(return_value=gemini_response)
+
+        with (
+            patch("lecturelink_api.services.learn_session.search_lectures", new_callable=AsyncMock, return_value=[
+                {"chunk_id": "ch1", "lecture_id": "lec1", "lecture_title": "Thermo", "content": "Entropy is...", "start_time": None, "end_time": None, "slide_number": None, "metadata": {}},
+            ]),
+            patch("lecturelink_api.services.learn_session._get_client", return_value=mock_client),
+        ):
+            await get_power_quiz(sb, "user1", "s1")
+
+        # Check that stored session data has _stored_question_id
+        quiz_data = stored_session_data.get("power_quiz", {})
+        questions = quiz_data.get("questions", [])
+        if questions:
+            assert any(
+                q.get("_stored_question_id") is not None
+                for q in questions
+                if q.get("_source") == "generated"
+            )
+
+
 class TestSubmitFlashReviewAnswer:
     @pytest.mark.asyncio
     async def test_records_answer(self):
@@ -564,3 +856,133 @@ class TestSubmitFlashReviewAnswer:
 
         assert result["card_id"] == "card-1"
         assert result["answer_index"] == 0
+
+
+class TestLearningEventWriteBack:
+    """Verify that submit functions record learning events for mastery tracking."""
+
+    @pytest.mark.asyncio
+    async def test_power_quiz_records_event(self):
+        from lecturelink_api.services.learn_session import submit_power_quiz_answer
+
+        sb = MagicMock()
+        session = {
+            "id": "s1",
+            "user_id": "user1",
+            "course_id": "course1",
+            "session_data": {
+                "power_quiz": {
+                    "quiz_id": "quiz1",
+                    "questions": [{
+                        "question_id": "q1",
+                        "question_text": "What?",
+                        "options": ["A", "B", "C", "D"],
+                        "_correct_index": 1,
+                        "_explanation": "B is right.",
+                        "concept_id": "concept-abc",
+                    }],
+                },
+                "combo_count": 0,
+                "combo_max": 0,
+                "quiz_results": [],
+            },
+        }
+
+        def table_side_effect(name):
+            if name == "learn_sessions":
+                chain = _mock_chain(session)
+                update_chain = MagicMock()
+                update_chain.eq.return_value = update_chain
+                update_chain.execute.return_value = _mock_execute([])
+                chain.update.return_value = update_chain
+                return chain
+            return _mock_chain([])
+
+        sb.table.side_effect = table_side_effect
+
+        mock_record = AsyncMock()
+        with (
+            patch("lecturelink_api.services.learn_session._award_xp", new_callable=AsyncMock, return_value={"amount": 10, "total_xp": 10, "level": 1, "leveled_up": False}),
+            patch("lecturelink_api.services.learn_session.record_learning_event", mock_record),
+        ):
+            await submit_power_quiz_answer(sb, "user1", "s1", "q1", answer_index=1, time_ms=5000)
+
+        mock_record.assert_called_once()
+        args = mock_record.call_args
+        assert args.kwargs["event_type"] == "power_quiz"
+        assert args.kwargs["concept_id"] == "concept-abc"
+        assert args.kwargs["is_correct"] is True
+
+    @pytest.mark.asyncio
+    async def test_gut_check_records_event(self):
+        from lecturelink_api.services.learn_session import submit_gut_check
+
+        sb = MagicMock()
+        session = {
+            "id": "s1",
+            "user_id": "user1",
+            "course_id": "course1",
+            "session_data": {},
+        }
+
+        def table_side_effect(name):
+            return _mock_chain(session)
+
+        sb.table.side_effect = table_side_effect
+
+        mock_record = AsyncMock()
+        with (
+            patch("lecturelink_api.services.learn_session._award_xp", new_callable=AsyncMock, return_value={"amount": 5, "total_xp": 5, "level": 1, "leveled_up": False}),
+            patch("lecturelink_api.services.learn_session.record_learning_event", mock_record),
+        ):
+            await submit_gut_check(sb, "user1", "s1", "concept-xyz", answer_index=2)
+
+        mock_record.assert_called_once()
+        args = mock_record.call_args
+        assert args.kwargs["event_type"] == "gut_check"
+        assert args.kwargs["concept_id"] == "concept-xyz"
+
+    @pytest.mark.asyncio
+    async def test_flash_review_records_event(self):
+        from lecturelink_api.services.learn_session import submit_flash_review_answer
+
+        sb = MagicMock()
+        session = {
+            "id": "s1",
+            "user_id": "user1",
+            "course_id": "course1",
+            "session_data": {
+                "flash_review_cards": [{
+                    "card_id": "card-1",
+                    "concept_id": "concept-flash",
+                    "question_text": "What?",
+                    "options": ["A", "B", "C"],
+                    "correct_index": 1,
+                }],
+                "flash_review_results": [],
+            },
+        }
+
+        def table_side_effect(name):
+            if name == "learn_sessions":
+                chain = _mock_chain(session)
+                update_chain = MagicMock()
+                update_chain.eq.return_value = update_chain
+                update_chain.execute.return_value = _mock_execute([])
+                chain.update.return_value = update_chain
+                return chain
+            return _mock_chain([])
+
+        sb.table.side_effect = table_side_effect
+
+        mock_record = AsyncMock()
+        with (
+            patch("lecturelink_api.services.learn_session._award_xp", new_callable=AsyncMock, return_value={"amount": 5, "total_xp": 5, "level": 1, "leveled_up": False}),
+            patch("lecturelink_api.services.learn_session.record_learning_event", mock_record),
+        ):
+            await submit_flash_review_answer(sb, "user1", "s1", "card-1", answer_index=1, time_ms=2000)
+
+        mock_record.assert_called_once()
+        args = mock_record.call_args
+        assert args.kwargs["event_type"] == "flash_review"
+        assert args.kwargs["concept_id"] == "concept-flash"

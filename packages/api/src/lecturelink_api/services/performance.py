@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
+
+from .mastery import compute_mastery
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +112,7 @@ async def get_performance(
         accuracy = m.get("accuracy", 0.0)
         recent = m.get("recent_accuracy", 0.0)
 
-        mastery = 0.0 if attempts == 0 else round(accuracy * 0.6 + recent * 0.4, 4)
+        mastery = compute_mastery(accuracy, recent, attempts)
 
         total_attempted += attempts
         total_correct += m.get("correct_attempts", 0)
@@ -196,3 +199,51 @@ async def get_performance(
         pass
 
     return result
+
+
+async def get_bkt_enhanced_performance(
+    supabase: Any,
+    user_id: str,
+    course_id: str,
+) -> list[dict]:
+    """
+    Returns concept mastery list enriched with BKT p_mastery.
+    Falls back to accuracy-based mastery if BKT state doesn't exist yet.
+    """
+    from lecturelink_api.services.mastery import get_course_mastery_summary
+
+    # Get BKT data
+    bkt_summary = await get_course_mastery_summary(supabase, user_id, course_id)
+    bkt_by_concept = {item["concept_id"]: item for item in bkt_summary}
+
+    # Get legacy accuracy data
+    try:
+        legacy_result = supabase.rpc(
+            "get_concept_mastery",
+            {"p_user_id": user_id, "p_course_id": course_id},
+        ).execute()
+        legacy = legacy_result.data or []
+    except Exception:
+        logger.warning("get_concept_mastery RPC failed in BKT enhanced", exc_info=True)
+        legacy = []
+
+    # Merge: prefer BKT when available, fall back to accuracy
+    for concept in legacy:
+        cid = concept.get("concept_id")
+        if cid and cid in bkt_by_concept:
+            concept["p_mastery"] = bkt_by_concept[cid]["p_mastery"]
+            concept["mastery_label"] = bkt_by_concept[cid]["mastery_label"]
+            concept["bkt_available"] = True
+        else:
+            # Fallback: convert accuracy [0,1] to p_mastery proxy
+            accuracy = concept.get("accuracy", 0.3)
+            concept["p_mastery"] = max(0.1, min(0.9, accuracy))
+            concept["mastery_label"] = (
+                "mastered" if accuracy >= 0.85
+                else "proficient" if accuracy >= 0.65
+                else "developing" if accuracy >= 0.40
+                else "learning"
+            )
+            concept["bkt_available"] = False
+
+    return legacy

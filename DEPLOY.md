@@ -25,7 +25,7 @@ api.lecturelink.ca      → Cloud Run: lecturelink-api-prod   (FastAPI)
 Run this once to set your project:
 ```bash
 gcloud auth login
-gcloud config set project YOUR_PROJECT_ID
+gcloud config set project meeting-assistant-473703
 ```
 
 Replace `YOUR_PROJECT_ID` everywhere below with your actual GCP project ID.
@@ -103,7 +103,7 @@ gcloud redis instances describe lecturelink-redis \
 ```
 
 **Save this IP.** You'll use it as `REDIS_IP` in later steps. The full URL is `redis://<IP>:6379`.
-
+10.139.150.251
 ---
 
 ## Step 5: Store Secrets in Google Secret Manager
@@ -112,9 +112,10 @@ The API loads these secrets at startup via `config/secrets.py`. Create each one:
 
 ```bash
 # Required — Supabase credentials
-echo -n "https://YOUR_PROJECT.supabase.co" | gcloud secrets create SUPABASE_URL --data-file=-
-echo -n "YOUR_ANON_KEY" | gcloud secrets create SUPABASE_ANON_KEY --data-file=-
-echo -n "YOUR_SERVICE_ROLE_KEY" | gcloud secrets create SUPABASE_SERVICE_ROLE_KEY --data-file=-
+echo -n "https://ncypmtimgxfiumlkzrrz.supabase.co" | gcloud secrets create SUPABASE_URL --data-file=-
+echo -n "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jeXBtdGltZ3hmaXVtbGt6cnJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1MTgyNzAsImV4cCI6MjA4NjA5NDI3MH0.rXedsmhVpCB5ru3yryEiJYwogBdQzETNdUGtdg7ONkU" | gcloud secrets create SUPABASE_ANON_KEY --data-file=-
+echo -n "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jeXBtdGltZ3hmaXVtbGt6cnJ6Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MDUxODI3MCwiZXhwIjoyMDg2MDk0MjcwfQ._0kNpTVVlV7th_zhY5ffvI5yh0j8dEdzDxbSk9xQbQE
+" | gcloud secrets create SUPABASE_SERVICE_ROLE_KEY --data-file=-
 
 # Required — LLM access (Gemini API key)
 echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets create GEMINI_API_KEY --data-file=-
@@ -152,18 +153,18 @@ You need two service accounts:
 gcloud iam service-accounts create github-deployer \
   --display-name="GitHub Actions Deployer"
 
-SA=github-deployer@YOUR_PROJECT_ID.iam.gserviceaccount.com
+SA=github-deployer@meeting-assistant-473703.iam.gserviceaccount.com
 
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+gcloud projects add-iam-policy-binding meeting-assistant-473703 \
   --member="serviceAccount:$SA" --role="roles/run.admin"
 
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+gcloud projects add-iam-policy-binding meeting-assistant-473703 \
   --member="serviceAccount:$SA" --role="roles/artifactregistry.writer"
 
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+gcloud projects add-iam-policy-binding meeting-assistant-473703 \
   --member="serviceAccount:$SA" --role="roles/iam.serviceAccountUser"
 
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+gcloud projects add-iam-policy-binding meeting-assistant-473703 \
   --member="serviceAccount:$SA" --role="roles/secretmanager.secretAccessor"
 ```
 
@@ -173,15 +174,15 @@ gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
 gcloud iam service-accounts create lecturelink-runtime \
   --display-name="LectureLink Runtime"
 
-RUNTIME_SA=lecturelink-runtime@YOUR_PROJECT_ID.iam.gserviceaccount.com
+RUNTIME_SA=lecturelink-runtime@meeting-assistant-473703.iam.gserviceaccount.com
 
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+gcloud projects add-iam-policy-binding meeting-assistant-473703 \
   --member="serviceAccount:$RUNTIME_SA" --role="roles/secretmanager.secretAccessor"
 
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+gcloud projects add-iam-policy-binding meeting-assistant-473703 \
   --member="serviceAccount:$RUNTIME_SA" --role="roles/aiplatform.user"
 
-gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+gcloud projects add-iam-policy-binding meeting-assistant-473703 \
   --member="serviceAccount:$RUNTIME_SA" --role="roles/logging.logWriter"
 ```
 
@@ -194,10 +195,10 @@ This lets GitHub Actions authenticate to GCP without a service account key file.
 ### 7a. Get your project number
 
 ```bash
-gcloud projects describe YOUR_PROJECT_ID --format='value(projectNumber)'
+cccccccccccccccccc
 ```
 
-**Save this as `PROJECT_NUMBER`.**
+**Save this as `PROJECT_NUMBER`.** 948583810015
 
 ### 7b. Create the identity pool and provider
 
@@ -211,6 +212,7 @@ gcloud iam workload-identity-pools providers create-oidc github-provider \
   --workload-identity-pool=github-pool \
   --display-name="GitHub" \
   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
+  --attribute-condition="assertion.repository == 'thivian17/LectureLink-2.0'" \
   --issuer-uri="https://token.actions.githubusercontent.com"
 ```
 
@@ -219,18 +221,18 @@ gcloud iam workload-identity-pools providers create-oidc github-provider \
 Replace `YOUR_GITHUB_ORG/YOUR_REPO_NAME` with your actual GitHub org/repo (e.g. `thivi/LectureLink-2.0`):
 
 ```bash
-SA=github-deployer@YOUR_PROJECT_ID.iam.gserviceaccount.com
+SA=github-deployer@meeting-assistant-473703.iam.gserviceaccount.com
 
 gcloud iam service-accounts add-iam-policy-binding $SA \
   --role="roles/iam.workloadIdentityUser" \
-  --member="principalSet://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/attribute.repository/YOUR_GITHUB_ORG/YOUR_REPO_NAME"
+  --member="principalSet://iam.googleapis.com/projects/948583810015/locations/global/workloadIdentityPools/github-pool/attribute.repository/thivian17/LectureLink-2.0"
 ```
 
 ### 7d. Note the WIF provider resource name
 
 You'll need this for GitHub secrets:
 ```
-projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+projects/948583810015/locations/global/workloadIdentityPools/github-pool/providers/github-provider
 ```
 
 ---
@@ -260,9 +262,9 @@ Do the first deployment manually to create the Cloud Run services. After this, C
 ### 9a. Set variables
 
 ```bash
-PROJECT_ID=YOUR_PROJECT_ID
+PROJECT_ID=meeting-assistant-473703
 REGISTRY=us-central1-docker.pkg.dev
-REDIS_IP=YOUR_REDIS_IP_FROM_STEP_4
+REDIS_IP=10.139.150.251
 RUNTIME_SA=lecturelink-runtime@${PROJECT_ID}.iam.gserviceaccount.com
 ```
 
@@ -293,8 +295,8 @@ Replace the Supabase values with your real ones:
 docker build \
   -f packages/web/Dockerfile \
   -t ${REGISTRY}/${PROJECT_ID}/lecturelink/web:v1 \
-  --build-arg NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
-  --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY \
+  --build-arg NEXT_PUBLIC_SUPABASE_URL=https://ncypmtimgxfiumlkzrrz.supabase.co \
+  --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5jeXBtdGltZ3hmaXVtbGt6cnJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA1MTgyNzAsImV4cCI6MjA4NjA5NDI3MH0.rXedsmhVpCB5ru3yryEiJYwogBdQzETNdUGtdg7ONkU \
   --build-arg NEXT_PUBLIC_API_URL=https://api.lecturelink.ca \
   .
 

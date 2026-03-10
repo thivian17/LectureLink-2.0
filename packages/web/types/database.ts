@@ -22,6 +22,7 @@ export interface Syllabus {
   raw_extraction: Record<string, unknown> | null;
   grade_breakdown: Record<string, unknown>[];
   extraction_confidence: number | null;
+  low_confidence: boolean | null;
   needs_review: boolean;
   reviewed_at: string | null;
   created_at: string;
@@ -52,6 +53,7 @@ export interface Lecture {
   processing_progress: number;
   summary: string | null;
   duration_seconds: number | null;
+  low_concept_yield: boolean;
   created_at: string;
 }
 
@@ -377,6 +379,19 @@ export interface CoachMessage {
   recommendations: CoachRecommendation[];
   suggested_quiz: { focus: string | null; difficulty: string } | null;
   created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Invites & Referrals
+// ---------------------------------------------------------------------------
+
+export interface Invite {
+  invite_code: string;
+  invite_url: string;
+  email?: string;
+  max_uses: number;
+  use_count: number;
+  expires_at: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -732,6 +747,52 @@ export interface FlashReviewCard {
   source_lecture_title: string;
 }
 
+// Study Card types for Learn Session V2
+export interface FormulaVariable {
+  symbol: string;
+  name: string;
+  unit: string;
+  description: string;
+}
+
+export interface StudyCard {
+  type: "hook" | "explain" | "formula" | "example" | "interactive" | "real_world" | "connection" | "gut_check";
+  // Common
+  content?: string;
+  title?: string;
+  // Formula
+  formula_latex?: string;
+  formula_name?: string;
+  plain_english?: string;
+  variable_breakdown?: FormulaVariable[];
+  conditions?: string;
+  // Example
+  setup?: string;
+  steps?: string[];
+  answer?: string;
+  // Interactive
+  challenge_type?: "calculation" | "fill_in";
+  prompt?: string;
+  hint?: string;
+  solution_steps?: string[];
+  // Real world
+  domain?: string;
+  // Connection
+  related_concept?: string;
+  // Gut check
+  question_text?: string;
+  options?: string[];
+  correct_index?: number;
+  explanation?: string;
+}
+
+// V2 concept brief with cards array
+export interface ConceptBriefV2 extends ConceptBrief {
+  cards: StudyCard[];
+  has_formula: boolean;
+  estimated_read_seconds: number;
+}
+
 export interface ConceptBrief {
   concept_id: string;
   concept_title: string;
@@ -806,6 +867,68 @@ export interface LearnStartSessionResponse {
   session_id: string;
   daily_briefing: DailyBriefing;
   flash_review_cards: FlashReviewCard[];
+}
+
+// ---------------------------------------------------------------------------
+// Course Materials
+// ---------------------------------------------------------------------------
+
+export type MaterialType =
+  | 'reading'
+  | 'homework'
+  | 'practice_exam'
+  | 'assignment_outline'
+  | 'lab_manual'
+  | 'study_guide'
+  | 'problem_set'
+  | 'other';
+
+export const MATERIAL_TYPE_LABELS: Record<MaterialType, string> = {
+  reading: 'Reading',
+  homework: 'Homework',
+  practice_exam: 'Practice Exam',
+  assignment_outline: 'Assignment Outline',
+  lab_manual: 'Lab Manual',
+  study_guide: 'Study Guide',
+  problem_set: 'Problem Set',
+  other: 'Other',
+};
+
+export interface CourseMaterial {
+  id: string;
+  course_id: string;
+  title: string;
+  material_type: MaterialType;
+  file_name: string | null;
+  processing_status: 'pending' | 'processing' | 'completed' | 'failed';
+  processing_progress: number;
+  processing_error: string | null;
+  linked_assessment_id: string | null;
+  linked_lecture_id: string | null;
+  week_number: number | null;
+  relevant_date: string | null;
+  concept_count: number;
+  chunk_count: number;
+  created_at: string;
+}
+
+export interface CourseMaterialDetail extends CourseMaterial {
+  file_url: string | null;
+  extracted_text_preview: string | null;
+  page_count: number | null;
+}
+
+export interface MaterialStatus {
+  id: string;
+  processing_status: 'pending' | 'processing' | 'completed' | 'failed';
+  processing_stage: string | null;
+  processing_progress: number;
+  processing_error: string | null;
+}
+
+export interface MaterialListResponse {
+  materials: CourseMaterial[];
+  total: number;
 }
 
 export interface SessionSummary {

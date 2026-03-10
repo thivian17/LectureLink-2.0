@@ -8,6 +8,8 @@ previously studied concepts.
 from __future__ import annotations
 
 import asyncio
+
+from .mastery import compute_mastery
 import json
 import logging
 import uuid
@@ -55,9 +57,9 @@ async def get_flash_review_cards(
 
     # 2. Sort by mastery ascending (lowest first), then by total_attempts ascending
     def _priority_key(m):
-        accuracy = m.get("accuracy", 0.0)
-        recent = m.get("recent_accuracy", 0.0)
-        mastery = accuracy * 0.6 + recent * 0.4
+        mastery = compute_mastery(
+            m.get("accuracy", 0.0), m.get("recent_accuracy", 0.0), m.get("total_attempts", 0),
+        )
         return (mastery, m.get("total_attempts", 0))
 
     # Determine which concepts to build cards from

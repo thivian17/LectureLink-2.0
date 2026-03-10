@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379"
     GOOGLE_OAUTH_CLIENT_ID: str = ""
     GOOGLE_OAUTH_CLIENT_SECRET: str = ""
+    GITHUB_TOKEN: str = ""
+    GITHUB_FEEDBACK_REPO: str = "thivian17/LectureLink-2.0"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

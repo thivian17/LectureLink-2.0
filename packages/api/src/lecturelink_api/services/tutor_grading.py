@@ -12,13 +12,40 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_json_lenient(text: str) -> dict:
-    """Parse JSON leniently — handle trailing commas from LLM output."""
+    """Parse JSON leniently — handle common LLM formatting quirks."""
+    # 1. Try raw first
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        # Strip trailing commas before } or ]
-        cleaned = re.sub(r",\s*([}\]])", r"\1", text)
-        return json.loads(cleaned)
+        pass
+
+    # 2. Extract JSON object from markdown code fences or surrounding text
+    cleaned = text.strip()
+    fence = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", cleaned)
+    if fence:
+        cleaned = fence.group(1)
+    else:
+        # Find the outermost { ... }
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start != -1 and end > start:
+            cleaned = cleaned[start : end + 1]
+
+    # 3. Strip trailing commas before } or ]
+    cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
+
+    # 4. Replace single quotes with double quotes (but not inside strings)
+    # Simple heuristic: if no double quotes found at all, swap single to double
+    if '"' not in cleaned and "'" in cleaned:
+        cleaned = cleaned.replace("'", '"')
+
+    # 5. Replace JavaScript-style values
+    cleaned = re.sub(r"\bundefined\b", "null", cleaned)
+    cleaned = re.sub(r"\bNone\b", "null", cleaned)
+    cleaned = re.sub(r"\bTrue\b", "true", cleaned)
+    cleaned = re.sub(r"\bFalse\b", "false", cleaned)
+
+    return json.loads(cleaned)
 
 from .genai_client import get_genai_client as _get_client
 
@@ -330,6 +357,33 @@ async def grade_short_answer(
     is_correct = result.get("is_correct", False)
     confidence = result.get("confidence", 0.8)
     misconception_type = result.get("misconception_type")
+
+    # LangFuse generation span for grading calibration
+    langfuse_generation_id = None
+    try:
+        from .observability import get_langfuse
+
+        _lf = get_langfuse()
+        if _lf:
+            _gen = _lf.generation(
+                name="tutor_answer_grading",
+                input={
+                    "question": question.get("question_text", ""),
+                    "student_answer": student_answer,
+                },
+                output={
+                    "is_correct": is_correct,
+                    "misconception_type": misconception_type,
+                },
+                metadata={
+                    "question_type": question.get("question_type", ""),
+                },
+            )
+            _gen.end()
+            langfuse_generation_id = _gen.id
+    except Exception:
+        pass
+
     # Trigger reteach for ALL wrong answers so the student always gets
     # a detailed explanation, not just for "fundamental" misconceptions.
     reteach = not is_correct
@@ -351,6 +405,7 @@ async def grade_short_answer(
             "misconceptions_detected": result.get(
                 "misconceptions_detected", []
             ),
+            **({"langfuse_generation_id": langfuse_generation_id} if langfuse_generation_id else {}),
         },
         model_answer=str(model_answer),
     )

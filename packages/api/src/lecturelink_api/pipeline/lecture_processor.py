@@ -64,6 +64,26 @@ async def process_lecture(
     """
     start_time = datetime.utcnow()
 
+    # LangFuse trace — wraps the full pipeline
+    lf = None
+    trace = None
+    try:
+        from ..services.observability import get_langfuse
+
+        lf = get_langfuse()
+        if lf:
+            trace = lf.trace(
+                name="lecture_processing",
+                user_id=user_id,
+                metadata={
+                    "lecture_id": lecture_id,
+                    "course_id": course_id,
+                    "is_reprocess": is_reprocess,
+                },
+            )
+    except Exception:
+        pass  # observability is always non-fatal
+
     try:
         # If reprocessing, clean up old data first
         if is_reprocess:
@@ -96,6 +116,16 @@ async def process_lecture(
             )
 
         # Run audio + slides in parallel when both exist
+        _audio_span = None
+        _slide_span = None
+        try:
+            if trace and processing_path in ("audio_only", "audio+slides"):
+                _audio_span = trace.span(name="audio_transcription")
+            if trace and processing_path in ("slides_only", "audio+slides"):
+                _slide_span = trace.span(name="slide_analysis")
+        except Exception:
+            pass
+
         if processing_path == "audio+slides":
             transcript_segments, slide_analysis = await asyncio.gather(
                 transcribe_audio(route_result.audio_url),
@@ -105,6 +135,14 @@ async def process_lecture(
             transcript_segments = await transcribe_audio(route_result.audio_url)
         elif processing_path == "slides_only":
             slide_analysis = await analyze_slides(route_result.slides_url)
+
+        try:
+            if _audio_span and transcript_segments:
+                _audio_span.end(output={"segments": len(transcript_segments)})
+            if _slide_span and slide_analysis:
+                _slide_span.end(output={"slides_analyzed": True})
+        except Exception:
+            pass
 
         # ── Stage 3: Content Alignment ──
         update_processing_status(
@@ -138,7 +176,24 @@ async def process_lecture(
             stage="extracting_concepts",
             progress=STAGE_PROGRESS["extracting_concepts"],
         )
+        _concept_span = None
+        try:
+            if trace:
+                _concept_span = trace.span(
+                    name="concept_extraction",
+                    input={"segment_count": len(aligned_segments)},
+                )
+        except Exception:
+            pass
+
         concepts = await extract_concepts(aligned_segments)
+
+        try:
+            if _concept_span:
+                _concept_span.end(output={"concepts_extracted": len(concepts)})
+        except Exception:
+            pass
+
         logger.info("Lecture %s: extracted %d concepts", lecture_id, len(concepts))
 
         # ── Stage 5: Chunking + Embedding ──
@@ -147,9 +202,23 @@ async def process_lecture(
             stage="generating_embeddings",
             progress=STAGE_PROGRESS["generating_embeddings"],
         )
+        _embed_span = None
+        try:
+            if trace:
+                _embed_span = trace.span(name="embedding_generation")
+        except Exception:
+            pass
+
         chunks = chunk_content(aligned_segments)
         chunks = await embed_chunks(chunks)
         concepts = await embed_concepts(concepts)
+
+        try:
+            if _embed_span:
+                _embed_span.end(output={"chunks": len(chunks), "concepts": len(concepts)})
+        except Exception:
+            pass
+
         logger.info(
             "Lecture %s: embedded %d chunks, %d concepts",
             lecture_id, len(chunks), len(concepts),
@@ -201,6 +270,17 @@ async def process_lecture(
             lecture_id, len(concept_links),
         )
 
+        # ── Quality gate: flag lectures with suspiciously low concept yield ──
+        LOW_CONCEPT_THRESHOLD = 3
+        low_concept_yield = len(stored_concepts) < LOW_CONCEPT_THRESHOLD
+
+        if low_concept_yield:
+            logger.warning(
+                "Lecture %s: low concept yield (%d concepts extracted — threshold: %d). "
+                "Possible causes: short audio, poor quality, or abstract content.",
+                lecture_id, len(stored_concepts), LOW_CONCEPT_THRESHOLD,
+            )
+
         # ── Update lecture record ──
         # Store structured JSONB array of segments (cap at 500 to avoid row bloat)
         transcript_json = [
@@ -220,6 +300,7 @@ async def process_lecture(
             "processing_progress": 1.0,
             "processing_error": None,
             "transcript": transcript_json,
+            "low_concept_yield": low_concept_yield,
         }
         if generated_title:
             update_data["title"] = generated_title
@@ -236,6 +317,31 @@ async def process_lecture(
         elapsed = (datetime.utcnow() - start_time).total_seconds()
         logger.info("Lecture %s: processing complete in %.1fs", lecture_id, elapsed)
 
+        # Finalize LangFuse trace + PostHog event
+        try:
+            if trace:
+                trace.update(output={
+                    "chunks_stored": len(stored_chunks),
+                    "concepts_stored": len(stored_concepts),
+                    "processing_path": processing_path,
+                    "duration_seconds": elapsed,
+                })
+                lf.flush()
+        except Exception:
+            pass
+
+        try:
+            from ..services.observability import track_event
+
+            track_event(user_id, "lecture_processing_complete", {
+                "lecture_id": lecture_id,
+                "chunks_stored": len(stored_chunks),
+                "concepts_stored": len(stored_concepts),
+                "duration_seconds": elapsed,
+            })
+        except Exception:
+            pass
+
         return {
             "lecture_id": lecture_id,
             "chunks_stored": len(stored_chunks),
@@ -243,6 +349,7 @@ async def process_lecture(
             "concept_links_created": len(concept_links),
             "processing_path": processing_path,
             "duration_seconds": elapsed,
+            "low_concept_yield": low_concept_yield,
         }
 
     except (TranscriptionError, SlideAnalysisError) as e:
@@ -275,6 +382,15 @@ def _handle_failure(
 ) -> None:
     """Mark lecture as failed and log the error."""
     logger.error("Lecture %s failed at %s: %s", lecture_id, stage, error)
+    try:
+        from ..services.observability import capture_exception
+
+        capture_exception(
+            Exception(f"Lecture processing failed at {stage}: {error}"),
+            context={"lecture_id": lecture_id, "stage": stage},
+        )
+    except Exception:
+        pass
     try:
         update_processing_status(
             supabase, lecture_id,

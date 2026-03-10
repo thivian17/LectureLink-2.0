@@ -6,6 +6,7 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from supabase import create_client
 
 from lecturelink_api.auth import get_current_user
@@ -299,6 +300,42 @@ async def answer_question(
         questions_correct_delta=1 if grading_result.is_correct else 0,
         duration_delta=body.time_spent_seconds,
     )
+
+    # Record learning event for mastery tracking
+    concept_title = question.get("concept_title")
+    concept_id = question.get("concept_id")
+
+    if not concept_id and concept_title:
+        try:
+            concept_result = (
+                sb.table("concepts")
+                .select("id")
+                .eq("course_id", session["course_id"])
+                .eq("title", concept_title)
+                .limit(1)
+                .execute()
+            )
+            if concept_result.data:
+                concept_id = concept_result.data[0]["id"]
+        except Exception:
+            pass
+
+    if concept_id:
+        try:
+            from lecturelink_api.services.mastery import record_learning_event
+
+            await record_learning_event(
+                sb,
+                user_id=user["id"],
+                course_id=session["course_id"],
+                concept_id=concept_id,
+                event_type="tutor_check",
+                is_correct=grading_result.is_correct,
+                student_answer=body.student_answer,
+                time_ms=(body.time_spent_seconds * 1000) if body.time_spent_seconds else None,
+            )
+        except Exception:
+            logger.warning("Failed to record tutor learning event", exc_info=True)
 
     # If reteach triggered, generate proper reteach content and log
     if grading_result.reteach_triggered:
@@ -653,6 +690,53 @@ async def chat_endpoint(
     return ChatResponse(
         response=result["response"],
         relevance=result["relevance"],
+    )
+
+
+# -----------------------------------------------------------------------
+# 13b. POST /session/{session_id}/chat/stream
+# -----------------------------------------------------------------------
+
+
+@router.post("/session/{session_id}/chat/stream")
+async def chat_stream_endpoint(
+    session_id: str,
+    body: TutorChatRequest,
+    user: dict = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    """Streaming version of tutor chat.
+
+    Returns text/event-stream with chunks as they arrive from Gemini.
+    """
+    sb = _sb(user, settings)
+    session = _verify_session_ownership(sb, session_id, user["id"])
+
+    if session["status"] != "active":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Session is not active",
+        )
+
+    from lecturelink_api.services.tutor_content import stream_tutor_chat_response
+
+    await log_session_event(
+        sb,
+        session_id,
+        user["id"],
+        session["course_id"],
+        "chat_message",
+        student_answer=body.message,
+    )
+
+    return StreamingResponse(
+        stream_tutor_chat_response(sb, session, body.message),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

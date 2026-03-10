@@ -7,10 +7,27 @@ from __future__ import annotations
 
 import logging
 import os
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from lecturelink_api.services.session_service import DatabaseSessionService
 
 from arq.connections import RedisSettings
 
 logger = logging.getLogger(__name__)
+
+# Module-level singleton — set during on_startup, importable by agents
+_session_service: "DatabaseSessionService | None" = None
+
+
+def get_session_service() -> "DatabaseSessionService":
+    """Return the worker's DatabaseSessionService singleton.
+
+    Raises RuntimeError if called before on_startup has run.
+    """
+    if _session_service is None:
+        raise RuntimeError("Session service not initialized — worker not started yet")
+    return _session_service
 
 
 # ---------------------------------------------------------------------------
@@ -30,6 +47,24 @@ async def on_startup(ctx: dict) -> None:
         settings.SUPABASE_SERVICE_KEY or settings.SUPABASE_ANON_KEY,
     )
     ctx["settings"] = settings
+
+    # Initialize persistent ADK session service and clean up expired sessions
+    from lecturelink_api.services.session_service import (
+        DatabaseSessionService,
+        cleanup_expired_sessions,
+    )
+
+    session_service = DatabaseSessionService(ctx["supabase"])
+    ctx["session_service"] = session_service
+    # Make available as module-level singleton for agent imports
+    global _session_service
+    _session_service = session_service
+
+    try:
+        cleanup_expired_sessions(ctx["supabase"])
+    except Exception:
+        logger.warning("Failed to clean up expired ADK sessions", exc_info=True)
+
     logger.info("arq worker started")
 
 
@@ -146,6 +181,40 @@ async def task_process_syllabus(
     )
 
 
+async def task_process_material(
+    ctx: dict,
+    *,
+    material_id: str,
+    course_id: str,
+    user_id: str,
+    file_url: str,
+    file_name: str,
+    material_type: str,
+    title: str | None = None,
+    supabase_url: str = "",
+    supabase_key: str = "",
+    user_token: str = "",
+    is_reprocess: bool = False,
+) -> dict | None:
+    """Process a course material through the extraction pipeline."""
+    from lecturelink_api.pipeline.material_background import run_material_processing_async
+
+    logger.info("Processing material %s", material_id)
+    return await run_material_processing_async(
+        supabase_url=supabase_url or ctx["settings"].SUPABASE_URL,
+        supabase_key=supabase_key or ctx["settings"].SUPABASE_ANON_KEY,
+        user_token=user_token,
+        material_id=material_id,
+        course_id=course_id,
+        user_id=user_id,
+        file_url=file_url,
+        file_name=file_name,
+        material_type=material_type,
+        title=title,
+        is_reprocess=is_reprocess,
+    )
+
+
 async def task_refresh_user(
     ctx: dict,
     *,
@@ -201,6 +270,7 @@ class WorkerSettings:
         task_process_lecture,
         task_generate_quiz,
         task_process_syllabus,
+        task_process_material,
         task_refresh_user,
         task_send_notification,
     ]

@@ -38,7 +38,7 @@ export function PerformanceDashboard({ performance }: PerformanceDashboardProps)
         />
         <MetricCard
           icon={<TrendingUp className="h-4 w-4" />}
-          label="Quizzes Taken"
+          label="Practice Tests Taken"
           value={`${overall.quizzes_taken}`}
         />
       </div>

@@ -75,7 +75,7 @@ export function QuizList({ courseId, courseName }: QuizListProps) {
         setLectures(lectureResult.value);
       }
     } catch (err) {
-      const e = err instanceof Error ? err : new Error("Failed to load quizzes");
+      const e = err instanceof Error ? err : new Error("Failed to load practice tests");
       setError(e);
       if (err instanceof RateLimitError) {
         toast.error(
@@ -112,14 +112,14 @@ export function QuizList({ courseId, courseName }: QuizListProps) {
       const result = await generateQuiz(courseId, options);
       setDialogOpen(false);
       setGeneratingQuizId(result.quiz_id);
-      toast.success("Quiz generation started!");
+      toast.success("Practice test generation started!");
     } catch (err) {
       if (err instanceof RateLimitError) {
         toast.error(
           `Daily quiz limit reached. Try again in ${Math.ceil(err.retryAfterSeconds / 60)} min.`,
         );
       } else {
-        toast.error("Failed to generate quiz");
+        toast.error("Failed to generate practice test");
       }
     }
   }
@@ -203,13 +203,13 @@ export function QuizList({ courseId, courseName }: QuizListProps) {
         />
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
           <GraduationCap className="h-12 w-12 text-muted-foreground/50" />
-          <h3 className="mt-4 text-lg font-medium">No quizzes yet</h3>
+          <h3 className="mt-4 text-lg font-medium">No practice tests yet</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Generate your first quiz to test your knowledge.
+            Generate your first practice test to test your knowledge.
           </p>
           <Button className="mt-6" onClick={() => setDialogOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            Generate Quiz
+            Generate Practice Test
           </Button>
         </div>
         {dialog}
@@ -243,12 +243,12 @@ function QuizListHeader({
   return (
     <div className="flex items-center justify-between">
       <div>
-        <h2 className="text-lg font-semibold">Quizzes</h2>
+        <h2 className="text-lg font-semibold">Practice Tests</h2>
         <p className="text-sm text-muted-foreground">{courseName}</p>
       </div>
       <Button onClick={onGenerate}>
         <Plus className="mr-2 h-4 w-4" />
-        Generate Quiz
+        Generate Practice Test
       </Button>
     </div>
   );

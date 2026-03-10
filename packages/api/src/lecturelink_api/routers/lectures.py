@@ -208,6 +208,18 @@ async def upload_lecture(
         user_token=user["token"],
     )
 
+    try:
+        from lecturelink_api.services.observability import track_event
+
+        track_event(user["id"], "lecture_uploaded", {
+            "course_id": course_id,
+            "lecture_id": lecture_id,
+            "has_audio": bool(audio_storage_path),
+            "has_slides": bool(slides_storage_path),
+        })
+    except Exception:
+        pass
+
     return {"lecture_id": lecture_id, "status": "processing"}
 
 

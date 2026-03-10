@@ -7,12 +7,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { XPPopup } from "./XPPopup";
+import { CardStack } from "./CardStack";
 import { MarkdownContent } from "@/components/tutor/MarkdownContent";
 import { submitGutCheck } from "@/lib/api";
-import type { ConceptBrief } from "@/types/database";
+import type { ConceptBrief, StudyCard } from "@/types/database";
 
 interface ConceptBriefCardProps {
-  concept: ConceptBrief;
+  concept: ConceptBrief & { cards?: StudyCard[] };
   sessionId: string;
   onComplete: () => void;
 }
@@ -25,6 +26,39 @@ const TIER_STYLES: Record<string, { label: string; className: string }> = {
 };
 
 export function ConceptBriefCard({ concept, sessionId, onComplete }: ConceptBriefCardProps) {
+  // V2: Use CardStack if cards array is present
+  if (concept.cards && concept.cards.length > 0) {
+    return (
+      <CardStack
+        cards={concept.cards}
+        conceptTitle={concept.concept_title}
+        sessionId={sessionId}
+        conceptId={concept.concept_id}
+        onComplete={onComplete}
+      />
+    );
+  }
+
+  // V1 fallback: existing rendering
+  return (
+    <ConceptBriefV1
+      concept={concept}
+      sessionId={sessionId}
+      onComplete={onComplete}
+    />
+  );
+}
+
+// V1 fallback component (original implementation)
+function ConceptBriefV1({
+  concept,
+  sessionId,
+  onComplete,
+}: {
+  concept: ConceptBrief;
+  sessionId: string;
+  onComplete: () => void;
+}) {
   const [gutCheckAnswer, setGutCheckAnswer] = useState<number | null>(null);
   const [gutCheckResult, setGutCheckResult] = useState<{
     correct: boolean;

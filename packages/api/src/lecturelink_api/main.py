@@ -6,19 +6,24 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from lecturelink_api.config import Settings, get_settings
 from lecturelink_api.routers import (
+    admin,
+    analytics,
     assessments,
     coach,
     courses,
+    feedback,
     gamification,
     google_calendar,
     internal,
+    invites,
     learn,
     lectures,
+    materials,
     onboarding,
     quizzes,
     search,
@@ -56,6 +61,14 @@ async def lifespan(application: FastAPI):
         load_all_secrets()
     except Exception:
         logger.warning("Failed to load secrets at startup", exc_info=True)
+
+    # Initialize observability (Sentry, LangFuse, PostHog)
+    try:
+        from lecturelink_api.services.observability import init_observability
+
+        init_observability()
+    except Exception:
+        logger.warning("Observability init failed (non-fatal)", exc_info=True)
 
     # Redis connection pool (non-fatal — app works without Redis in dev)
     try:
@@ -136,6 +149,7 @@ app.include_router(courses.router)
 app.include_router(syllabi.router)
 app.include_router(assessments.router)
 app.include_router(lectures.router)
+app.include_router(materials.router)
 app.include_router(search.router)
 app.include_router(quizzes.router)
 app.include_router(coach.router)
@@ -145,12 +159,24 @@ app.include_router(tutor.router, prefix="/api/tutor")
 app.include_router(gamification.router)
 app.include_router(learn.router)
 app.include_router(google_calendar.router)
+app.include_router(invites.router)
+app.include_router(feedback.router)
+app.include_router(analytics.router)
+app.include_router(admin.router)
 app.include_router(internal.router)
 
 
 @app.get("/health")
 async def health(settings: Settings = Depends(get_settings)):
     return {"status": "ok", "version": "0.1.0", "environment": settings.ENVIRONMENT}
+
+
+@app.get("/health/sentry-test", include_in_schema=False)
+async def sentry_test(settings: Settings = Depends(get_settings)):
+    """Trigger a test error to verify Sentry is working. Only in non-production."""
+    if settings.ENVIRONMENT == "production":
+        raise HTTPException(status_code=404)
+    raise ValueError("Sentry test error — this is intentional")
 
 
 @app.get("/health/ready")

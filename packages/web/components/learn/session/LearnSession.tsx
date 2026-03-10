@@ -28,10 +28,12 @@ import {
   abandonLearnSession,
   AuthError,
 } from "@/lib/api";
+import { trackEvent } from "@/lib/analytics";
 import type {
   LearnSessionStep,
   LearnStartSessionResponse,
   ConceptBrief,
+  StudyCard,
   PowerQuizQuestion,
   LearnSessionComplete,
 } from "@/types/database";
@@ -52,7 +54,7 @@ export function LearnSession({ courseId }: LearnSessionProps) {
 
   // Concept brief state
   const [conceptIndex, setConceptIndex] = useState(0);
-  const [conceptBrief, setConceptBrief] = useState<ConceptBrief | null>(null);
+  const [conceptBrief, setConceptBrief] = useState<(ConceptBrief & { cards?: StudyCard[] }) | null>(null);
   const [conceptLoading, setConceptLoading] = useState(false);
 
   // Power quiz state
@@ -72,6 +74,7 @@ export function LearnSession({ courseId }: LearnSessionProps) {
     try {
       const data = await startLearnSession(courseId, timeBudget);
       setSessionData(data);
+      trackEvent.learnSessionStarted(courseId, timeBudget);
     } catch (err) {
       if (err instanceof AuthError) {
         router.push("/login");

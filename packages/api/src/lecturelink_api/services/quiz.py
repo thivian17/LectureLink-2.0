@@ -126,6 +126,27 @@ async def _generate_quiz_async(
     coding_only: bool = False,
 ) -> None:
     """Async quiz generation executed inside the background thread's event loop."""
+    # LangFuse trace for the full generator-critic loop
+    lf = None
+    trace = None
+    try:
+        from .observability import get_langfuse
+
+        lf = get_langfuse()
+        if lf:
+            trace = lf.trace(
+                name="quiz_generation",
+                user_id=user_id,
+                metadata={
+                    "course_id": course_id,
+                    "question_count": num_questions,
+                    "difficulty": difficulty,
+                    "include_coding": include_coding,
+                },
+            )
+    except Exception:
+        pass
+
     try:
         from .quiz_loop import run_quiz_generation_loop
         from .quiz_planner import plan_quiz
@@ -286,6 +307,19 @@ async def _generate_quiz_async(
             "Quiz %s: generated %d questions via critic loop",
             quiz_id, len(question_rows),
         )
+
+        # Finalize LangFuse trace
+        try:
+            if trace:
+                trace.update(output={
+                    "questions_stored": len(question_rows),
+                    "has_coding": any(
+                        r["question_type"].startswith("code") for r in question_rows
+                    ),
+                })
+                lf.flush()
+        except Exception:
+            pass
 
     except Exception as e:
         logger.error("Quiz generation failed for %s: %s", quiz_id, e)
@@ -611,6 +645,24 @@ async def score_quiz(
             .execute()
         )
 
+        # Update BKT mastery state for this concept (if linked)
+        concept_id = question.get("concept_id")
+        user_id = question.get("user_id")
+        if concept_id and user_id:
+            try:
+                from lecturelink_api.services.mastery import update_mastery_from_quiz_result
+
+                await update_mastery_from_quiz_result(
+                    supabase=supabase,
+                    user_id=user_id,
+                    concept_id=concept_id,
+                    is_correct=is_correct,
+                )
+            except Exception:
+                logger.warning(
+                    "BKT update failed for concept %s", concept_id, exc_info=True
+                )
+
     total = len(results)
     score = (correct_count / total * 100) if total > 0 else 0.0
 
@@ -637,6 +689,23 @@ async def score_quiz(
         .eq("id", quiz_id)
         .execute()
     )
+
+    try:
+        from .observability import track_event
+
+        quiz_user_id = questions_result.data[0].get("user_id") if questions_result.data else None
+        if quiz_user_id:
+            track_event(quiz_user_id, "quiz_submitted", {
+                "quiz_id": quiz_id,
+                "score_pct": score,
+                "question_count": total,
+                "has_code_questions": any(
+                    q.get("question_type", "").startswith("code")
+                    for q in questions_result.data
+                ),
+            })
+    except Exception:
+        pass
 
     return {
         "score": score,

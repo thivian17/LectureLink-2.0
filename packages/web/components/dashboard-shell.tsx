@@ -15,16 +15,22 @@ import {
   Settings,
   LogOut,
   Menu,
+  UserPlus,
+  Shield,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import type { Course } from "@/types/database";
+import { MessageSquarePlus } from "lucide-react";
+import { FeedbackDrawer } from "@/components/feedback/FeedbackDrawer";
+import { FeedbackWidget } from "@/components/feedback/FeedbackWidget";
 
 const navItems = [
   { label: "Study Hub", href: "/dashboard", icon: GraduationCap },
   { label: "Record", href: "/dashboard/record", icon: Mic },
   { label: "Calendar", href: "/dashboard/calendar", icon: Calendar },
+  { label: "Invite Classmates", href: "/dashboard/invites", icon: UserPlus },
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
@@ -38,13 +44,27 @@ export function DashboardShell({
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     getCourses()
       .then(setCourses)
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("admin_users")
+      .select("role")
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setIsAdmin(true);
+      });
+  }, [user.id]);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -89,8 +109,8 @@ export function DashboardShell({
                 onClick={() => setSidebarOpen(false)}
                 className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
                   isActive
-                    ? "bg-primary/10 text-primary font-medium"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground font-medium"
+                    ? "bg-brand-light text-brand font-medium"
+                    : "text-sidebar-foreground/70 hover:text-brand hover:bg-sidebar-accent font-medium"
                 }`}
               >
                 <item.icon className="h-4 w-4" />
@@ -98,6 +118,21 @@ export function DashboardShell({
               </Link>
             );
           })}
+
+          {isAdmin && (
+            <Link
+              href="/admin"
+              onClick={() => setSidebarOpen(false)}
+              className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
+                pathname.startsWith("/admin")
+                  ? "bg-brand-light text-brand font-medium"
+                  : "text-sidebar-foreground/70 hover:text-brand hover:bg-sidebar-accent font-medium"
+              }`}
+            >
+              <Shield className="h-4 w-4" />
+              Admin
+            </Link>
+          )}
 
           {courses.length > 0 && (
             <>
@@ -116,8 +151,8 @@ export function DashboardShell({
                     onClick={() => setSidebarOpen(false)}
                     className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
                       isActive
-                        ? "bg-primary/10 text-primary font-medium"
-                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground font-medium"
+                        ? "bg-brand-light text-brand font-medium"
+                        : "text-sidebar-foreground/70 hover:text-brand hover:bg-sidebar-accent font-medium"
                     }`}
                   >
                     <div className="w-2 h-2 rounded-full bg-primary/60 shrink-0" />
@@ -129,6 +164,15 @@ export function DashboardShell({
             </>
           )}
         </nav>
+        <div className="p-3">
+          <button
+            onClick={() => setFeedbackOpen(true)}
+            className="flex w-full items-center gap-3 rounded-lg border border-dashed border-sidebar-foreground/20 px-3 py-2.5 text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-brand hover:border-brand/30"
+          >
+            <MessageSquarePlus className="h-4 w-4 shrink-0" />
+            <span className="truncate">Roast us (nicely)</span>
+          </button>
+        </div>
       </aside>
 
       {/* Main content */}
@@ -162,6 +206,8 @@ export function DashboardShell({
         {/* Page content */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</main>
       </div>
+      <FeedbackDrawer open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
+      <FeedbackWidget />
     </div>
   );
 }

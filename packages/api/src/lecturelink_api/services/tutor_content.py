@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from collections.abc import AsyncIterator
 
 from . import tutor_prompts
 from .genai_client import get_genai_client as _get_client
@@ -277,6 +278,70 @@ async def generate_chat_response(
     answer = await _call_gemini(answer_prompt, temperature=0.4)
 
     return {"response": answer, "relevance": relevance}
+
+
+# ---------------------------------------------------------------------------
+# 3b. Streaming chat response
+# ---------------------------------------------------------------------------
+
+
+async def stream_tutor_chat_response(
+    supabase,
+    session: dict,
+    student_message: str,
+) -> AsyncIterator[str]:
+    """Stream a tutor chat response as SSE-formatted chunks.
+
+    Mirrors generate_chat_response() context assembly but streams
+    the Gemini output instead of waiting for the full response.
+    """
+    course_id = session.get("course_id", "")
+    plan = session.get("lesson_plan", {})
+    current_concept_idx = session.get("current_concept_index", 0)
+    concepts = plan.get("concepts", [])
+    current_concept = (
+        concepts[current_concept_idx]["title"]
+        if current_concept_idx < len(concepts)
+        else "general review"
+    )
+
+    assessment_ctx = plan.get("_assessment_context", {})
+
+    # Get lecture context
+    chunks = await _get_concept_chunks(supabase, course_id, student_message)
+
+    assessment_context_str = ""
+    if assessment_ctx:
+        assessment_context_str = (
+            f"Preparing for {assessment_ctx.get('assessment_title', 'upcoming assessment')} "
+            f"({assessment_ctx.get('days_until', '?')} days away)."
+        )
+
+    answer_prompt = tutor_prompts.get_chat_answer_prompt(
+        student_message=student_message,
+        current_concept=current_concept,
+        lecture_chunks=chunks,
+        assessment_context=assessment_context_str,
+    )
+
+    try:
+        async for chunk in await _get_client().aio.models.generate_content_stream(
+            model=TUTOR_MODEL,
+            contents=answer_prompt,
+            config={"temperature": 0.4},
+        ):
+            if chunk.text:
+                data = json.dumps({"type": "chunk", "content": chunk.text})
+                yield f"data: {data}\n\n"
+    except Exception:
+        logger.error("Tutor chat streaming failed", exc_info=True)
+        error_data = json.dumps({
+            "type": "error",
+            "content": "I'm having trouble generating a response. Let me try again.",
+        })
+        yield f"data: {error_data}\n\n"
+
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
 
 # ---------------------------------------------------------------------------

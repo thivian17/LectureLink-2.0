@@ -67,6 +67,15 @@ export function QuizResults({ result, courseId, quizId }: QuizResultsProps) {
         </CardContent>
       </Card>
 
+      {/* Mastery impact note */}
+      <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+        <p className="font-medium">Mastery Impact</p>
+        <p className="text-blue-700 mt-0.5">
+          Your results have been used to update your concept mastery scores.
+          Check your study session for detailed progress.
+        </p>
+      </div>
+
       {/* Filter buttons */}
       <div className="flex gap-2">
         {(["all", "incorrect", "correct"] as Filter[]).map((f) => (
@@ -111,7 +120,7 @@ export function QuizResults({ result, courseId, quizId }: QuizResultsProps) {
           }
         >
           <RotateCcw className="mr-2 h-4 w-4" />
-          Retake Quiz
+          Retake Practice Test
         </Button>
         <Button
           variant="outline"
@@ -122,7 +131,7 @@ export function QuizResults({ result, courseId, quizId }: QuizResultsProps) {
           }
         >
           <Plus className="mr-2 h-4 w-4" />
-          Generate New Quiz
+          Generate New Practice Test
         </Button>
         <Button
           variant="outline"
@@ -131,7 +140,7 @@ export function QuizResults({ result, courseId, quizId }: QuizResultsProps) {
           }
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Quizzes
+          Back to Practice Tests
         </Button>
       </div>
     </div>

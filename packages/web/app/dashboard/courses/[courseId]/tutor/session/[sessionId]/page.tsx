@@ -38,6 +38,7 @@ import {
   fetchNextBlock,
 } from "@/lib/api";
 import { AuthError } from "@/lib/api-errors";
+import { trackEvent } from "@/lib/analytics";
 import type {
   TutorSession,
   AssessmentReadiness,
@@ -64,6 +65,7 @@ interface RenderedBlock {
   // For transition blocks
   nextConceptTitle?: string;
   estimatedMinutes?: number;
+  onStart?: () => void;
   // For reteach
   reteachContent?: string;
 }
@@ -100,10 +102,17 @@ export default function TutorSessionPage() {
   const [reviewingMissed, setReviewingMissed] = useState(false);
   const conceptQAsked = useRef(0);
   const conceptQCorrect = useRef(0);
+  // How many pre-generated blocks of the current concept have been consumed
+  const conceptBlocksConsumed = useRef(0);
 
   function nextBlockId() {
     return `block-${++blockIdCounter.current}`;
   }
+
+  // Track tutor session start
+  useEffect(() => {
+    trackEvent.tutorSessionStarted(courseId, "tutor");
+  }, [courseId]);
 
   // Load session
   const loadSession = useCallback(async () => {
@@ -150,26 +159,56 @@ export default function TutorSessionPage() {
     }
   }, [courseId, sessionId, router]);
 
+  /**
+   * Render pre-generated blocks up to (and including) the first "check"
+   * question, so content is presented one chunk at a time instead of all
+   * at once.  Uses conceptBlocksConsumed ref to track position within the
+   * current concept's block list.
+   */
+  function renderBlocksUntilCheck(
+    allBlocks: ContentBlock[],
+    startIndex: number,
+    replace: boolean,
+  ): void {
+    const batch: RenderedBlock[] = [];
+
+    for (let i = startIndex; i < allBlocks.length; i++) {
+      const b = allBlocks[i];
+      batch.push({
+        id: nextBlockId(),
+        type: b.block_type,
+        content: b.content,
+        block: b,
+      });
+      conceptBlocksConsumed.current = i + 1;
+
+      // Stop after the first check question so the user must answer
+      if (b.block_type === "check" && b.question) {
+        setIsWaitingForAnswer(true);
+        break;
+      }
+
+      // Also stop after a practice block (interactive reveal)
+      if (b.block_type === "practice") {
+        break;
+      }
+    }
+
+    if (replace) {
+      setBlocks(batch);
+    } else {
+      setBlocks((prev) => [...prev, ...batch]);
+    }
+  }
+
   async function populateBlocks(sess: TutorSession) {
     if (!sess.lesson_plan) return;
 
     const concept = sess.lesson_plan.concepts[sess.current_concept_index];
     if (concept?.generated_content) {
-      // Fast path: use pre-generated content
-      const initial = concept.generated_content.blocks.map(
-        (b): RenderedBlock => ({
-          id: nextBlockId(),
-          type: b.block_type,
-          content: b.content,
-          block: b,
-        }),
-      );
-      setBlocks(initial);
-
-      const lastBlock = concept.generated_content.blocks.at(-1);
-      if (lastBlock?.block_type === "check" && lastBlock.question) {
-        setIsWaitingForAnswer(true);
-      }
+      // Fast path: render blocks up to the first check question
+      conceptBlocksConsumed.current = 0;
+      renderBlocksUntilCheck(concept.generated_content.blocks, 0, true);
       return;
     }
 
@@ -276,15 +315,19 @@ export default function TutorSessionPage() {
     }
   }, [elapsedSeconds]);
 
-  // Auto-scroll
+  // Auto-scroll: scroll the last block into view (not the absolute bottom)
+  const lastBlockId = blocks.at(-1)?.id;
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: "smooth",
-      });
-    }
-  }, [blocks]);
+    if (!lastBlockId) return;
+    // Small delay so the DOM has rendered the new block
+    const timer = setTimeout(() => {
+      const el = document.getElementById(lastBlockId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [lastBlockId]);
 
   async function handlePause() {
     try {
@@ -297,6 +340,7 @@ export default function TutorSessionPage() {
 
   async function handleEnd() {
     setEnding(true);
+    trackEvent.tutorSessionEnded(courseId, elapsedSeconds);
     try {
       const summary = await completeTutorSession(sessionId);
       setSummaryData(summary);
@@ -416,30 +460,13 @@ export default function TutorSessionPage() {
         session.lesson_plan.concepts[currentConceptIndex];
 
       if (concept?.generated_content) {
-        // Pre-generated path: exclude reteach/chat from count
-        const existingCount = blocks.filter(
-          (b) => b.type !== "chat_response" && b.type !== "reteach",
-        ).length;
-        const remaining =
-          concept.generated_content.blocks.slice(existingCount);
+        // Pre-generated path: use the ref to know where we left off
+        const allContentBlocks = concept.generated_content.blocks;
+        const consumed = conceptBlocksConsumed.current;
 
-        if (remaining.length > 0) {
-          const nextBlocks = remaining.map(
-            (b): RenderedBlock => ({
-              id: nextBlockId(),
-              type: b.block_type,
-              content: b.content,
-              block: b,
-            }),
-          );
-          setBlocks((prev) => [...prev, ...nextBlocks]);
-
-          const nextCheck = remaining.find(
-            (b) => b.block_type === "check" && b.question,
-          );
-          if (nextCheck) {
-            setIsWaitingForAnswer(true);
-          }
+        if (consumed < allContentBlocks.length) {
+          // Render the next chunk (up to the next check question)
+          renderBlocksUntilCheck(allContentBlocks, consumed, false);
         } else {
           // Concept blocks done — review missed first
           if (missedQRef.current.length > 0) {
@@ -461,14 +488,19 @@ export default function TutorSessionPage() {
     const plan = session.lesson_plan;
     const nextIdx = currentConceptIndex + 1;
 
+    // Capture ref values NOW — the setBlocks updater runs later during
+    // render, by which point the refs would already be reset to 0.
+    const asked = conceptQAsked.current;
+    const correct = conceptQCorrect.current;
+
     setBlocks((prev) => [
       ...prev,
       {
         id: nextBlockId(),
         type: "summary",
         content: `You've completed: ${concept.title}`,
-        questionsAsked: conceptQAsked.current,
-        questionsCorrect: conceptQCorrect.current,
+        questionsAsked: asked,
+        questionsCorrect: correct,
         mastery: concept.mastery,
       },
     ]);
@@ -477,9 +509,13 @@ export default function TutorSessionPage() {
     missedQRef.current = [];
     conceptQAsked.current = 0;
     conceptQCorrect.current = 0;
+    conceptBlocksConsumed.current = 0;
 
     if (nextIdx < plan.concepts.length) {
       const next = plan.concepts[nextIdx];
+      setCurrentConceptIndex(nextIdx);
+
+      // Show transition with a button — user clicks to start the next concept
       setBlocks((prev) => [
         ...prev,
         {
@@ -488,30 +524,15 @@ export default function TutorSessionPage() {
           content: "",
           nextConceptTitle: next.title,
           estimatedMinutes: next.estimated_minutes,
+          onStart: () => {
+            if (next.generated_content) {
+              renderBlocksUntilCheck(next.generated_content.blocks, 0, false);
+            } else {
+              loadNextBlockFromApi();
+            }
+          },
         },
       ]);
-      setCurrentConceptIndex(nextIdx);
-
-      if (next.generated_content) {
-        const nextContentBlocks = next.generated_content.blocks.map(
-          (b): RenderedBlock => ({
-            id: nextBlockId(),
-            type: b.block_type,
-            content: b.content,
-            block: b,
-          }),
-        );
-        setBlocks((prev) => [...prev, ...nextContentBlocks]);
-        const firstCheck = next.generated_content.blocks.find(
-          (b) => b.block_type === "check" && b.question,
-        );
-        if (firstCheck) {
-          setIsWaitingForAnswer(true);
-        }
-      } else {
-        // No pre-generated content for next concept — fetch from API
-        await loadNextBlockFromApi();
-      }
     }
   }
 
@@ -625,81 +646,78 @@ export default function TutorSessionPage() {
 
           {/* Lesson blocks */}
           {blocks.map((block) => {
+            let element: React.ReactNode;
             switch (block.type) {
               case "teaching":
-                return (
+                element = (
                   <TeachingBlock
-                    key={block.id}
                     content={block.content}
                     approach={currentConcept?.teaching_approach}
                   />
                 );
+                break;
               case "check":
                 if (block.block?.question) {
-                  return (
+                  element = (
                     <CheckQuestion
-                      key={block.id}
                       question={block.block.question}
                       sessionId={sessionId}
                       onAnswered={handleAnswered}
                     />
                   );
+                } else {
+                  element = (
+                    <TeachingBlock content={block.content} />
+                  );
                 }
-                return (
-                  <TeachingBlock
-                    key={block.id}
-                    content={block.content}
-                  />
-                );
+                break;
               case "feedback":
-                return (
-                  <TeachingBlock
-                    key={block.id}
-                    content={block.content}
-                  />
+                element = (
+                  <TeachingBlock content={block.content} />
                 );
+                break;
               case "reteach":
-                return (
-                  <ReteachBlock key={block.id} content={block.content} />
+                element = (
+                  <ReteachBlock content={block.content} />
                 );
+                break;
               case "practice":
-                return (
-                  <PracticeBlock key={block.id} content={block.content} />
+                element = (
+                  <PracticeBlock content={block.content} />
                 );
+                break;
               case "summary":
-                return (
+                element = (
                   <SummaryBlock
-                    key={block.id}
                     content={block.content}
                     questionsAsked={block.questionsAsked ?? 0}
                     questionsCorrect={block.questionsCorrect ?? 0}
                     mastery={block.mastery}
                   />
                 );
+                break;
               case "transition":
-                return (
+                element = (
                   <TransitionBlock
-                    key={block.id}
                     content={block.content}
                     nextConceptTitle={block.nextConceptTitle ?? ""}
                     estimatedMinutes={block.estimatedMinutes}
+                    onStart={block.onStart}
                   />
                 );
+                break;
               case "chat_response":
-                return (
+                element = (
                   <ChatResponse
-                    key={block.id}
                     userMessage={block.userMessage ?? ""}
                     response={block.content}
                     relevance={block.relevance ?? "on_topic"}
                   />
                 );
+                break;
               case "complete":
-                return (
-                  <Card
-                    key={block.id}
-                    className="border-green-200 dark:border-green-800"
-                  >
+                element = (
+                  <Card className="border-green-200 dark:border-green-800">
                     <CardContent className="flex items-center gap-3 py-6">
                       <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
                       <p className="text-sm font-medium">
@@ -708,14 +726,17 @@ export default function TutorSessionPage() {
                     </CardContent>
                   </Card>
                 );
+                break;
               default:
-                return (
-                  <TeachingBlock
-                    key={block.id}
-                    content={block.content}
-                  />
+                element = (
+                  <TeachingBlock content={block.content} />
                 );
             }
+            return (
+              <div key={block.id} id={block.id}>
+                {element}
+              </div>
+            );
           })}
 
           {/* Loading indicator for on-demand block fetching */}
@@ -725,21 +746,45 @@ export default function TutorSessionPage() {
             </div>
           )}
 
-          {/* Continue button when not waiting for answer and blocks exist but no pre-generated content */}
+          {/* Continue button: advance to next chunk of content */}
           {!isWaitingForAnswer &&
             !fetchingBlock &&
             !ending &&
             blocks.length > 0 &&
             !blocks.some((b) => b.type === "complete") &&
-            session?.lesson_plan &&
-            !session.lesson_plan.concepts[currentConceptIndex]
-              ?.generated_content && (
-              <div className="flex justify-center">
-                <Button onClick={loadNextBlockFromApi} variant="outline">
-                  Continue
-                </Button>
-              </div>
-            )}
+            session?.lesson_plan && (() => {
+              const concept = session.lesson_plan!.concepts[currentConceptIndex];
+              if (concept?.generated_content) {
+                // Pre-generated path: check if there are more blocks to reveal
+                const consumed = conceptBlocksConsumed.current;
+                const total = concept.generated_content.blocks.length;
+                if (consumed >= total) return null;
+                return (
+                  <div className="flex justify-center">
+                    <Button
+                      onClick={() => {
+                        renderBlocksUntilCheck(
+                          concept.generated_content!.blocks,
+                          conceptBlocksConsumed.current,
+                          false,
+                        );
+                      }}
+                      variant="outline"
+                    >
+                      Continue
+                    </Button>
+                  </div>
+                );
+              }
+              // On-demand path
+              return (
+                <div className="flex justify-center">
+                  <Button onClick={loadNextBlockFromApi} variant="outline">
+                    Continue
+                  </Button>
+                </div>
+              );
+            })()}
 
           {/* End session loading indicator */}
           {ending && (

@@ -123,9 +123,9 @@ export function GenerateQuizDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Generate Quiz</DialogTitle>
+          <DialogTitle>Generate Practice Test</DialogTitle>
           <DialogDescription>
-            Create an AI-generated quiz to test your knowledge.
+            Create an AI-generated practice test to test your knowledge.
           </DialogDescription>
         </DialogHeader>
 

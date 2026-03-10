@@ -22,9 +22,9 @@ interface PracticeModeIntroStepProps {
 const FEATURES = [
   {
     icon: Brain,
-    title: "Smart Quizzes",
+    title: "Smart Practice Tests",
     description:
-      "Auto-generated quizzes based on your lecture content, weighted toward upcoming exams.",
+      "Auto-generated practice tests based on your lecture content, weighted toward upcoming exams.",
   },
   {
     icon: Code,

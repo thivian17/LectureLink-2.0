@@ -432,4 +432,46 @@ async def complete_onboarding(
         "onboarding_step": None,
     }).eq("id", course_id).execute()
 
+    try:
+        from lecturelink_api.services.observability import track_event
+
+        track_event(user["id"], "onboarding_completed", {
+            "course_id": course_id,
+            "path": course.get("onboarding_path"),
+        })
+    except Exception:
+        pass
+
     return {"completed_at": now, "mastery_scores_seeded": mastery_count}
+
+
+# -----------------------------------------------------------------------
+# PATCH /api/courses/{course_id}/notifications/preferences
+# -----------------------------------------------------------------------
+
+
+@router.patch("/notifications/preferences")
+async def update_notification_preferences(
+    course_id: str,
+    body: dict,
+    user: dict = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    """Update user email notification preferences."""
+    enabled = body.get("email_notifications_enabled")
+    if enabled is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="email_notifications_enabled required",
+        )
+
+    sb = _sb(user, settings)
+    sb.table("user_onboarding").upsert(
+        {
+            "user_id": user["id"],
+            "email_notifications_enabled": bool(enabled),
+        },
+        on_conflict="user_id",
+    ).execute()
+
+    return {"email_notifications_enabled": bool(enabled)}

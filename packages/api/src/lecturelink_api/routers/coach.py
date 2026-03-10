@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from supabase import create_client
 
@@ -75,6 +76,53 @@ async def study_coach_chat(
     )
 
     return CoachChatResponse(**result)
+
+
+@router.post("/courses/{course_id}/study-coach/chat/stream")
+async def stream_coach_chat(
+    course_id: str,
+    body: CoachChatRequest,
+    user: dict = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    """Streaming version of study coach chat.
+
+    Returns text/event-stream with chunks as they arrive from Gemini.
+    """
+    sb = _sb(user, settings)
+
+    check_rate_limit(sb, user["id"], "study_coach")
+
+    # Verify course ownership
+    course = (
+        sb.table("courses")
+        .select("id")
+        .eq("id", course_id)
+        .eq("user_id", user["id"])
+        .execute()
+    )
+    if not course.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
+        )
+
+    from lecturelink_api.services.coach import stream_coach_response
+
+    return StreamingResponse(
+        stream_coach_response(
+            supabase=sb,
+            course_id=course_id,
+            user_id=user["id"],
+            message=body.message,
+            conversation_history=body.conversation_history,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/courses/{course_id}/performance")

@@ -63,7 +63,7 @@ const MODES: { key: QuizMode; icon: string; title: string; subtitle: string }[] 
   {
     key: "knowledge",
     icon: "\u{1F4DD}",
-    title: "Knowledge Quiz",
+    title: "Knowledge Test",
     subtitle: "Multiple choice & short answer",
   },
   {

@@ -1,4 +1,16 @@
-"""Study Actions (LLM) — Gemini-powered personalized study recommendations."""
+"""LLM-enhanced study action framing — wraps the deterministic engine.
+
+This module DOES NOT compute its own recommendations. It calls
+study_actions.py to get the deterministic priority list, then uses
+Gemini to rephrase those actions in motivating, personalized language.
+
+Used by:
+  - GET /api/study-actions/enhanced (slower, ~1-3s, costs LLM tokens)
+
+Contract: study_actions_llm.py is ALWAYS a wrapper around study_actions.py.
+It must never introduce its own priority logic. If you need to change what
+recommendations are surfaced, change study_actions.py — NOT this file.
+"""
 
 from __future__ import annotations
 
