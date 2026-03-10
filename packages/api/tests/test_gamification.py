@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from datetime import UTC, date, datetime, timedelta
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -232,7 +232,7 @@ class TestUpdateStreak:
                 "last_session_date": today.isoformat(),
                 "streak_freezes_available": 1,
                 "streak_freezes_used": 0,
-                "freeze_last_reset_at": datetime.now(timezone.utc).isoformat(),
+                "freeze_last_reset_at": datetime.now(UTC).isoformat(),
             }],
         })
         result = await update_streak(sb, "user-1")
@@ -252,7 +252,7 @@ class TestUpdateStreak:
                 "last_session_date": yesterday.isoformat(),
                 "streak_freezes_available": 1,
                 "streak_freezes_used": 0,
-                "freeze_last_reset_at": datetime.now(timezone.utc).isoformat(),
+                "freeze_last_reset_at": datetime.now(UTC).isoformat(),
             }],
         })
         result = await update_streak(sb, "user-1")
@@ -272,7 +272,7 @@ class TestUpdateStreak:
                 "last_session_date": two_days_ago.isoformat(),
                 "streak_freezes_available": 1,
                 "streak_freezes_used": 0,
-                "freeze_last_reset_at": datetime.now(timezone.utc).isoformat(),
+                "freeze_last_reset_at": datetime.now(UTC).isoformat(),
             }],
         })
         result = await update_streak(sb, "user-1")
@@ -292,7 +292,7 @@ class TestUpdateStreak:
                 "last_session_date": two_days_ago.isoformat(),
                 "streak_freezes_available": 0,
                 "streak_freezes_used": 1,
-                "freeze_last_reset_at": datetime.now(timezone.utc).isoformat(),
+                "freeze_last_reset_at": datetime.now(UTC).isoformat(),
             }],
         })
         result = await update_streak(sb, "user-1")
@@ -312,7 +312,7 @@ class TestUpdateStreak:
                 "last_session_date": week_ago.isoformat(),
                 "streak_freezes_available": 1,
                 "streak_freezes_used": 0,
-                "freeze_last_reset_at": datetime.now(timezone.utc).isoformat(),
+                "freeze_last_reset_at": datetime.now(UTC).isoformat(),
             }],
         })
         result = await update_streak(sb, "user-1")
@@ -331,7 +331,7 @@ class TestUpdateStreak:
                 "last_session_date": yesterday.isoformat(),
                 "streak_freezes_available": 1,
                 "streak_freezes_used": 0,
-                "freeze_last_reset_at": datetime.now(timezone.utc).isoformat(),
+                "freeze_last_reset_at": datetime.now(UTC).isoformat(),
             }],
         })
         result = await update_streak(sb, "user-1")
@@ -351,7 +351,7 @@ class TestUpdateStreak:
                 "last_session_date": yesterday.isoformat(),
                 "streak_freezes_available": 1,
                 "streak_freezes_used": 0,
-                "freeze_last_reset_at": datetime.now(timezone.utc).isoformat(),
+                "freeze_last_reset_at": datetime.now(UTC).isoformat(),
             }],
         })
         result = await update_streak(sb, "user-1")
@@ -455,7 +455,7 @@ class TestGetXPHistory:
     async def test_history_with_events(self):
         from lecturelink_api.services.gamification import get_xp_history
 
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
         sb = _make_sb({
             "xp_events": [
                 {"amount": 10, "created_at": f"{today}T10:00:00+00:00"},

@@ -77,7 +77,6 @@ class TestPlanQuiz:
             },
         ])
 
-        call_count = [0]
 
         def table_side_effect(name):
             if name == "concept_assessment_links":

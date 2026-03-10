@@ -279,7 +279,7 @@ class TestLectureListAndDetail:
         course = make_course()
         lec = make_lecture(course["id"])
         concept = make_concept(course["id"], lec["id"], title="First Law")
-        chunk = make_chunk(lec["id"], slide_number=3)
+        make_chunk(lec["id"], slide_number=3)
 
         call_count = {"n": 0}
 

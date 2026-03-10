@@ -261,6 +261,7 @@ class TestCourseCreationOnboardingFlag:
                 "code": "CS101",
                 "semester_start": "2026-01-12",
                 "semester_end": "2026-05-01",
+                "meeting_days": ["Tue", "Thu"],
             })
 
         assert resp.status_code == 201
@@ -298,6 +299,7 @@ class TestCourseCreationOnboardingFlag:
                 "name": "Intro to CS",
                 "semester_start": "2026-01-12",
                 "semester_end": "2026-05-01",
+                "meeting_days": ["Tue", "Thu"],
             })
 
         assert resp.status_code == 201

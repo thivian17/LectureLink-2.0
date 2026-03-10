@@ -10,9 +10,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-
 from lecturelink_api.services.tutor_planner import get_assessment_readiness
-
 
 # ---------------------------------------------------------------------------
 # Helpers

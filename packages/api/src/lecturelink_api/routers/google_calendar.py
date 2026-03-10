@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from supabase import create_client
@@ -51,7 +51,7 @@ async def store_tokens(
             "access_token": body.access_token,
             "refresh_token": body.refresh_token,
             "scopes": ["https://www.googleapis.com/auth/calendar.events"],
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         },
         on_conflict="user_id",
     ).execute()
@@ -130,7 +130,7 @@ async def toggle_sync(
         .update(
             {
                 "calendar_sync_enabled": body.enabled,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
             }
         )
         .eq("user_id", user["id"])

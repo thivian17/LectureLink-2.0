@@ -250,7 +250,7 @@ def _consolidate_by_topics(
     fine_concepts: list[dict],
     topics: list[str],
     covered_titles: set[str],
-) -> list["ConceptReadiness"]:
+) -> list[ConceptReadiness]:
     """Consolidate fine-grained concepts into broader assessment topics.
 
     Uses word-overlap scoring to bucket each concept under the best-matching

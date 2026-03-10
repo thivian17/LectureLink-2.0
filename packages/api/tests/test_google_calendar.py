@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-
 from lecturelink_api.models.google_calendar import (
     GoogleTokensRequest,
     SyncStatusResponse,
@@ -16,7 +14,6 @@ from lecturelink_api.models.google_calendar import (
 from lecturelink_api.services.google_calendar import (
     build_calendar_event,
 )
-
 
 # ---------------------------------------------------------------------------
 # Unit tests: Pydantic models

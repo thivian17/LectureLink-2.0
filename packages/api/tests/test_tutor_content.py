@@ -2,30 +2,27 @@
 
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
 from lecturelink_api.services.tutor_prompts import (
+    get_chat_answer_prompt,
     get_chat_relevance_prompt,
     get_check_question_prompt,
+    get_diagnostic_analysis_prompt,
     get_diagnostic_questions_prompt,
     get_grading_prompt,
     get_lesson_plan_prompt,
+    get_practice_prompt,
     get_reteach_prompt,
     get_session_summary_prompt,
-    get_teaching_block_prompt,
-    get_tutor_system_prompt,
-    get_transition_prompt,
-    get_practice_prompt,
     get_summary_prompt,
-    get_chat_answer_prompt,
-    get_diagnostic_analysis_prompt,
+    get_teaching_block_prompt,
+    get_transition_prompt,
+    get_tutor_system_prompt,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

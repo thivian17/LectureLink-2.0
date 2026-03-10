@@ -178,7 +178,7 @@ class TestGenerateQuestions:
              "feedback": "Too vague"},
         ]
 
-        questions = await generate_questions(
+        await generate_questions(
             _make_plan(), critic_feedback=feedback
         )
 
