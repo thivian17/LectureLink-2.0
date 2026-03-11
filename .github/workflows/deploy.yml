@@ -238,7 +238,7 @@ jobs:
           SA=${_SA//[$'\t\r\n ']}
           PROJECT=${_PROJECT//[$'\t\r\n ']}
           REDIS=${_REDIS//[$'\t\r\n ']}
-          gcloud run deploy $WORKER_SERVICE --image $REGISTRY/$PROJECT/lecturelink/api:$GITHUB_SHA --region $REGION --platform managed --command="python","-m","arq","lecturelink_api.worker.WorkerSettings" --memory 512Mi --cpu 1 --min-instances 1 --max-instances 3 --no-cpu-throttling --vpc-connector=$VPC_CONNECTOR --service-account=$SA --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest" --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=$PROJECT,REDIS_URL=redis://$REDIS:6379,GOOGLE_GENAI_USE_VERTEXAI=TRUE" --no-allow-unauthenticated
+          gcloud run deploy $WORKER_SERVICE --image $REGISTRY/$PROJECT/lecturelink/api:$GITHUB_SHA --region $REGION --platform managed --command="python","-m","lecturelink_api.worker_main" --memory 512Mi --cpu 1 --min-instances 1 --max-instances 3 --no-cpu-throttling --vpc-connector=$VPC_CONNECTOR --service-account=$SA --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest" --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=$PROJECT,REDIS_URL=redis://$REDIS:6379,GOOGLE_GENAI_USE_VERTEXAI=TRUE" --no-allow-unauthenticated
 
   # ---------------------------------------------------------------------------
   # Job 3c: Deploy Web to Cloud Run
