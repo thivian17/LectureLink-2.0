@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -46,7 +46,7 @@ class TestExtractMaterialText:
             "sections": [],
             "preview": "plain text",
         }
-        result = await extract_material_text("http://example.com/file.txt", ".txt")
+        await extract_material_text("http://example.com/file.txt", ".txt")
         mock_txt.assert_called_once()
 
     @pytest.mark.asyncio
