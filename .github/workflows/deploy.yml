@@ -189,19 +189,15 @@ jobs:
           SA=${_SA//[$'\t\r\n ']}
           PROJECT=${_PROJECT//[$'\t\r\n ']}
           REDIS=${_REDIS//[$'\t\r\n ']}
-          gcloud run deploy $API_SERVICE --image $REGISTRY/$PROJECT/lecturelink/api:$GITHUB_SHA --region $REGION --platform managed --memory 512Mi --cpu 1 --min-instances 1 --max-instances 10 --timeout 60s --vpc-connector=$VPC_CONNECTOR --service-account=$SA --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,INTERNAL_API_KEY=INTERNAL_API_KEY:latest" --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=$PROJECT,REDIS_URL=redis://$REDIS:6379,CORS_ORIGINS=https://lecturelink.ca,GOOGLE_GENAI_USE_VERTEXAI=TRUE" --no-traffic --allow-unauthenticated
+          gcloud run deploy $API_SERVICE --image $REGISTRY/$PROJECT/lecturelink/api:$GITHUB_SHA --region $REGION --platform managed --memory 512Mi --cpu 1 --min-instances 1 --max-instances 10 --timeout 60s --vpc-connector=$VPC_CONNECTOR --service-account=$SA --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,INTERNAL_API_KEY=INTERNAL_API_KEY:latest" --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=$PROJECT,REDIS_URL=redis://$REDIS:6379,CORS_ORIGINS=https://lecturelink.ca,GOOGLE_GENAI_USE_VERTEXAI=TRUE" --no-traffic --tag canary --allow-unauthenticated
 
       - name: Smoke test API
         run: |
-          REVISION_URL=$(gcloud run revisions list \
-            --service=${{ env.API_SERVICE }} \
-            --region=${{ env.REGION }} \
-            --sort-by=~creationTimestamp \
-            --limit=1 \
-            --format='value(status.url)')
-          echo "Testing revision: $REVISION_URL"
+          SERVICE_URL=$(gcloud run services describe ${{ env.API_SERVICE }} --region=${{ env.REGION }} --format='value(status.url)')
+          CANARY_URL=$(echo "$SERVICE_URL" | sed 's|https://|https://canary---|')
+          echo "Testing canary: $CANARY_URL"
 
-          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "${REVISION_URL}/health" --max-time 30)
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "${CANARY_URL}/health" --max-time 30)
           echo "Health check returned: $STATUS"
 
           if [ "$STATUS" -ne 200 ]; then
@@ -213,6 +209,7 @@ jobs:
         run: |
           gcloud run services update-traffic ${{ env.API_SERVICE }} \
             --to-latest \
+            --remove-tags=canary \
             --region ${{ env.REGION }}
 
   # ---------------------------------------------------------------------------
@@ -269,19 +266,15 @@ jobs:
           SA=${_SA//[$'\t\r\n ']}
           PROJECT=${_PROJECT//[$'\t\r\n ']}
           API_URL=${_API_URL//[$'\t\r\n ']}
-          gcloud run deploy $WEB_SERVICE --image $REGISTRY/$PROJECT/lecturelink/web:$GITHUB_SHA --region $REGION --platform managed --memory 256Mi --cpu 1 --min-instances 1 --max-instances 5 --timeout 30s --service-account=$SA --set-env-vars="NEXT_PUBLIC_API_URL=$API_URL" --no-traffic --allow-unauthenticated
+          gcloud run deploy $WEB_SERVICE --image $REGISTRY/$PROJECT/lecturelink/web:$GITHUB_SHA --region $REGION --platform managed --memory 256Mi --cpu 1 --min-instances 1 --max-instances 5 --timeout 30s --service-account=$SA --set-env-vars="NEXT_PUBLIC_API_URL=$API_URL" --no-traffic --tag canary --allow-unauthenticated
 
       - name: Smoke test Web
         run: |
-          REVISION_URL=$(gcloud run revisions list \
-            --service=${{ env.WEB_SERVICE }} \
-            --region=${{ env.REGION }} \
-            --sort-by=~creationTimestamp \
-            --limit=1 \
-            --format='value(status.url)')
-          echo "Testing revision: $REVISION_URL"
+          SERVICE_URL=$(gcloud run services describe ${{ env.WEB_SERVICE }} --region=${{ env.REGION }} --format='value(status.url)')
+          CANARY_URL=$(echo "$SERVICE_URL" | sed 's|https://|https://canary---|')
+          echo "Testing canary: $CANARY_URL"
 
-          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "${REVISION_URL}" --max-time 30)
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "${CANARY_URL}" --max-time 30)
           echo "Root page returned: $STATUS"
 
           if [ "$STATUS" -ne 200 ]; then
@@ -293,6 +286,7 @@ jobs:
         run: |
           gcloud run services update-traffic ${{ env.WEB_SERVICE }} \
             --to-latest \
+            --remove-tags=canary \
             --region ${{ env.REGION }}
 
   # ---------------------------------------------------------------------------
