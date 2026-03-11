@@ -181,13 +181,22 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Deploy API (no traffic)
-        env:
-          IMAGE: ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:${{ github.sha }}
-          SA: ${{ secrets.RUNTIME_SERVICE_ACCOUNT }}
-          PROJECT: ${{ secrets.GCP_PROJECT_ID }}
-          REDIS: ${{ secrets.MEMORYSTORE_IP }}
-        run: |
-          gcloud run deploy "$API_SERVICE" --image "$IMAGE" --region "$REGION" --platform managed --memory 512Mi --cpu 1 --min-instances 1 --max-instances 10 --timeout 60s --vpc-connector="$VPC_CONNECTOR" --service-account="$SA" --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,INTERNAL_API_KEY=INTERNAL_API_KEY:latest" --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=$PROJECT,REDIS_URL=redis://$REDIS:6379,CORS_ORIGINS=https://lecturelink.ca,GOOGLE_GENAI_USE_VERTEXAI=TRUE" --no-traffic --allow-unauthenticated
+        run: >-
+          gcloud run deploy ${{ env.API_SERVICE }}
+          --image ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:${{ github.sha }}
+          --region ${{ env.REGION }}
+          --platform managed
+          --memory 512Mi
+          --cpu 1
+          --min-instances 1
+          --max-instances 10
+          --timeout 60s
+          --vpc-connector=${{ env.VPC_CONNECTOR }}
+          --service-account=${{ secrets.RUNTIME_SERVICE_ACCOUNT }}
+          --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,INTERNAL_API_KEY=INTERNAL_API_KEY:latest"
+          --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},REDIS_URL=redis://${{ secrets.MEMORYSTORE_IP }}:6379,CORS_ORIGINS=https://lecturelink.ca,GOOGLE_GENAI_USE_VERTEXAI=TRUE"
+          --no-traffic
+          --allow-unauthenticated
 
       - name: Smoke test API
         run: |
@@ -231,13 +240,22 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Deploy Worker
-        env:
-          IMAGE: ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:${{ github.sha }}
-          SA: ${{ secrets.RUNTIME_SERVICE_ACCOUNT }}
-          PROJECT: ${{ secrets.GCP_PROJECT_ID }}
-          REDIS: ${{ secrets.MEMORYSTORE_IP }}
-        run: |
-          gcloud run deploy "$WORKER_SERVICE" --image "$IMAGE" --region "$REGION" --platform managed --command="python","-m","arq","lecturelink_api.worker.WorkerSettings" --memory 512Mi --cpu 1 --min-instances 1 --max-instances 3 --no-cpu-throttling --vpc-connector="$VPC_CONNECTOR" --service-account="$SA" --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest" --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=$PROJECT,REDIS_URL=redis://$REDIS:6379,GOOGLE_GENAI_USE_VERTEXAI=TRUE" --no-allow-unauthenticated
+        run: >-
+          gcloud run deploy ${{ env.WORKER_SERVICE }}
+          --image ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:${{ github.sha }}
+          --region ${{ env.REGION }}
+          --platform managed
+          --command="python","-m","arq","lecturelink_api.worker.WorkerSettings"
+          --memory 512Mi
+          --cpu 1
+          --min-instances 1
+          --max-instances 3
+          --no-cpu-throttling
+          --vpc-connector=${{ env.VPC_CONNECTOR }}
+          --service-account=${{ secrets.RUNTIME_SERVICE_ACCOUNT }}
+          --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest"
+          --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},REDIS_URL=redis://${{ secrets.MEMORYSTORE_IP }}:6379,GOOGLE_GENAI_USE_VERTEXAI=TRUE"
+          --no-allow-unauthenticated
 
   # ---------------------------------------------------------------------------
   # Job 3c: Deploy Web to Cloud Run
@@ -257,12 +275,20 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Deploy Web (no traffic)
-        env:
-          IMAGE: ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/web:${{ github.sha }}
-          SA: ${{ secrets.RUNTIME_SERVICE_ACCOUNT }}
-          API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
-        run: |
-          gcloud run deploy "$WEB_SERVICE" --image "$IMAGE" --region "$REGION" --platform managed --memory 256Mi --cpu 1 --min-instances 1 --max-instances 5 --timeout 30s --service-account="$SA" --set-env-vars="NEXT_PUBLIC_API_URL=$API_URL" --no-traffic --allow-unauthenticated
+        run: >-
+          gcloud run deploy ${{ env.WEB_SERVICE }}
+          --image ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/web:${{ github.sha }}
+          --region ${{ env.REGION }}
+          --platform managed
+          --memory 256Mi
+          --cpu 1
+          --min-instances 1
+          --max-instances 5
+          --timeout 30s
+          --service-account=${{ secrets.RUNTIME_SERVICE_ACCOUNT }}
+          --set-env-vars="NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}"
+          --no-traffic
+          --allow-unauthenticated
 
       - name: Smoke test Web
         run: |
