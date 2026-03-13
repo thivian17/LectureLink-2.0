@@ -229,8 +229,18 @@ def generate_lecture_checklist(
             d += timedelta(days=1)
 
     # Build weekly schedule topic map and detect break weeks
-    _BREAK_KEYWORDS = {"reading week", "break", "no class", "no lecture",
-                       "holiday", "recess", "study week", "off week"}
+    # Use word-boundary regex to avoid false positives (e.g. "Breakdowns" matching "break")
+    import re
+    _BREAK_PATTERNS = [
+        re.compile(r"\breading\s+week\b", re.IGNORECASE),
+        re.compile(r"\b(?<![\w])break(?![\w])\b", re.IGNORECASE),
+        re.compile(r"\bno\s+class\b", re.IGNORECASE),
+        re.compile(r"\bno\s+lecture\b", re.IGNORECASE),
+        re.compile(r"\bholiday\b", re.IGNORECASE),
+        re.compile(r"\brecess\b", re.IGNORECASE),
+        re.compile(r"\bstudy\s+week\b", re.IGNORECASE),
+        re.compile(r"\boff\s+week\b", re.IGNORECASE),
+    ]
     topic_map: dict[int, str | None] = {}
     break_weeks: set[int] = set()
     for entry in syllabus_weekly_schedule or []:
@@ -239,7 +249,7 @@ def generate_lecture_checklist(
         if wn is not None and topics:
             joined = ", ".join(topics)
             topic_map[wn] = joined
-            if any(kw in joined.lower() for kw in _BREAK_KEYWORDS):
+            if any(pat.search(joined) for pat in _BREAK_PATTERNS):
                 break_weeks.add(wn)
 
     checklist: list[dict] = []

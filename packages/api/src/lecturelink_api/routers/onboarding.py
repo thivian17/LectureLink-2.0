@@ -571,6 +571,31 @@ async def update_lecture_checklist_item(
         (item for item in checklist if item["lecture_number"] == lecture_number),
         None,
     )
+
+    # Also check user-added lectures if not found in auto-generated checklist
+    is_user_added = False
+    if original is None:
+        added = (
+            sb.table("lecture_schedule_corrections")
+            .select("*")
+            .eq("course_id", course_id)
+            .eq("user_id", user["id"])
+            .eq("original_lecture_number", lecture_number)
+            .eq("is_addition", True)
+            .execute()
+        )
+        if added.data:
+            row = added.data[0]
+            original = {
+                "lecture_number": lecture_number,
+                "expected_date": row.get("corrected_date") or "",
+                "week_number": 0,
+                "topic_hint": row.get("corrected_title") or row.get("corrected_description"),
+                "day_of_week": "",
+                "status": "pending",
+            }
+            is_user_added = True
+
     if original is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -583,7 +608,7 @@ async def update_lecture_checklist_item(
         "user_id": user["id"],
         "original_lecture_number": lecture_number,
         "original_title": f"Lecture {lecture_number}",
-        "original_date": original["expected_date"],
+        "original_date": original["expected_date"] or None,
         "original_topic_hint": original.get("topic_hint"),
         "corrected_title": body.title,
         "corrected_date": body.lecture_date.isoformat() if body.lecture_date else None,
@@ -599,6 +624,7 @@ async def update_lecture_checklist_item(
         topic_hint=body.title or body.description or original.get("topic_hint"),
         day_of_week=original["day_of_week"],
         status=original["status"],
+        is_user_added=is_user_added,
     )
 
 

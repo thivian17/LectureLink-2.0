@@ -270,6 +270,26 @@ class TestGenerateLectureChecklist:
         assert 1 in week_numbers
         assert 3 in week_numbers
 
+    def test_break_keyword_no_false_positive_on_breakdowns(self):
+        """'Showing Breakdowns of the Whole' should NOT trigger break detection."""
+        start = date(2026, 1, 5)  # a Monday
+        course = {
+            "semester_start": start.isoformat(),
+            "semester_end": "2026-05-01",
+            "meeting_days": ["Wed"],
+        }
+        schedule = [
+            {"week_number": 6, "topics": [
+                "Data Modelling Fundamentals",
+                "Showing Breakdowns of the Whole",
+            ]},
+        ]
+        checklist = generate_lecture_checklist(
+            course, syllabus_weekly_schedule=schedule,
+        )
+        week_numbers = {item["week_number"] for item in checklist}
+        assert 6 in week_numbers, "Week 6 should NOT be skipped (Breakdowns != break)"
+
     def test_end_date_caps_at_today(self):
         start = date.today() - timedelta(days=7)
         # Semester end is way in the future
