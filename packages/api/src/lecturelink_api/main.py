@@ -16,6 +16,7 @@ from lecturelink_api.routers import (
     assessments,
     coach,
     courses,
+    dashboard,
     feedback,
     gamification,
     google_calendar,
@@ -153,6 +154,7 @@ app.include_router(materials.router)
 app.include_router(search.router)
 app.include_router(quizzes.router)
 app.include_router(coach.router)
+app.include_router(dashboard.router)
 app.include_router(study_actions.router)
 app.include_router(onboarding.router)
 app.include_router(tutor.router, prefix="/api/tutor")

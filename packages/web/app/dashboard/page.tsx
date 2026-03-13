@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { StudyBriefingAgent } from "@/components/dashboard-agent/StudyBriefingAgent";
 import { StartSessionButton } from "@/components/learn/StartSessionButton";
 import { CourseReadinessCards } from "@/components/learn/CourseReadinessCards";
 import { UpcomingAssessmentTimeline } from "@/components/learn/UpcomingAssessmentTimeline";
@@ -116,25 +117,31 @@ export default function DashboardPage() {
       </div>
 
       {!hasCourses && !loading ? (
-        <Card className="flex flex-col items-center justify-center py-16">
-          <CardHeader className="items-center text-center">
-            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
-              <BookOpen className="h-6 w-6 text-primary" />
-            </div>
-            <CardTitle>No courses yet</CardTitle>
-            <CardDescription>
-              Add your first course and upload a syllabus to get started.
-            </CardDescription>
-          </CardHeader>
-          <Button asChild>
-            <Link href="/dashboard/courses/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Course
-            </Link>
-          </Button>
-        </Card>
+        <>
+          <StudyBriefingAgent />
+          <Card className="flex flex-col items-center justify-center py-16">
+            <CardHeader className="items-center text-center">
+              <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+                <BookOpen className="h-6 w-6 text-primary" />
+              </div>
+              <CardTitle>No courses yet</CardTitle>
+              <CardDescription>
+                Add your first course and upload a syllabus to get started.
+              </CardDescription>
+            </CardHeader>
+            <Button asChild>
+              <Link href="/dashboard/courses/new">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Course
+              </Link>
+            </Button>
+          </Card>
+        </>
       ) : (
         <>
+          {/* Study Briefing Agent */}
+          <StudyBriefingAgent />
+
           {/* Primary CTA: Start Today's Session */}
           <StartSessionButton
             topAssessment={topAssessment}

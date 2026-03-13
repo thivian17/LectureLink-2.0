@@ -108,7 +108,7 @@ class TestGenerateConceptBrief:
                 return_value=mock_client,
             ),
             patch(
-                "lecturelink_api.services.concept_brief.search_lectures",
+                "lecturelink_api.services.concept_brief.fetch_concept_chunks",
                 new_callable=AsyncMock,
                 return_value=[
                     {
@@ -176,19 +176,19 @@ class TestGenerateConceptBrief:
         mock_client = MagicMock()
         mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
-        mock_search = AsyncMock(return_value=[
+        mock_fetch = AsyncMock(return_value=[
             {"chunk_id": "ch1", "content": "Source content", "lecture_title": "L1", "start_time": 60.0},
         ])
 
         with (
             patch("lecturelink_api.services.concept_brief._get_client", return_value=mock_client),
-            patch("lecturelink_api.services.concept_brief.search_lectures", mock_search),
+            patch("lecturelink_api.services.concept_brief.fetch_concept_chunks", mock_fetch),
         ):
             result = await generate_concept_brief(
                 sb, user_id="u1", concept_id="c1", course_id="course1"
             )
 
-        mock_search.assert_called_once()
+        mock_fetch.assert_called_once()
         assert result["sources"][0]["lecture_title"] == "L1"
 
     @pytest.mark.asyncio
@@ -218,7 +218,7 @@ class TestGenerateConceptBrief:
         with (
             patch("lecturelink_api.services.concept_brief._get_client", return_value=mock_client),
             patch(
-                "lecturelink_api.services.concept_brief.search_lectures",
+                "lecturelink_api.services.concept_brief.fetch_concept_chunks",
                 new_callable=AsyncMock,
                 return_value=[],
             ),
@@ -257,7 +257,7 @@ class TestGenerateConceptBrief:
         with (
             patch("lecturelink_api.services.concept_brief._get_client", return_value=mock_client),
             patch(
-                "lecturelink_api.services.concept_brief.search_lectures",
+                "lecturelink_api.services.concept_brief.fetch_concept_chunks",
                 new_callable=AsyncMock,
                 return_value=[],
             ),

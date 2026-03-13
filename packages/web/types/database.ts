@@ -9,6 +9,7 @@ export interface Course {
   meeting_time: string | null;
   holidays: Record<string, unknown>[];
   target_grade: number;
+  onboarding_completed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -929,6 +930,63 @@ export interface MaterialStatus {
 export interface MaterialListResponse {
   materials: CourseMaterial[];
   total: number;
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard Briefing
+// ---------------------------------------------------------------------------
+
+export interface DashboardBriefingContext {
+  student_name: string;
+  current_streak: number;
+  total_xp: number;
+  current_level: number;
+  courses: DashboardCourseContext[];
+  top_priority_course_id: string | null;
+  has_courses: boolean;
+}
+
+export interface DashboardCourseContext {
+  course_id: string;
+  course_name: string;
+  course_code: string;
+  next_assessment: {
+    title: string;
+    due_date: string;
+    days_until: number;
+    weight_percent: number;
+    type: string;
+    assessment_id: string;
+  } | null;
+  weak_concepts: { concept_id: string; title: string; mastery: number }[];
+  session_recommendation: {
+    concepts: string[];
+    reason: string;
+    time_budget: number;
+  } | null;
+  recent_session: {
+    completed_at: string;
+    concepts_covered: string[];
+    quiz_score: number;
+  } | null;
+  lecture_gap: number;
+}
+
+export interface DashboardGreeting {
+  greeting: string;
+  session_pitch: string;
+  checkin_question: string;
+  encouragement: string;
+}
+
+export interface DashboardBriefingResponse {
+  context: DashboardBriefingContext;
+  greeting: DashboardGreeting;
+}
+
+export interface DashboardChatResponse {
+  message: string;
+  context_used: boolean;
 }
 
 export interface SessionSummary {

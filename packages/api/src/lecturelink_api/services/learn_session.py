@@ -145,21 +145,41 @@ async def start_learn_session(
         )
         if existing.data:
             session = existing.data[0]
-            daily_briefing = session.get("session_data", {}).get("daily_briefing", {})
 
-            # Resolve any missing titles from a previous session
-            daily_briefing["concepts_planned"] = await _resolve_concept_titles(
-                supabase, daily_briefing.get("concepts_planned", [])
-            )
-
-            flash_cards = await get_flash_review_cards(
-                supabase, user_id, course_id, count=5
-            )
-            return {
-                "session_id": session["id"],
-                "daily_briefing": daily_briefing,
-                "flash_review_cards": flash_cards,
-            }
+            # Expire stale sessions (>2 hours old)
+            started_at_raw = session.get("started_at")
+            if started_at_raw:
+                try:
+                    started = datetime.fromisoformat(str(started_at_raw))
+                    if started.tzinfo is None:
+                        started = started.replace(tzinfo=UTC)
+                    age_seconds = (datetime.now(UTC) - started).total_seconds()
+                    if age_seconds > 7200:  # 2 hours
+                        logger.info(
+                            "Expiring stale learn session %s (age: %.0fs)",
+                            session["id"], age_seconds,
+                        )
+                        supabase.table("learn_sessions").update(
+                            {"status": "expired"}
+                        ).eq("id", session["id"]).execute()
+                        # Fall through to create a new session
+                    else:
+                        # Session is still fresh — resume it
+                        daily_briefing = session.get("session_data", {}).get("daily_briefing", {})
+                        daily_briefing["concepts_planned"] = await _resolve_concept_titles(
+                            supabase, daily_briefing.get("concepts_planned", [])
+                        )
+                        flash_cards = await get_flash_review_cards(
+                            supabase, user_id, course_id, count=5
+                        )
+                        return {
+                            "session_id": session["id"],
+                            "daily_briefing": daily_briefing,
+                            "flash_review_cards": flash_cards,
+                        }
+                except Exception:
+                    logger.debug("Failed to parse session started_at", exc_info=True)
+                    # If we can't parse the date, fall through to create new
     except Exception:
         logger.debug("Failed to check existing sessions", exc_info=True)
 
@@ -223,11 +243,35 @@ async def start_learn_session(
     except Exception:
         logger.warning("get_concept_mastery RPC failed", exc_info=True)
 
+    # 2d. Get recently studied concept IDs to avoid repetition
+    recently_studied: set[str] = set()
+    try:
+        recent_sessions = (
+            supabase.table("learn_sessions")
+            .select("concepts_planned")
+            .eq("user_id", user_id)
+            .eq("course_id", course_id)
+            .eq("status", "completed")
+            .order("completed_at", desc=True)
+            .limit(5)
+            .execute()
+        )
+        for s in (recent_sessions.data or []):
+            for cid in (s.get("concepts_planned") or []):
+                recently_studied.add(cid)
+    except Exception:
+        logger.debug("Failed to fetch recent sessions for rotation", exc_info=True)
+
     # 3. Build selected concepts from assessment links (or fallback)
     if linked_concepts:
         selected = []
-        for link in linked_concepts[:num_concepts]:
+        for link in linked_concepts:
+            if len(selected) >= num_concepts:
+                break
             cid = link["concept_id"]
+            # Skip recently studied concepts (rotation)
+            if cid in recently_studied:
+                continue
             m_data = mastery_map.get(cid, {})
             accuracy = m_data.get("accuracy", 0.0)
             recent = m_data.get("recent_accuracy", 0.0)
@@ -239,6 +283,23 @@ async def start_learn_session(
                 "total_attempts": m_data.get("total_attempts", 0),
                 "priority_score": link.get("relevance_score", 0.5),
             })
+
+        # If rotation filtered out everything, relax and allow recently studied
+        if not selected:
+            logger.info("All linked concepts recently studied — relaxing rotation filter")
+            for link in linked_concepts[:num_concepts]:
+                cid = link["concept_id"]
+                m_data = mastery_map.get(cid, {})
+                accuracy = m_data.get("accuracy", 0.0)
+                recent = m_data.get("recent_accuracy", 0.0)
+                mastery = compute_mastery(accuracy, recent, m_data.get("total_attempts", 0))
+                selected.append({
+                    "concept_id": cid,
+                    "concept_title": m_data.get("concept_title", ""),
+                    "mastery_score": mastery,
+                    "total_attempts": m_data.get("total_attempts", 0),
+                    "priority_score": link.get("relevance_score", 0.5),
+                })
         # Fill in missing titles from concepts table
         missing = [s for s in selected if not s["concept_title"]]
         if missing:
@@ -260,15 +321,24 @@ async def start_learn_session(
                     exc_info=True,
                 )
     else:
-        # Fallback: get concepts directly
+        # Fallback: get concepts directly, ordered by most recent lecture first
         try:
             concepts_result = (
                 supabase.table("concepts")
                 .select("id, title, description, category, difficulty_estimate")
                 .eq("course_id", course_id)
-                .limit(num_concepts)
+                .order("created_at", desc=True)
+                .limit(num_concepts + len(recently_studied))  # fetch extra to allow filtering
                 .execute()
             )
+            fallback_rows = [
+                c for c in (concepts_result.data or [])
+                if c["id"] not in recently_studied
+            ][:num_concepts]
+            # If rotation filtered everything, relax
+            if not fallback_rows:
+                fallback_rows = (concepts_result.data or [])[:num_concepts]
+
             selected = [
                 {
                     "concept_id": c["id"],
@@ -277,7 +347,7 @@ async def start_learn_session(
                     "total_attempts": 0,
                     "priority_score": 0.5,
                 }
-                for c in (concepts_result.data or [])
+                for c in fallback_rows
             ]
         except Exception:
             selected = []

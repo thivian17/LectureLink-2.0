@@ -51,6 +51,8 @@ import type {
   CourseMaterialDetail,
   MaterialStatus,
   MaterialListResponse,
+  DashboardBriefingResponse,
+  DashboardChatResponse,
 } from "@/types/database";
 import {
   ApiError,
@@ -1481,4 +1483,34 @@ export async function updateMaterial(
     },
   );
   return resp.json();
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard Briefing
+// ---------------------------------------------------------------------------
+
+export async function getDashboardBriefing(): Promise<DashboardBriefingResponse> {
+  const resp = await fetchWithAuth(`${API_BASE}/api/dashboard/briefing`);
+  return resp.json();
+}
+
+export async function sendDashboardChat(
+  message: string,
+  conversationHistory?: { role: string; content: string }[],
+): Promise<DashboardChatResponse> {
+  const resp = await fetchWithAuth(`${API_BASE}/api/dashboard/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message,
+      conversation_history: conversationHistory,
+    }),
+  });
+  return resp.json();
+}
+
+export async function invalidateBriefingCache(): Promise<void> {
+  await fetchWithAuth(`${API_BASE}/api/dashboard/briefing/cache`, {
+    method: "DELETE",
+  });
 }

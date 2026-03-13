@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { format, differenceInCalendarDays } from "date-fns";
+import { FileUp } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -86,8 +87,15 @@ export function CourseReadinessCards({ courses, allCourses, loading }: CourseRea
                   )}
                 </div>
 
-                {/* Readiness progress bar */}
-                {pct === 0 && course.concepts_mastered === 0 && course.concepts_total > 0 ? (
+                {/* Readiness progress bar or onboarding prompt */}
+                {!full?.onboarding_completed_at ? (
+                  <div className="flex items-start gap-2 rounded-md bg-muted/50 px-3 py-2">
+                    <FileUp className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Upload a syllabus to unlock mastery tracking and study plans.
+                    </p>
+                  </div>
+                ) : pct === 0 && course.concepts_mastered === 0 && course.concepts_total > 0 ? (
                   <p className="text-xs text-muted-foreground italic">Not Yet Assessed</p>
                 ) : (
                   <div className="space-y-1.5">

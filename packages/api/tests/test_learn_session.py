@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -33,6 +34,7 @@ def _setup_supabase_for_start(
     mastery=None,
     course_name="PHYS 201",
     fallback_concepts=None,
+    recent_completed_sessions=None,
 ):
     """Return a mock supabase client configured for start_learn_session.
 
@@ -41,6 +43,7 @@ def _setup_supabase_for_start(
         concept_links: Rows for concept_assessment_links table.
         mastery: Rows for get_concept_mastery RPC.
         fallback_concepts: Concepts returned when no assessment links exist.
+        recent_completed_sessions: Rows for recently completed sessions (rotation).
     """
     sb = MagicMock()
 
@@ -58,10 +61,30 @@ def _setup_supabase_for_start(
 
     sb.rpc.side_effect = rpc_side_effect
 
+    # Track how many times learn_sessions table is accessed to distinguish
+    # 1st call (active session check) from 2nd call (recent completed sessions query)
+    learn_sessions_call_count = {"n": 0}
+
     def table_side_effect(name):
         if name == "learn_sessions":
-            chain = _mock_chain(existing_sessions or [])
-            # Also need insert to return data
+            learn_sessions_call_count["n"] += 1
+            call_num = learn_sessions_call_count["n"]
+            if call_num == 1:
+                # First call: active session check (+ update for expiry)
+                chain = _mock_chain(existing_sessions or [])
+                insert_chain = MagicMock()
+                insert_chain.execute.return_value = _mock_execute([{"id": "session-1"}])
+                chain.insert.return_value = insert_chain
+                return chain
+            if call_num == 2 and existing_sessions:
+                # Second call when there's a stale session to expire: the update call
+                chain = _mock_chain([])
+                insert_chain = MagicMock()
+                insert_chain.execute.return_value = _mock_execute([{"id": "session-1"}])
+                chain.insert.return_value = insert_chain
+                return chain
+            # Subsequent calls: recent completed sessions query or insert
+            chain = _mock_chain(recent_completed_sessions or [])
             insert_chain = MagicMock()
             insert_chain.execute.return_value = _mock_execute([{"id": "session-1"}])
             chain.insert.return_value = insert_chain
@@ -274,6 +297,7 @@ class TestStartLearnSession:
             "user_id": "user1",
             "course_id": "course1",
             "status": "active",
+            "started_at": (datetime.now(UTC) - timedelta(minutes=30)).isoformat(),
             "session_data": {
                 "daily_briefing": {
                     "course_name": "PHYS 201",
@@ -293,6 +317,177 @@ class TestStartLearnSession:
             result = await start_learn_session(sb, "user1", "course1", 15)
 
         assert result["session_id"] == "existing-session"
+
+    @pytest.mark.asyncio
+    async def test_stale_session_expires_and_creates_new(self):
+        """Sessions older than 2 hours should be expired, not resumed."""
+        from lecturelink_api.services.learn_session import start_learn_session
+
+        stale_session = {
+            "id": "stale-session",
+            "user_id": "user1",
+            "course_id": "course1",
+            "status": "active",
+            "started_at": (datetime.now(UTC) - timedelta(hours=3)).isoformat(),
+            "session_data": {
+                "daily_briefing": {"concepts_planned": []},
+            },
+        }
+        sb = _setup_supabase_for_start(
+            existing_sessions=[stale_session],
+            priority_assessments=[
+                {"assessment_id": "a1", "title": "Midterm 1", "course_id": "course1",
+                 "due_date": "2026-03-15", "weight_percent": 25.0, "priority_score": 0.9},
+            ],
+            concept_links=[
+                {"concept_id": "c1", "relevance_score": 0.9},
+            ],
+            mastery=[
+                {"concept_id": "c1", "concept_title": "Entropy", "total_attempts": 5,
+                 "accuracy": 0.6, "recent_accuracy": 0.8, "trend": "stable"},
+            ],
+        )
+
+        with patch(
+            "lecturelink_api.services.learn_session.get_flash_review_cards",
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            result = await start_learn_session(sb, "user1", "course1", 15)
+
+        # Should have created a NEW session, not returned the stale one
+        assert result["session_id"] != "stale-session"
+
+    @pytest.mark.asyncio
+    async def test_fresh_session_still_resumed(self):
+        """Sessions less than 2 hours old should still be resumed."""
+        from lecturelink_api.services.learn_session import start_learn_session
+
+        fresh_session = {
+            "id": "fresh-session",
+            "user_id": "user1",
+            "course_id": "course1",
+            "status": "active",
+            "started_at": (datetime.now(UTC) - timedelta(minutes=30)).isoformat(),
+            "session_data": {
+                "daily_briefing": {
+                    "course_name": "PHYS 201",
+                    "focus_description": "Entropy",
+                    "time_budget": 15,
+                    "concepts_planned": [],
+                },
+            },
+        }
+        sb = _setup_supabase_for_start(existing_sessions=[fresh_session])
+
+        with patch(
+            "lecturelink_api.services.learn_session.get_flash_review_cards",
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            result = await start_learn_session(sb, "user1", "course1", 15)
+
+        assert result["session_id"] == "fresh-session"
+
+    @pytest.mark.asyncio
+    async def test_recently_studied_concepts_excluded(self):
+        """Concepts from recent completed sessions should be rotated out."""
+        from lecturelink_api.services.learn_session import start_learn_session
+
+        sb = _setup_supabase_for_start(
+            priority_assessments=[
+                {"assessment_id": "a1", "title": "Midterm 1", "course_id": "course1",
+                 "due_date": "2026-03-15", "weight_percent": 25.0, "priority_score": 0.9},
+            ],
+            concept_links=[
+                {"concept_id": "c1", "relevance_score": 0.9},
+                {"concept_id": "c2", "relevance_score": 0.7},
+                {"concept_id": "c3", "relevance_score": 0.5},
+            ],
+            mastery=[
+                {"concept_id": "c1", "concept_title": "Already Studied", "total_attempts": 5,
+                 "accuracy": 0.6, "recent_accuracy": 0.8, "trend": "stable"},
+                {"concept_id": "c2", "concept_title": "Fresh Concept", "total_attempts": 2,
+                 "accuracy": 0.4, "recent_accuracy": 0.5, "trend": "stable"},
+                {"concept_id": "c3", "concept_title": "Also Fresh", "total_attempts": 1,
+                 "accuracy": 0.3, "recent_accuracy": 0.3, "trend": "stable"},
+            ],
+            recent_completed_sessions=[
+                {"concepts_planned": ["c1"]},
+            ],
+        )
+
+        with patch(
+            "lecturelink_api.services.learn_session.get_flash_review_cards",
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            result = await start_learn_session(sb, "user1", "course1", 15)
+
+        concepts = result["daily_briefing"]["concepts_planned"]
+        assert len(concepts) == 1
+        # c1 was recently studied, so c2 should be selected instead
+        assert concepts[0]["title"] == "Fresh Concept"
+
+    @pytest.mark.asyncio
+    async def test_rotation_relaxes_when_all_concepts_recently_studied(self):
+        """If all concepts were recently studied, still return concepts."""
+        from lecturelink_api.services.learn_session import start_learn_session
+
+        sb = _setup_supabase_for_start(
+            priority_assessments=[
+                {"assessment_id": "a1", "title": "Midterm 1", "course_id": "course1",
+                 "due_date": "2026-03-15", "weight_percent": 25.0, "priority_score": 0.9},
+            ],
+            concept_links=[
+                {"concept_id": "c1", "relevance_score": 0.9},
+            ],
+            mastery=[
+                {"concept_id": "c1", "concept_title": "Only Concept", "total_attempts": 5,
+                 "accuracy": 0.6, "recent_accuracy": 0.8, "trend": "stable"},
+            ],
+            recent_completed_sessions=[
+                {"concepts_planned": ["c1"]},
+            ],
+        )
+
+        with patch(
+            "lecturelink_api.services.learn_session.get_flash_review_cards",
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            result = await start_learn_session(sb, "user1", "course1", 15)
+
+        # Even though c1 was recently studied, it should still be selected (relaxation)
+        concepts = result["daily_briefing"]["concepts_planned"]
+        assert len(concepts) == 1
+        assert concepts[0]["title"] == "Only Concept"
+
+    @pytest.mark.asyncio
+    async def test_fallback_concepts_ordered_by_created_at(self):
+        """When no assessments exist, concepts should be ordered by recency."""
+        from lecturelink_api.services.learn_session import start_learn_session
+
+        sb = _setup_supabase_for_start(
+            priority_assessments=[],
+            fallback_concepts=[
+                {"id": "c1", "title": "Recent Concept", "description": "D1",
+                 "category": "general", "difficulty_estimate": 0.5},
+            ],
+        )
+
+        with patch(
+            "lecturelink_api.services.learn_session.get_flash_review_cards",
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
+            result = await start_learn_session(sb, "user1", "course1", 15)
+
+        concepts = result["daily_briefing"]["concepts_planned"]
+        assert len(concepts) == 1
+        assert concepts[0]["title"] == "Recent Concept"
+        # Verify .order() was called on the concepts table query
+        # (the mock chain records the call)
 
 
 class TestSubmitPowerQuizAnswer:

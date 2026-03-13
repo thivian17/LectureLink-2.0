@@ -13,9 +13,10 @@ import asyncio
 import json
 import logging
 
+from .chunk_fetcher import fetch_concept_chunks
 from .genai_client import get_genai_client as _get_client
 from .mastery import mastery_tier
-from .search import format_chunks_for_context, search_lectures
+from .search import format_chunks_for_context
 
 logger = logging.getLogger(__name__)
 
@@ -138,19 +139,18 @@ async def generate_concept_brief(
     except Exception:
         course_name = ""
 
-    # 2. Run search + assessment lookup concurrently (both need concept_id/title from step 1)
+    # 2. Run chunk fetch + assessment lookup concurrently
     async def _fetch_chunks() -> list[dict]:
-        search_query = f"{concept_title}: {concept_description}".strip().strip(":")
         try:
-            if search_query.strip():
-                return await search_lectures(
-                    supabase=supabase,
-                    course_id=course_id,
-                    query=search_query,
-                    limit=6,
-                )
+            return await fetch_concept_chunks(
+                supabase,
+                concept_id=concept_id,
+                course_id=course_id,
+                limit=5,
+                concept_title=f"{concept_title} {concept_description}",
+            )
         except Exception:
-            logger.debug("Chunk retrieval failed for concept brief", exc_info=True)
+            logger.warning("Failed to fetch chunks for concept %s", concept_id, exc_info=True)
         return []
 
     async def _fetch_assessment_context() -> str:
