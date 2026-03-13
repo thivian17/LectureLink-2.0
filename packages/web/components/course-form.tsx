@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -132,20 +133,41 @@ function TimePicker({
   onChange: (v: string) => void;
   label: string;
 }) {
-  const parts = parse24h(value);
+  const initial = parse24h(value);
+  const [hour, setHour] = useState(initial.hour);
+  const [minute, setMinute] = useState(initial.minute);
+  const [period, setPeriod] = useState(initial.period);
+
+  // Sync local state when the parent value changes externally (e.g. form reset)
+  useEffect(() => {
+    const parsed = parse24h(value);
+    setHour(parsed.hour);
+    setMinute(parsed.minute);
+    setPeriod(parsed.period);
+  }, [value]);
 
   function handleChange(field: "hour" | "minute" | "period", v: string) {
-    const next = { ...parts, [field]: v };
-    onChange(to24h(next.hour, next.minute, next.period));
+    const nextHour = field === "hour" ? v : hour;
+    const nextMinute = field === "minute" ? v : minute;
+    const nextPeriod = field === "period" ? v : period;
+
+    if (field === "hour") setHour(v);
+    if (field === "minute") setMinute(v);
+    if (field === "period") setPeriod(v);
+
+    // Only emit to form when both hour and minute are set
+    if (nextHour && nextMinute) {
+      onChange(to24h(nextHour, nextMinute, nextPeriod));
+    }
   }
 
   return (
     <div className="space-y-2">
       <label className="text-sm font-medium leading-none">{label}</label>
       <div className="flex gap-1.5">
-        <Select value={parts.hour} onValueChange={(v) => handleChange("hour", v)}>
-          <SelectTrigger className="w-[70px]">
-            <SelectValue placeholder="Hr" />
+        <Select value={hour} onValueChange={(v) => handleChange("hour", v)}>
+          <SelectTrigger className="w-auto min-w-[72px]">
+            <SelectValue placeholder="Hour" />
           </SelectTrigger>
           <SelectContent>
             {HOURS.map((h) => (
@@ -154,8 +176,8 @@ function TimePicker({
           </SelectContent>
         </Select>
         <span className="flex items-center text-muted-foreground font-medium">:</span>
-        <Select value={parts.minute} onValueChange={(v) => handleChange("minute", v)}>
-          <SelectTrigger className="w-[70px]">
+        <Select value={minute} onValueChange={(v) => handleChange("minute", v)}>
+          <SelectTrigger className="w-auto min-w-[68px]">
             <SelectValue placeholder="Min" />
           </SelectTrigger>
           <SelectContent>
@@ -164,8 +186,8 @@ function TimePicker({
             ))}
           </SelectContent>
         </Select>
-        <Select value={parts.period} onValueChange={(v) => handleChange("period", v)}>
-          <SelectTrigger className="w-[72px]">
+        <Select value={period} onValueChange={(v) => handleChange("period", v)}>
+          <SelectTrigger className="w-auto min-w-[68px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

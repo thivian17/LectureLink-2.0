@@ -52,7 +52,15 @@ def _build_semester_context(ctx: dict) -> SemesterContext | None:
     # Normalize to lowercase
     meeting_days = [d.lower() for d in meeting_days]
 
-    holidays = ctx.get("holidays") or []
+    # Normalize holiday keys: DB stores start_date/end_date, resolver expects start/end
+    raw_holidays = ctx.get("holidays") or []
+    holidays = []
+    for h in raw_holidays:
+        holidays.append({
+            "name": h.get("name", "Holiday"),
+            "start": h.get("start") or h.get("start_date", ""),
+            "end": h.get("end") or h.get("end_date", ""),
+        })
 
     return SemesterContext(
         start=start,

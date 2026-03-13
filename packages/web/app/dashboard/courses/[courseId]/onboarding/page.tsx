@@ -20,6 +20,7 @@ import {
   getOnboardingStatus,
   updateOnboardingStep,
 } from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 import type { OnboardingPath } from "@/types/database";
 
 // Step keys for each path
@@ -96,6 +97,20 @@ export default function OnboardingPage() {
         }
         if (status.step) {
           setCurrentStepKey(status.step);
+
+          // If resuming at extraction_review, recover the syllabusId
+          if (status.step === "extraction_review" || status.step === "path_selection") {
+            const supabase = createClient();
+            const { data } = await supabase
+              .from("syllabi")
+              .select("id")
+              .eq("course_id", courseId)
+              .order("created_at", { ascending: false })
+              .limit(1);
+            if (data?.[0]) {
+              setSyllabusId(data[0].id);
+            }
+          }
         } else {
           // Start fresh
           await startOnboarding(courseId);
@@ -170,8 +185,8 @@ export default function OnboardingPage() {
 
       case "extraction_review":
         if (!syllabusId) {
-          // Edge case: no syllabus ID, skip to path selection
-          goToStep("path_selection");
+          // No syllabus uploaded yet — go back to upload step
+          goToStep("syllabus_upload");
           return null;
         }
         return (

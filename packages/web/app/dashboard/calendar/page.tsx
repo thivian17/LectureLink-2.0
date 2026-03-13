@@ -41,12 +41,15 @@ export default async function CalendarPage() {
   const holidaySet = new Set<string>();
   const holidays: HolidayPeriod[] = [];
   for (const course of courses ?? []) {
-    for (const h of (course.holidays as HolidayPeriod[]) ?? []) {
-      if (!h.start || !h.end) continue;
-      const key = `${h.start}_${h.end}`;
+    // DB stores start_date/end_date; normalize to start/end
+    for (const h of (course.holidays as Record<string, string>[]) ?? []) {
+      const start = h.start ?? h.start_date;
+      const end = h.end ?? h.end_date;
+      if (!start || !end) continue;
+      const key = `${start}_${end}`;
       if (holidaySet.has(key)) continue;
       holidaySet.add(key);
-      holidays.push({ name: h.name ?? "Holiday", start: h.start, end: h.end });
+      holidays.push({ name: h.name ?? "Holiday", start, end });
     }
   }
 
