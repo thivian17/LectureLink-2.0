@@ -130,49 +130,69 @@ class TestDayMap:
 # ---------------------------------------------------------------------------
 
 
-class TestLayer1LLMValidation:
-    def test_llm_date_within_semester(self, semester):
-        result = resolve_date("Jan 15", semester, llm_resolved=date(2026, 1, 15))
-        assert result.value == date(2026, 1, 15)
+class TestLLMFallback:
+    """LLM-resolved dates are used as a fallback when deterministic layers fail.
+
+    Pattern matching and dateparser run first (they're holiday-aware), and the
+    LLM date is only used for free-text that no pattern can handle.
+    """
+
+    def test_llm_used_for_freetext(self, semester):
+        """'first day' has no pattern match or dateparser result → LLM fallback."""
+        result = resolve_date("first day", semester, llm_resolved=date(2026, 1, 12))
+        assert result.value == date(2026, 1, 12)
         assert result.confidence == 0.9
         assert result.method == "llm_validated"
 
-    def test_llm_date_at_semester_start(self, semester):
-        result = resolve_date("first day", semester, llm_resolved=date(2026, 1, 12))
-        assert result.value == date(2026, 1, 12)
-        assert result.method == "llm_validated"
-
-    def test_llm_date_at_semester_end(self, semester):
+    def test_llm_used_for_last_day(self, semester):
         result = resolve_date("last day", semester, llm_resolved=date(2026, 5, 1))
         assert result.value == date(2026, 5, 1)
         assert result.method == "llm_validated"
 
-    def test_llm_date_before_semester_rejected(self, semester):
-        result = resolve_date("Dec 1", semester, llm_resolved=date(2025, 12, 1))
+    def test_llm_before_semester_rejected(self, semester):
+        result = resolve_date("some event", semester, llm_resolved=date(2025, 12, 1))
         assert result.method != "llm_validated"
 
-    def test_llm_date_after_semester_rejected(self, semester):
-        result = resolve_date("June 1", semester, llm_resolved=date(2026, 6, 1))
+    def test_llm_after_semester_rejected(self, semester):
+        result = resolve_date("some event", semester, llm_resolved=date(2026, 6, 1))
         assert result.method != "llm_validated"
 
-    def test_llm_none_skips_to_other_layers(self, semester):
+    def test_llm_during_holiday_rejected(self, semester):
+        """LLM resolves to a date inside Spring Break → rejected."""
+        result = resolve_date(
+            "Week 9 Tuesday", semester, llm_resolved=date(2026, 3, 10)
+        )
+        # Mar 10 is during Spring Break (Mar 9-13) → LLM rejected
+        # Week-relative resolves with holiday skip → Mar 17
+        assert result.value == date(2026, 3, 17)
+        assert result.method == "week_relative"
+
+    def test_llm_none_uses_pattern(self, semester):
         result = resolve_date("Week 1 Tuesday", semester, llm_resolved=None)
         assert result.method == "week_relative"
 
-    def test_llm_takes_priority_over_week_pattern(self, semester):
+    def test_pattern_takes_priority_over_llm(self, semester):
+        """When text matches a week pattern, pattern matching wins over LLM."""
         result = resolve_date(
             "Week 3 Tuesday", semester, llm_resolved=date(2026, 2, 1)
         )
-        assert result.value == date(2026, 2, 1)
-        assert result.method == "llm_validated"
+        # Pattern matching resolves Week 3 Tuesday → Jan 27
+        assert result.value == date(2026, 1, 27)
+        assert result.method == "week_relative"
 
-    def test_llm_rejected_falls_to_week_pattern(self, semester):
+    def test_llm_rejected_falls_to_pattern(self, semester):
         # LLM gives out-of-range date, but text has a week pattern
         result = resolve_date(
             "Week 3 Tuesday", semester, llm_resolved=date(2025, 6, 1)
         )
         assert result.value == date(2026, 1, 27)
         assert result.method == "week_relative"
+
+    def test_dateparser_text_uses_dateparser_not_llm(self, semester):
+        """'Jan 15' is parseable by dateparser — LLM fallback not needed."""
+        result = resolve_date("Jan 15", semester, llm_resolved=date(2026, 1, 15))
+        assert result.value == date(2026, 1, 15)
+        assert result.method == "dateparser"
 
 
 # ---------------------------------------------------------------------------
@@ -576,7 +596,7 @@ class TestAmbiguousDates:
 class TestEdgeCases:
     def test_confidence_ordering(self, semester):
         """LLM (0.9) > week_relative (0.85) > dateparser (0.7)."""
-        llm = resolve_date("Jan 15", semester, llm_resolved=date(2026, 1, 15))
+        llm = resolve_date("midterm week", semester, llm_resolved=date(2026, 2, 15))
         week = resolve_date("Week 1 Tuesday", semester)
         dp = resolve_date("January 15, 2026", semester)
         assert llm.confidence > week.confidence > dp.confidence

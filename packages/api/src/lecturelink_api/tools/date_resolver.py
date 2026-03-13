@@ -247,10 +247,13 @@ def _try_llm_validated(
     semester: SemesterContext,
     original_text: str,
 ) -> ResolvedDate | None:
-    """If Gemini already resolved a date, validate it falls within semester."""
+    """If Gemini already resolved a date, validate it falls within semester
+    and does not land on a holiday."""
     if llm_resolved is None:
         return None
-    if _in_semester(llm_resolved, semester):
+    if _in_semester(llm_resolved, semester) and not _is_in_holiday(
+        llm_resolved, semester.holidays
+    ):
         return ResolvedDate(
             value=llm_resolved,
             confidence=0.9,
@@ -434,10 +437,15 @@ def resolve_date(
 ) -> ResolvedDate:
     """Resolve a single raw date string into a calendar date.
 
-    Tries three layers in order:
-      1. LLM-resolved validation (confidence 0.9)
-      2. Relative week pattern matching (confidence 0.85)
-      3. dateparser fallback (confidence 0.7)
+    Tries three layers in priority order — deterministic pattern matching
+    first, then dateparser, then the LLM-resolved value as a fallback:
+
+      1. Week/class-relative pattern matching (confidence 0.85)
+      2. dateparser (confidence 0.7)
+      3. LLM-resolved fallback (confidence 0.9)
+
+    Deterministic layers run first so that holiday-aware logic always gets
+    priority over the LLM, which has no knowledge of the course calendar.
 
     Returns *ResolvedDate* with value=None and method='ambiguous' when all
     layers fail.
@@ -454,23 +462,23 @@ def resolve_date(
             value=None, confidence=0.0, method="ambiguous", original_text=raw_text
         )
 
-    # Layer 1
-    result = _try_llm_validated(llm_resolved, semester, raw_text)
-    if result is not None:
-        return result
-
-    # Layer 2a — week-relative patterns ("Week 3 Tuesday")
+    # Layer 1a — week-relative patterns ("Week 3 Tuesday")
     result = _try_week_relative(raw_text, semester)
     if result is not None:
         return result
 
-    # Layer 2b — class/lecture-relative patterns ("Class 4", "wednes in Class 3")
+    # Layer 1b — class/lecture-relative patterns ("Class 4", "wednes in Class 3")
     result = _try_class_relative(raw_text, semester)
     if result is not None:
         return result
 
-    # Layer 3
+    # Layer 2 — dateparser ("March 15", "1/20/2026")
     result = _try_dateparser(raw_text, semester)
+    if result is not None:
+        return result
+
+    # Layer 3 — LLM-resolved fallback (for free-text like "midterm week")
+    result = _try_llm_validated(llm_resolved, semester, raw_text)
     if result is not None:
         return result
 
