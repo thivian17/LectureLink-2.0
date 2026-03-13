@@ -147,7 +147,7 @@ class TestAssessmentType:
     def test_all_values(self):
         expected = {
             "exam", "quiz", "homework", "project", "lab",
-            "paper", "presentation", "participation", "other",
+            "paper", "presentation", "participation", "discussion", "other",
         }
         assert {t.value for t in AssessmentType} == expected
 
