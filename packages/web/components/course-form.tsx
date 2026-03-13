@@ -99,22 +99,84 @@ function parseMeetingTime(raw: string | null): [string, string] {
   return ["", ""];
 }
 
-/** Generate time options in 15-minute increments from 06:00 to 23:00. */
-const TIME_OPTIONS: { label: string; value: string }[] = (() => {
-  const opts: { label: string; value: string }[] = [];
-  for (let h = 6; h <= 23; h++) {
-    for (const m of [0, 15, 30, 45]) {
-      const hh = h.toString().padStart(2, "0");
-      const mm = m.toString().padStart(2, "0");
-      const value = `${hh}:${mm}`;
-      const hour12 = h % 12 || 12;
-      const ampm = h < 12 ? "AM" : "PM";
-      const label = `${hour12}:${mm.padStart(2, "0")} ${ampm}`;
-      opts.push({ label, value });
-    }
+/** Convert 24h "HH:MM" to {hour12, minute, period} parts. */
+function parse24h(hhmm: string): { hour: string; minute: string; period: string } {
+  if (!hhmm || !/^\d{2}:\d{2}$/.test(hhmm)) return { hour: "", minute: "", period: "AM" };
+  const [hStr, mStr] = hhmm.split(":");
+  const h = parseInt(hStr, 10);
+  return {
+    hour: String(h % 12 || 12),
+    minute: mStr,
+    period: h < 12 ? "AM" : "PM",
+  };
+}
+
+/** Convert {hour12, minute, period} back to 24h "HH:MM". */
+function to24h(hour: string, minute: string, period: string): string {
+  if (!hour || !minute) return "";
+  let h = parseInt(hour, 10);
+  if (period === "PM" && h !== 12) h += 12;
+  if (period === "AM" && h === 12) h = 0;
+  return `${h.toString().padStart(2, "0")}:${minute.padStart(2, "0")}`;
+}
+
+const HOURS = Array.from({ length: 12 }, (_, i) => String(i + 1));
+const MINUTES = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, "0"));
+
+function TimePicker({
+  value,
+  onChange,
+  label,
+}: {
+  value: string;       // "HH:MM" 24h format or ""
+  onChange: (v: string) => void;
+  label: string;
+}) {
+  const parts = parse24h(value);
+
+  function handleChange(field: "hour" | "minute" | "period", v: string) {
+    const next = { ...parts, [field]: v };
+    onChange(to24h(next.hour, next.minute, next.period));
   }
-  return opts;
-})();
+
+  return (
+    <div className="space-y-2">
+      <label className="text-sm font-medium leading-none">{label}</label>
+      <div className="flex gap-1.5">
+        <Select value={parts.hour} onValueChange={(v) => handleChange("hour", v)}>
+          <SelectTrigger className="w-[70px]">
+            <SelectValue placeholder="Hr" />
+          </SelectTrigger>
+          <SelectContent>
+            {HOURS.map((h) => (
+              <SelectItem key={h} value={h}>{h}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <span className="flex items-center text-muted-foreground font-medium">:</span>
+        <Select value={parts.minute} onValueChange={(v) => handleChange("minute", v)}>
+          <SelectTrigger className="w-[70px]">
+            <SelectValue placeholder="Min" />
+          </SelectTrigger>
+          <SelectContent>
+            {MINUTES.map((m) => (
+              <SelectItem key={m} value={m}>{m}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={parts.period} onValueChange={(v) => handleChange("period", v)}>
+          <SelectTrigger className="w-[72px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="AM">AM</SelectItem>
+            <SelectItem value="PM">PM</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+}
 
 export function CourseForm({ course, onSuccess }: CourseFormProps) {
   const router = useRouter();
@@ -341,21 +403,11 @@ export function CourseForm({ course, onSuccess }: CourseFormProps) {
             name="meeting_start_time"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Start Time</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Start time" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {TIME_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <TimePicker
+                  label="Start Time"
+                  value={field.value}
+                  onChange={field.onChange}
+                />
                 <FormMessage />
               </FormItem>
             )}
@@ -365,21 +417,11 @@ export function CourseForm({ course, onSuccess }: CourseFormProps) {
             name="meeting_end_time"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>End Time</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="End time" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {TIME_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <TimePicker
+                  label="End Time"
+                  value={field.value}
+                  onChange={field.onChange}
+                />
                 <FormMessage />
               </FormItem>
             )}
