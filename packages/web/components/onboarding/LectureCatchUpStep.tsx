@@ -45,9 +45,16 @@ interface LectureCatchUpStepProps {
 }
 
 type ChecklistRow = LectureChecklistItem & {
+  rowId: string;
   localStatus: "pending" | "uploading" | "uploaded" | "skipped";
   fileName?: string;
 };
+
+function makeRowId(item: LectureChecklistItem): string {
+  return item.is_user_added
+    ? `user-${item.lecture_number}`
+    : `auto-${item.lecture_number}`;
+}
 
 // Try to extract lecture number from filename
 function suggestLectureNumber(filename: string): number | null {
@@ -70,7 +77,8 @@ export function LectureCatchUpStep({
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
   // Editing state
-  const [editingLecture, setEditingLecture] = useState<number | null>(null);
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editingLectureNumber, setEditingLectureNumber] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -90,6 +98,7 @@ export function LectureCatchUpStep({
         setRows(
           checklist.map((item) => ({
             ...item,
+            rowId: makeRowId(item),
             localStatus: item.status === "uploaded" ? "uploaded" : item.status,
           })),
         );
@@ -105,10 +114,11 @@ export function LectureCatchUpStep({
   const uploadedCount = rows.filter((r) => r.localStatus === "uploaded").length;
 
   const handleFileUpload = useCallback(
-    async (lectureNumber: number, file: File) => {
+    async (row: ChecklistRow, file: File) => {
+      const id = row.rowId;
       setRows((prev) =>
         prev.map((r) =>
-          r.lecture_number === lectureNumber
+          r.rowId === id
             ? { ...r, localStatus: "uploading", fileName: file.name }
             : r,
         ),
@@ -117,36 +127,36 @@ export function LectureCatchUpStep({
       try {
         const formData = new FormData();
         formData.append("files", file);
-        formData.append("lecture_number", String(lectureNumber));
+        formData.append("lecture_number", String(row.lecture_number));
 
         await uploadLecture(courseId, formData);
 
         setRows((prev) =>
           prev.map((r) =>
-            r.lecture_number === lectureNumber
+            r.rowId === id
               ? { ...r, localStatus: "uploaded" }
               : r,
           ),
         );
-        toast.success(`Lecture ${lectureNumber} uploaded`);
+        toast.success(`Lecture ${row.lecture_number} uploaded`);
       } catch {
         setRows((prev) =>
           prev.map((r) =>
-            r.lecture_number === lectureNumber
+            r.rowId === id
               ? { ...r, localStatus: "pending", fileName: undefined }
               : r,
           ),
         );
-        toast.error(`Failed to upload lecture ${lectureNumber}`);
+        toast.error(`Failed to upload lecture ${row.lecture_number}`);
       }
     },
     [courseId],
   );
 
-  const handleSkip = useCallback((lectureNumber: number) => {
+  const handleSkip = useCallback((rowId: string) => {
     setRows((prev) =>
       prev.map((r) =>
-        r.lecture_number === lectureNumber
+        r.rowId === rowId
           ? { ...r, localStatus: "skipped" }
           : r,
       ),
@@ -154,27 +164,29 @@ export function LectureCatchUpStep({
   }, []);
 
   const startEditing = useCallback((row: ChecklistRow) => {
-    setEditingLecture(row.lecture_number);
+    setEditingRowId(row.rowId);
+    setEditingLectureNumber(row.lecture_number);
     setEditTitle(row.topic_hint ?? "");
     setEditDate(row.expected_date);
     setEditDescription("");
   }, []);
 
   const cancelEditing = useCallback(() => {
-    setEditingLecture(null);
+    setEditingRowId(null);
+    setEditingLectureNumber(null);
     setEditTitle("");
     setEditDate("");
     setEditDescription("");
   }, []);
 
   const saveEdit = useCallback(async () => {
-    if (editingLecture === null) return;
+    if (editingRowId === null || editingLectureNumber === null) return;
 
     setEditSaving(true);
     try {
       const updated = await updateLectureChecklistItem(
         courseId,
-        editingLecture,
+        editingLectureNumber,
         {
           title: editTitle || undefined,
           date: editDate || undefined,
@@ -184,7 +196,7 @@ export function LectureCatchUpStep({
 
       setRows((prev) =>
         prev.map((r) =>
-          r.lecture_number === editingLecture
+          r.rowId === editingRowId
             ? {
                 ...r,
                 expected_date: updated.expected_date,
@@ -193,14 +205,14 @@ export function LectureCatchUpStep({
             : r,
         ),
       );
-      toast.success(`Lecture ${editingLecture} updated`);
+      toast.success(`Lecture ${editingLectureNumber} updated`);
       cancelEditing();
     } catch {
       toast.error("Failed to save changes");
     } finally {
       setEditSaving(false);
     }
-  }, [courseId, editingLecture, editTitle, editDate, editDescription, cancelEditing]);
+  }, [courseId, editingRowId, editingLectureNumber, editTitle, editDate, editDescription, cancelEditing]);
 
   const handleAddLecture = useCallback(async () => {
     setAddSaving(true);
@@ -215,6 +227,7 @@ export function LectureCatchUpStep({
         ...prev,
         {
           ...added,
+          rowId: makeRowId(added),
           localStatus: "pending" as const,
         },
       ]);
@@ -267,7 +280,7 @@ export function LectureCatchUpStep({
 
         setRows((prev) =>
           prev.map((r) =>
-            r.lecture_number === bf.assignedLecture
+            r.lecture_number === bf.assignedLecture && !r.is_user_added
               ? { ...r, localStatus: "uploaded", fileName: bf.file.name }
               : r,
           ),
@@ -310,7 +323,7 @@ export function LectureCatchUpStep({
       {/* Checklist */}
       <div className="space-y-2">
         {rows.map((row) => (
-          <div key={row.lecture_number}>
+          <div key={row.rowId}>
             <div
               className={cn(
                 "flex items-center gap-3 rounded-lg border p-3 transition-colors",
@@ -385,7 +398,7 @@ export function LectureCatchUpStep({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleSkip(row.lecture_number)}
+                    onClick={() => handleSkip(row.rowId)}
                   >
                     Skip
                   </Button>
@@ -398,7 +411,7 @@ export function LectureCatchUpStep({
                     accept=".mp3,.wav,.m4a,.pdf,.pptx,.mp4"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) handleFileUpload(row.lecture_number, file);
+                      if (file) handleFileUpload(row, file);
                     }}
                   />
                 </div>
@@ -421,7 +434,7 @@ export function LectureCatchUpStep({
             </div>
 
             {/* Inline edit form */}
-            {editingLecture === row.lecture_number && (
+            {editingRowId === row.rowId && (
               <div className="ml-7 mt-2 mb-1 space-y-2 rounded-lg border bg-muted/30 p-3">
                 <div className="grid grid-cols-2 gap-2">
                   <div>

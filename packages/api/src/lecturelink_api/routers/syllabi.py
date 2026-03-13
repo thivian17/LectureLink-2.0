@@ -65,7 +65,9 @@ async def upload_syllabus(
     file_name = file.filename or "syllabus"
     storage_path = f"{user['id']}/{course_id}/{file_name}"
 
-    # Clean up old data for this course before re-upload
+    # Clean up old data for this course before re-upload (blank slate).
+    # lectures CASCADE → lecture_chunks, concepts → concept_assessment_links, concept_bkt_state
+    sb.table("lectures").delete().eq("course_id", course_id).execute()
     sb.table("assessments").delete().eq("course_id", course_id).execute()
     sb.table("syllabi").delete().eq("course_id", course_id).execute()
 
