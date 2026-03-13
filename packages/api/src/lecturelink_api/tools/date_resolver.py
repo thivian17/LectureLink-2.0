@@ -1,90 +1,21 @@
-"""Three-layer date resolution for syllabus processing.
+"""LLM date validation for syllabus processing.
 
-Resolves ambiguous academic dates like "Week 3 Tuesday" or "the Monday after
-spring break" into specific calendar dates using three layers:
-
-  Layer 1 — LLM-resolved validation
-  Layer 2 — Relative week pattern matching
-  Layer 3 — dateparser fallback
+The LLM extraction agent (with full semester + holiday context) is the primary
+date resolver.  This module validates those dates and flags low-confidence or
+invalid ones for user confirmation.
 """
 
 from __future__ import annotations
 
 import contextlib
-import re
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
-
-import dateparser
+from datetime import date
 
 from lecturelink_api.models.syllabus_models import AssessmentExtraction, ExtractedField
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-
-DAY_MAP: dict[str, int] = {
-    "monday": 0,
-    "tuesday": 1,
-    "wednesday": 2,
-    "thursday": 3,
-    "friday": 4,
-    "saturday": 5,
-    "sunday": 6,
-}
-
-_DAY_ABBREV: dict[str, str] = {
-    "mon": "monday",
-    "tue": "tuesday",
-    "tues": "tuesday",
-    "wed": "wednesday",
-    "wednes": "wednesday",
-    "thu": "thursday",
-    "thur": "thursday",
-    "thurs": "thursday",
-    "fri": "friday",
-    "sat": "saturday",
-    "sun": "sunday",
-}
-
-# Build regex alternation from all known day names + abbreviations
-_DAY_NAMES = "|".join(list(DAY_MAP.keys()) + list(_DAY_ABBREV.keys()))
-
-_WEEK_DAY_RE = re.compile(
-    rf"(?:week|wk)\s*(\d+)\s+({_DAY_NAMES})\b",
-    re.IGNORECASE,
-)
-
-_WEEK_ONLY_RE = re.compile(
-    r"(?:week|wk)\s*(\d+)\b",
-    re.IGNORECASE,
-)
-
-_END_OF_WEEK_RE = re.compile(
-    r"(?:due\s+)?end\s+of\s+week\s+(\d+)",
-    re.IGNORECASE,
-)
-
-# "Class N" / "Lecture N" / "Session N" patterns — Nth class meeting
-_CLASS_KEYWORD = r"(?:class|lecture|session)"
-
-# "Class 4", "Lecture 10", "Session 3"
-_CLASS_ONLY_RE = re.compile(
-    rf"{_CLASS_KEYWORD}\s*(\d+)\b",
-    re.IGNORECASE,
-)
-
-# "Class 4 Tuesday", "Lecture 3 Wed"
-_CLASS_DAY_RE = re.compile(
-    rf"{_CLASS_KEYWORD}\s*(\d+)\s+({_DAY_NAMES})\b",
-    re.IGNORECASE,
-)
-
-# "Wednesday in Class 3", "wednes in Lecture 5", "Tue of Class 2"
-_DAY_IN_CLASS_RE = re.compile(
-    rf"({_DAY_NAMES})\s+(?:in|of|during)\s+{_CLASS_KEYWORD}\s*(\d+)",
-    re.IGNORECASE,
-)
 
 _AMBIGUOUS_PHRASES: set[str] = {
     "tba",
@@ -96,6 +27,19 @@ _AMBIGUOUS_PHRASES: set[str] = {
     "see blackboard",
     "end of semester",
     "last day of class",
+}
+
+# Phrases that indicate an ongoing/recurring assessment with no single due date.
+# Shared with extraction_to_db_assessments() via import.
+ONGOING_PHRASES: set[str] = {
+    "ongoing",
+    "throughout semester",
+    "throughout the semester",
+    "continuous",
+    "weekly",
+    "every class",
+    "every week",
+    "all semester",
 }
 
 # ---------------------------------------------------------------------------
@@ -116,19 +60,13 @@ class SemesterContext:
 class ResolvedDate:
     value: date | None
     confidence: float
-    method: str  # 'llm_validated', 'week_relative', 'dateparser', 'ambiguous'
+    method: str  # 'llm_validated', 'ambiguous'
     original_text: str
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-
-
-def _normalize_day(name: str) -> str:
-    """Normalize a day name or abbreviation to its full lowercase form."""
-    name = name.lower().strip()
-    return _DAY_ABBREV.get(name, name)
 
 
 def _parse_holiday_date(d: date | str) -> date:
@@ -148,281 +86,8 @@ def _is_in_holiday(d: date, holidays: list[dict]) -> bool:
     return False
 
 
-def _is_break_week(week_monday: date, holidays: list[dict]) -> bool:
-    """Check if a calendar week is a break week (skipped in teaching week count).
-
-    A week is a break week if a holiday period of 3+ days overlaps with any
-    of its weekdays (Mon–Fri).  Single- or two-day holidays do NOT skip the
-    whole week — those are handled by ``_next_valid_day`` instead.
-    """
-    week_friday = week_monday + timedelta(days=4)
-    for h in holidays:
-        h_start = _parse_holiday_date(h["start"])
-        h_end = _parse_holiday_date(h["end"])
-        if (h_end - h_start).days + 1 < 3:
-            continue  # short holidays don't skip the whole week
-        # Check overlap between [week_monday, week_friday] and [h_start, h_end]
-        if max(week_monday, h_start) <= min(week_friday, h_end):
-            return True
-    return False
-
-
-def _teaching_week_to_calendar(week_num: int, semester: SemesterContext) -> date:
-    """Convert a teaching week number to the Monday of the corresponding
-    calendar week, skipping break weeks.
-
-    Syllabi that number weeks sequentially (Week 1, 2, … N) typically do
-    not count reading/break weeks.  This function iterates through calendar
-    weeks from the semester start, skips break weeks, and returns the Monday
-    of the *week_num*-th teaching week.
-    """
-    teaching_count = 0
-    calendar_offset = 0
-    while True:
-        candidate = semester.start + timedelta(weeks=calendar_offset)
-        if candidate > semester.end:
-            break
-        if not _is_break_week(candidate, semester.holidays):
-            teaching_count += 1
-            if teaching_count == week_num:
-                return candidate
-        calendar_offset += 1
-    # Fallback: naive calculation (no break weeks found / past semester end)
-    return semester.start + timedelta(weeks=week_num - 1)
-
-
-def _next_valid_day(d: date, weekday: int, holidays: list[dict]) -> date:
-    """If *d* is inside a holiday, advance to the next occurrence of *weekday*
-    that is not in a holiday period."""
-    if not _is_in_holiday(d, holidays):
-        return d
-    # Walk forward past the current holiday period
-    candidate = d + timedelta(days=1)
-    while _is_in_holiday(candidate, holidays):
-        candidate += timedelta(days=1)
-    # Advance to the target weekday
-    while candidate.weekday() != weekday:
-        candidate += timedelta(days=1)
-    # Guard against landing in yet another holiday
-    if _is_in_holiday(candidate, holidays):
-        return _next_valid_day(candidate, weekday, holidays)
-    return candidate
-
-
 def _in_semester(d: date, semester: SemesterContext) -> bool:
     return semester.start <= d <= semester.end
-
-
-def _nth_meeting_date(n: int, semester: SemesterContext) -> date | None:
-    """Return the date of the *n*-th class meeting from semester start.
-
-    Uses ``semester.meeting_days`` to determine which weekdays have class.
-    Skips dates that fall in holiday periods.  Returns ``None`` if there
-    are no meeting days or *n* is beyond the semester.
-    """
-    if not semester.meeting_days or n < 1:
-        return None
-    meeting_weekdays = {DAY_MAP[d.lower()] for d in semester.meeting_days if d.lower() in DAY_MAP}
-    if not meeting_weekdays:
-        return None
-
-    count = 0
-    current = semester.start
-    while current <= semester.end:
-        if current.weekday() in meeting_weekdays and not _is_in_holiday(current, semester.holidays):
-            count += 1
-            if count == n:
-                return current
-        current += timedelta(days=1)
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Layer 1 — LLM-resolved validation
-# ---------------------------------------------------------------------------
-
-
-def _try_llm_validated(
-    llm_resolved: date | None,
-    semester: SemesterContext,
-    original_text: str,
-) -> ResolvedDate | None:
-    """If Gemini already resolved a date, validate it falls within semester
-    and does not land on a holiday."""
-    if llm_resolved is None:
-        return None
-    if _in_semester(llm_resolved, semester) and not _is_in_holiday(
-        llm_resolved, semester.holidays
-    ):
-        return ResolvedDate(
-            value=llm_resolved,
-            confidence=0.9,
-            method="llm_validated",
-            original_text=original_text,
-        )
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Layer 2 — Relative week pattern matching
-# ---------------------------------------------------------------------------
-
-
-def _try_week_relative(
-    raw_text: str,
-    semester: SemesterContext,
-) -> ResolvedDate | None:
-    """Parse patterns like 'Week 3', 'Week 3 Tuesday', 'Wk 5 Thurs',
-    'end of week 10' and calculate the calendar date."""
-    text = raw_text.strip()
-
-    # --- "end of week N" (most specific, check first) ---
-    m = _END_OF_WEEK_RE.search(text)
-    if m:
-        week_num = int(m.group(1))
-        week_start = _teaching_week_to_calendar(week_num, semester)
-        friday = week_start + timedelta(days=DAY_MAP["friday"])
-        friday = _next_valid_day(friday, DAY_MAP["friday"], semester.holidays)
-        if _in_semester(friday, semester):
-            return ResolvedDate(
-                value=friday,
-                confidence=0.85,
-                method="week_relative",
-                original_text=raw_text,
-            )
-
-    # --- "Week N DayName" ---
-    m = _WEEK_DAY_RE.search(text)
-    if m:
-        week_num = int(m.group(1))
-        day_name = _normalize_day(m.group(2))
-        day_offset = DAY_MAP.get(day_name)
-        if day_offset is not None:
-            week_start = _teaching_week_to_calendar(week_num, semester)
-            target = week_start + timedelta(days=day_offset)
-            target = _next_valid_day(target, day_offset, semester.holidays)
-            if _in_semester(target, semester):
-                return ResolvedDate(
-                    value=target,
-                    confidence=0.85,
-                    method="week_relative",
-                    original_text=raw_text,
-                )
-
-    # --- "Week N" (no day — return the Monday of that week) ---
-    m = _WEEK_ONLY_RE.search(text)
-    if m:
-        week_num = int(m.group(1))
-        week_start = _teaching_week_to_calendar(week_num, semester)
-        week_start = _next_valid_day(
-            week_start, week_start.weekday(), semester.holidays
-        )
-        if _in_semester(week_start, semester):
-            return ResolvedDate(
-                value=week_start,
-                confidence=0.85,
-                method="week_relative",
-                original_text=raw_text,
-            )
-
-    return None
-
-
-def _try_class_relative(
-    raw_text: str,
-    semester: SemesterContext,
-) -> ResolvedDate | None:
-    """Parse patterns like 'Class 4', 'Lecture 3 Wed', 'Wednesday in Class 3'.
-
-    'Class N' means the Nth class meeting based on ``semester.meeting_days``.
-    If a day name is also specified, resolve to that day of the week containing
-    the Nth class meeting.
-    """
-    text = raw_text.strip()
-
-    # --- "DayName in/of Class N" (e.g. "wednes in Class 3") ---
-    m = _DAY_IN_CLASS_RE.search(text)
-    if m:
-        day_name = _normalize_day(m.group(1))
-        class_num = int(m.group(2))
-        day_offset = DAY_MAP.get(day_name)
-        meeting = _nth_meeting_date(class_num, semester)
-        if meeting is not None and day_offset is not None:
-            # Monday of the meeting's week
-            week_monday = meeting - timedelta(days=meeting.weekday())
-            target = week_monday + timedelta(days=day_offset)
-            target = _next_valid_day(target, day_offset, semester.holidays)
-            if _in_semester(target, semester):
-                return ResolvedDate(
-                    value=target,
-                    confidence=0.8,
-                    method="class_relative",
-                    original_text=raw_text,
-                )
-
-    # --- "Class N DayName" (e.g. "Lecture 3 Wed") ---
-    m = _CLASS_DAY_RE.search(text)
-    if m:
-        class_num = int(m.group(1))
-        day_name = _normalize_day(m.group(2))
-        day_offset = DAY_MAP.get(day_name)
-        meeting = _nth_meeting_date(class_num, semester)
-        if meeting is not None and day_offset is not None:
-            week_monday = meeting - timedelta(days=meeting.weekday())
-            target = week_monday + timedelta(days=day_offset)
-            target = _next_valid_day(target, day_offset, semester.holidays)
-            if _in_semester(target, semester):
-                return ResolvedDate(
-                    value=target,
-                    confidence=0.8,
-                    method="class_relative",
-                    original_text=raw_text,
-                )
-
-    # --- "Class N" (no day — return the meeting date itself) ---
-    m = _CLASS_ONLY_RE.search(text)
-    if m:
-        class_num = int(m.group(1))
-        meeting = _nth_meeting_date(class_num, semester)
-        if meeting is not None and _in_semester(meeting, semester):
-            return ResolvedDate(
-                value=meeting,
-                confidence=0.8,
-                method="class_relative",
-                original_text=raw_text,
-            )
-
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Layer 3 — dateparser fallback
-# ---------------------------------------------------------------------------
-
-
-def _try_dateparser(
-    raw_text: str,
-    semester: SemesterContext,
-) -> ResolvedDate | None:
-    """Use the *dateparser* library with semester-aware settings."""
-    base_dt = datetime(
-        semester.start.year, semester.start.month, semester.start.day
-    )
-    parsed = dateparser.parse(
-        raw_text,
-        settings={
-            "PREFER_DATES_FROM": "future",
-            "RELATIVE_BASE": base_dt,
-        },
-    )
-    if parsed is not None:
-        return ResolvedDate(
-            value=parsed.date(),
-            confidence=0.7,
-            method="dateparser",
-            original_text=raw_text,
-        )
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -434,55 +99,47 @@ def resolve_date(
     raw_text: str,
     semester: SemesterContext,
     llm_resolved: date | None = None,
+    llm_confidence: float = 0.0,
 ) -> ResolvedDate:
-    """Resolve a single raw date string into a calendar date.
+    """Validate an LLM-resolved date against semester boundaries and holidays.
 
-    Tries three layers in priority order — deterministic pattern matching
-    first, then dateparser, then the LLM-resolved value as a fallback:
+    The LLM (with full semester + holiday context in its prompt) is the primary
+    resolver.  This function validates the result:
 
-      1. Week/class-relative pattern matching (confidence 0.85)
-      2. dateparser (confidence 0.7)
-      3. LLM-resolved fallback (confidence 0.9)
+      - If the raw text is empty, ambiguous, or ongoing → ambiguous
+      - If the LLM resolved a valid date (in semester, not on holiday) → keep it
+        with the LLM's own confidence
+      - Otherwise → ambiguous (user confirmation needed)
 
-    Deterministic layers run first so that holiday-aware logic always gets
-    priority over the LLM, which has no knowledge of the course calendar.
-
-    Returns *ResolvedDate* with value=None and method='ambiguous' when all
-    layers fail.
+    Returns *ResolvedDate* with value=None and method='ambiguous' when
+    validation fails.
     """
     # Fast-exit for empty / whitespace-only text
     if not raw_text or not raw_text.strip():
         return ResolvedDate(
-            value=None, confidence=0.0, method="ambiguous", original_text=raw_text
+            value=None, confidence=0.0, method="ambiguous", original_text=raw_text or ""
         )
 
-    # Known ambiguous phrases
-    if raw_text.strip().lower() in _AMBIGUOUS_PHRASES:
+    # Known ambiguous / ongoing phrases
+    normalized = raw_text.strip().lower()
+    if normalized in _AMBIGUOUS_PHRASES or normalized in ONGOING_PHRASES:
         return ResolvedDate(
             value=None, confidence=0.0, method="ambiguous", original_text=raw_text
         )
 
-    # Layer 1a — week-relative patterns ("Week 3 Tuesday")
-    result = _try_week_relative(raw_text, semester)
-    if result is not None:
-        return result
+    # Validate the LLM-resolved date
+    if llm_resolved is not None:
+        if _in_semester(llm_resolved, semester) and not _is_in_holiday(
+            llm_resolved, semester.holidays
+        ):
+            return ResolvedDate(
+                value=llm_resolved,
+                confidence=llm_confidence if llm_confidence > 0 else 0.9,
+                method="llm_validated",
+                original_text=raw_text,
+            )
 
-    # Layer 1b — class/lecture-relative patterns ("Class 4", "wednes in Class 3")
-    result = _try_class_relative(raw_text, semester)
-    if result is not None:
-        return result
-
-    # Layer 2 — dateparser ("March 15", "1/20/2026")
-    result = _try_dateparser(raw_text, semester)
-    if result is not None:
-        return result
-
-    # Layer 3 — LLM-resolved fallback (for free-text like "midterm week")
-    result = _try_llm_validated(llm_resolved, semester, raw_text)
-    if result is not None:
-        return result
-
-    # All layers failed
+    # LLM date invalid or missing — mark ambiguous
     return ResolvedDate(
         value=None, confidence=0.0, method="ambiguous", original_text=raw_text
     )
@@ -492,12 +149,12 @@ def resolve_all_dates(
     assessments: list[AssessmentExtraction],
     semester: SemesterContext,
 ) -> list[AssessmentExtraction]:
-    """Run *resolve_date* on every assessment, returning updated copies.
+    """Validate LLM-resolved dates for every assessment, returning updated copies.
 
     For each assessment the function:
       - Reads ``due_date_raw.value`` as the raw text
       - Parses ``due_date_resolved.value`` (if present) as the LLM-resolved date
-      - Calls *resolve_date* and writes the result back into ``due_date_resolved``
+      - Calls *resolve_date* to validate and writes the result back
     """
     results: list[AssessmentExtraction] = []
     for a in assessments:
@@ -509,7 +166,12 @@ def resolve_all_dates(
             with contextlib.suppress(ValueError, TypeError):
                 llm_resolved = date.fromisoformat(str(a.due_date_resolved.value))
 
-        resolved = resolve_date(raw_text, semester, llm_resolved)
+        resolved = resolve_date(
+            raw_text,
+            semester,
+            llm_resolved,
+            llm_confidence=a.due_date_resolved.confidence,
+        )
 
         new_resolved = ExtractedField(
             value=resolved.value.isoformat() if resolved.value else None,

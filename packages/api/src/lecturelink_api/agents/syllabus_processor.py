@@ -129,9 +129,14 @@ Individual assessments — for each one extract:
 - type: One of: exam, quiz, homework, project, lab, paper, presentation, participation, other.
 - due_date_raw: The original date text as written in the syllabus. For assessments that \
 are ongoing throughout the semester (e.g. class participation, attendance), set this to "Ongoing".
-- due_date_resolved: Resolved calendar date in YYYY-MM-DD format, or null if ambiguous or ongoing.
+- due_date_resolved: Resolved calendar date in YYYY-MM-DD format, or null if ambiguous or ongoing. \
+IMPORTANT: When the syllabus uses relative references like "Week 5" or "Class 3", use the \
+semester context below to calculate the exact date. Never resolve a date to a holiday/break period — \
+if a week number falls on a break, skip the break week and count only teaching weeks.
 - weight_percent: Grade weight as a percentage.
 - topics: Related topics or chapters.
+
+Semester context for resolving relative dates: {semester_context}
 
 Express all weights as percentages (25.0 for 25%, not 0.25). If the syllabus uses \
 point values, convert to percentages. Set confidence and source_text on every \
@@ -422,37 +427,60 @@ def post_process_extraction(
     raw_result: dict,
     semester_context: dict,
 ) -> SyllabusExtraction:
-    """Parse raw agent output into SyllabusExtraction with deterministic re-validation.
+    """Parse raw agent output into SyllabusExtraction with deterministic cleanup.
+
+    This runs BEFORE date resolution.  It only patches structural issues from
+    Gemini output (missing keys, weight validation).  Confidence scoring and
+    date boundary validation happen AFTER date resolution in
+    ``finalize_extraction`` so they use the final resolved values.
 
     Args:
         raw_result: The raw dict from the agent's validated_syllabus output.
         semester_context: Dict with 'semester_start' and 'semester_end' as YYYY-MM-DD strings.
 
     Returns:
-        A cleaned SyllabusExtraction with recomputed confidence and needs_review flags.
+        A cleaned SyllabusExtraction ready for date resolution.
     """
     _patch_extracted_fields(raw_result)
     extraction = SyllabusExtraction(**raw_result)
 
+    # Re-validate grade weights (don't trust the LLM's math)
+    weight_issues = validate_grade_weights(extraction)
+
+    # Merge weight issues into missing_sections
+    existing_missing = list(extraction.missing_sections)
+    for issue in weight_issues:
+        if issue not in existing_missing:
+            existing_missing.append(issue)
+    extraction.missing_sections = existing_missing
+
+    return extraction
+
+
+def finalize_extraction(
+    extraction: SyllabusExtraction,
+    semester_context: dict,
+) -> SyllabusExtraction:
+    """Run AFTER date resolution to compute final confidence and flag issues.
+
+    This is the single place where extraction_confidence is computed and
+    low-confidence / date-boundary issues are flagged.  It uses the final
+    resolved date values and their confidence scores.
+    """
     semester_start = _parse_date(semester_context.get("semester_start"))
     semester_end = _parse_date(semester_context.get("semester_end"))
 
-    # Recompute extraction_confidence from actual field confidences
+    # Compute extraction_confidence from all field confidences (including resolved dates)
     confidences = _collect_confidences(extraction)
     if confidences:
         extraction.extraction_confidence = round(sum(confidences) / len(confidences), 4)
 
-    # Re-validate grade weights (don't trust the LLM's math)
-    weight_issues = validate_grade_weights(extraction)
-
-    # Re-validate date boundaries
+    # Validate date boundaries against semester (now using resolver output)
     date_issues: list[str] = []
     if semester_start and semester_end:
         date_issues = validate_date_boundaries(extraction, semester_start, semester_end)
 
-    # Set needs_review=True for any field with confidence < 0.7
-    # We track this via missing_sections as a pragmatic approach since the
-    # SyllabusExtraction model doesn't have per-field needs_review flags
+    # Flag low-confidence fields (< 0.7) for user review
     low_confidence_fields: list[str] = []
     for attr in (
         "course_name", "course_code", "instructor_name",
@@ -460,7 +488,7 @@ def post_process_extraction(
     ):
         field = getattr(extraction, attr, None)
         if field is not None and isinstance(field, ExtractedField) and field.confidence < 0.7:
-                low_confidence_fields.append(f"low_confidence:{attr}")
+            low_confidence_fields.append(f"low_confidence:{attr}")
 
     for i, a in enumerate(extraction.assessments):
         for attr in ("title", "type", "due_date_raw", "due_date_resolved", "weight_percent"):
@@ -469,9 +497,9 @@ def post_process_extraction(
                 title_str = a.title.value or f"assessment_{i + 1}"
                 low_confidence_fields.append(f"low_confidence:{title_str}.{attr}")
 
-    # Merge any issues into missing_sections for review
+    # Merge into missing_sections
     existing_missing = list(extraction.missing_sections)
-    all_issues = weight_issues + date_issues + low_confidence_fields
+    all_issues = date_issues + low_confidence_fields
     for issue in all_issues:
         if issue not in existing_missing:
             existing_missing.append(issue)

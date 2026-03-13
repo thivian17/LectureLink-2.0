@@ -11,7 +11,7 @@ from datetime import date
 from unittest.mock import MagicMock, patch
 
 import pytest
-from lecturelink_api.agents.syllabus_processor import post_process_extraction
+from lecturelink_api.agents.syllabus_processor import finalize_extraction, post_process_extraction
 from lecturelink_api.models.syllabus_models import (
     SyllabusExtraction,
     extraction_to_db_assessments,
@@ -45,6 +45,7 @@ class TestPostProcessingIntegration:
         }
 
         extraction = post_process_extraction(raw, semester_ctx)
+        extraction = finalize_extraction(extraction, semester_ctx)
 
         assert isinstance(extraction, SyllabusExtraction)
         assert extraction.extraction_confidence > 0
@@ -102,8 +103,8 @@ class TestDateResolutionIntegration:
                 date.fromisoformat(str(a.due_date_resolved.value))
 
     @pytest.mark.integration
-    def test_week_n_format_resolution(self):
-        """Dates in 'Week N DayName' format resolve to correct calendar dates."""
+    def test_llm_resolved_dates_validated(self):
+        """LLM-resolved dates are validated against semester boundaries."""
         from lecturelink_api.tools.date_resolver import resolve_date
 
         sem = SemesterContext(
@@ -113,15 +114,14 @@ class TestDateResolutionIntegration:
             holidays=[],
         )
 
-        # Week 3 Tuesday: Jan 12 (Mon W1) + 2 weeks = Jan 26 (Mon W3), Tue = Jan 27
-        result = resolve_date("Week 3 Tuesday", sem)
+        # Valid LLM date within semester accepted
+        result = resolve_date("Week 3 Tuesday", sem, llm_resolved=date(2026, 1, 27))
         assert result.value is not None
         assert result.value == date(2026, 1, 27)
 
-        # Week 8 Thursday: Jan 12 + 7 weeks = Mar 2 (Mon W8), Thu = Mar 5
-        result = resolve_date("Week 8 Thursday", sem)
-        assert result.value is not None
-        assert result.value == date(2026, 3, 5)
+        # LLM date outside semester rejected
+        result = resolve_date("Week 8 Thursday", sem, llm_resolved=date(2026, 6, 1))
+        assert result.value is None
 
     @pytest.mark.integration
     def test_ambiguous_dates_flagged(self):

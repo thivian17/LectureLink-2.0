@@ -245,7 +245,7 @@ async def process_syllabus(
             semester_context=semester_context,
         )
 
-        # 3. Post-process with deterministic validation
+        # 3. Post-process: patch structural issues, validate grade weights
         extraction = post_process_extraction(raw_result, semester_context)
 
         # 4. Run date resolution on all assessments
@@ -256,14 +256,11 @@ async def process_syllabus(
                 "Resolved dates for {} assessments", len(extraction.assessments)
             )
 
-        # 5. Recompute extraction_confidence as average of all field confidences
-        from lecturelink_api.agents.syllabus_processor import _collect_confidences
+        # 5. Finalize: compute confidence, validate dates, flag low-confidence
+        #    (runs AFTER date resolution so it uses final resolved values)
+        from lecturelink_api.agents.syllabus_processor import finalize_extraction
 
-        confidences = _collect_confidences(extraction)
-        if confidences:
-            extraction.extraction_confidence = round(
-                sum(confidences) / len(confidences), 4
-            )
+        extraction = finalize_extraction(extraction, semester_context)
 
         # 6. Save to syllabi table
         grade_breakdown_dicts = [

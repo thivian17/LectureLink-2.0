@@ -44,6 +44,7 @@ class AssessmentType(StrEnum):
     paper = "paper"
     presentation = "presentation"
     participation = "participation"
+    discussion = "discussion"
     other = "other"
 
 
@@ -53,7 +54,7 @@ class AssessmentExtraction(BaseModel):
     title: ExtractedField = Field(description="Name or title of the assessment.")
     type: ExtractedField = Field(
         description="Assessment category. value must be one of: "
-        "exam, quiz, homework, project, lab, paper, presentation, participation, other."
+        "exam, quiz, homework, project, lab, paper, presentation, participation, discussion, other."
     )
     due_date_raw: ExtractedField = Field(
         description="Original due-date text as written in the syllabus (e.g. 'Week 7 Thursday')."
@@ -165,14 +166,20 @@ def extraction_to_db_assessments(
         raw = a.due_date_raw.value if a.due_date_raw.value else None
 
         # Detect "ongoing" assessments (participation, attendance, etc.)
-        is_ongoing = raw is not None and str(raw).strip().lower() in (
-            "ongoing", "throughout semester", "continuous", "weekly", "every class",
-            "every week", "all semester", "throughout the semester",
-        )
+        from lecturelink_api.tools.date_resolver import ONGOING_PHRASES
 
-        # A date is ambiguous when raw text exists but couldn't be resolved,
-        # UNLESS it's an ongoing assessment (intentionally no specific date)
-        is_ambiguous = raw is not None and resolved is None and not is_ongoing
+        is_ongoing = raw is not None and str(raw).strip().lower() in ONGOING_PHRASES
+
+        # A date is ambiguous when:
+        # 1. Raw text exists but couldn't be resolved (not ongoing), OR
+        # 2. The resolved date has low confidence (< 0.5) — needs user confirmation
+        low_confidence = (
+            resolved is not None
+            and a.due_date_resolved.confidence < 0.5
+        )
+        is_ambiguous = (
+            raw is not None and resolved is None and not is_ongoing
+        ) or low_confidence
 
         weight = a.weight_percent.value
         if isinstance(weight, str):

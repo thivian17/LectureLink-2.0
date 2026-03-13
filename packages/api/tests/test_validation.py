@@ -6,6 +6,7 @@ from datetime import date
 
 import pytest
 from lecturelink_api.agents.syllabus_processor import (
+    finalize_extraction,
     post_process_extraction,
     validate_assessment_completeness,
     validate_date_boundaries,
@@ -348,17 +349,21 @@ class TestAssessmentCompleteness:
 
 
 class TestPostProcessExtraction:
+    """post_process_extraction handles structural cleanup and grade weights.
+    finalize_extraction (run after date resolution) handles confidence,
+    date boundaries, and low-confidence flagging.
+    """
+
     def test_recomputes_confidence(self):
         data = _make_extraction()
         semester_ctx = {
             "semester_start": "2025-08-25",
             "semester_end": "2025-12-20",
         }
-        result = post_process_extraction(data, semester_ctx)
-        # Confidence should be recomputed from actual field values, not the input
+        extraction = post_process_extraction(data, semester_ctx)
+        result = finalize_extraction(extraction, semester_ctx)
         assert isinstance(result.extraction_confidence, float)
         assert 0.0 <= result.extraction_confidence <= 1.0
-        # The recomputed value should be the average of all field confidences (0.9)
         assert result.extraction_confidence == pytest.approx(0.9, abs=0.01)
 
     def test_flags_low_confidence_fields(self):
@@ -369,7 +374,8 @@ class TestPostProcessExtraction:
             "semester_start": "2025-08-25",
             "semester_end": "2025-12-20",
         }
-        result = post_process_extraction(data, semester_ctx)
+        extraction = post_process_extraction(data, semester_ctx)
+        result = finalize_extraction(extraction, semester_ctx)
         assert any("low_confidence:instructor_email" in s for s in result.missing_sections)
 
     def test_flags_weight_issues(self):
@@ -399,7 +405,8 @@ class TestPostProcessExtraction:
             "semester_start": "2025-08-25",
             "semester_end": "2025-12-20",
         }
-        result = post_process_extraction(data, semester_ctx)
+        extraction = post_process_extraction(data, semester_ctx)
+        result = finalize_extraction(extraction, semester_ctx)
         assert any("after semester end" in s for s in result.missing_sections)
 
     def test_returns_valid_syllabus_extraction(self):
@@ -431,7 +438,8 @@ class TestPostProcessExtraction:
             "semester_start": "2025-08-25",
             "semester_end": "2025-12-20",
         }
-        result = post_process_extraction(data, semester_ctx)
+        extraction = post_process_extraction(data, semester_ctx)
+        result = finalize_extraction(extraction, semester_ctx)
         low_conf_entries = [s for s in result.missing_sections if "low_confidence:" in s]
         assert len(low_conf_entries) >= 2  # title + weight_percent
 
