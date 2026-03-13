@@ -449,6 +449,7 @@ export interface LectureChecklistItem {
   topic_hint: string | null;
   day_of_week: string;
   status: "pending" | "uploaded" | "skipped";
+  is_user_added?: boolean;
 }
 
 export interface SemesterProgress {

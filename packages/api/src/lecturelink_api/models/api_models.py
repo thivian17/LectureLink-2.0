@@ -372,6 +372,23 @@ class LectureChecklistItem(BaseModel):
     topic_hint: str | None
     day_of_week: str
     status: str
+    is_user_added: bool = False
+
+
+class LectureChecklistUpdate(BaseModel):
+    """User correction to a single lecture in the checklist."""
+    lecture_number: int
+    title: str | None = None
+    lecture_date: date | None = None
+    description: str | None = None
+
+
+class LectureChecklistAdd(BaseModel):
+    """User-added lecture that was missing from the auto-generated checklist."""
+    title: str | None = None
+    lecture_date: date | None = None
+    description: str | None = None
+    week_number: int | None = None
 
 
 class SemesterProgressResponse(BaseModel):

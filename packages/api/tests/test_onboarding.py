@@ -778,3 +778,130 @@ class TestOnboardingRouter:
         assert result["status"] == "in_progress"
         assert "past_assessments" in result
         assert "upcoming_assessments" in result
+
+    @pytest.mark.asyncio
+    async def test_update_lecture_checklist_item(self):
+        from lecturelink_api.routers.onboarding import update_lecture_checklist_item
+        from lecturelink_api.models.api_models import LectureChecklistUpdate
+
+        today = date.today()
+        sb, _ = self._make_sb({
+            "semester_start": (today - timedelta(days=14)).isoformat(),
+            "semester_end": (today + timedelta(days=60)).isoformat(),
+            "meeting_days": ["tuesday", "thursday"],
+        })
+
+        with patch(
+            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+        ):
+            result = await update_lecture_checklist_item(
+                course_id="course-1",
+                lecture_number=1,
+                body=LectureChecklistUpdate(
+                    lecture_number=1,
+                    title="Intro to Algorithms",
+                    description="Big-O notation basics",
+                ),
+                user={"id": "user-1", "token": "tok", "email": "a@b.com"},
+                settings=MagicMock(),
+            )
+
+        assert result.lecture_number == 1
+        assert result.topic_hint == "Intro to Algorithms"
+        # Verify correction was stored
+        sb.table.assert_any_call("lecture_schedule_corrections")
+
+    @pytest.mark.asyncio
+    async def test_update_lecture_checklist_item_not_found(self):
+        from fastapi import HTTPException
+        from lecturelink_api.routers.onboarding import update_lecture_checklist_item
+        from lecturelink_api.models.api_models import LectureChecklistUpdate
+
+        today = date.today()
+        sb, _ = self._make_sb({
+            "semester_start": (today - timedelta(days=14)).isoformat(),
+            "semester_end": (today + timedelta(days=60)).isoformat(),
+            "meeting_days": ["tuesday", "thursday"],
+        })
+
+        with patch(
+            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await update_lecture_checklist_item(
+                    course_id="course-1",
+                    lecture_number=999,
+                    body=LectureChecklistUpdate(lecture_number=999),
+                    user={"id": "user-1", "token": "tok", "email": "a@b.com"},
+                    settings=MagicMock(),
+                )
+            assert exc_info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_add_lecture_checklist_item(self):
+        from lecturelink_api.routers.onboarding import add_lecture_checklist_item
+        from lecturelink_api.models.api_models import LectureChecklistAdd
+
+        today = date.today()
+        sb, _ = self._make_sb({
+            "semester_start": (today - timedelta(days=14)).isoformat(),
+            "semester_end": (today + timedelta(days=60)).isoformat(),
+            "meeting_days": ["tuesday", "thursday"],
+            "holidays": [],
+        }, extra_tables={
+            "lecture_schedule_corrections": [],
+        })
+
+        with patch(
+            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+        ):
+            result = await add_lecture_checklist_item(
+                course_id="course-1",
+                body=LectureChecklistAdd(
+                    title="Guest Lecture",
+                    lecture_date=today,
+                    description="AI Ethics panel",
+                ),
+                user={"id": "user-1", "token": "tok", "email": "a@b.com"},
+                settings=MagicMock(),
+            )
+
+        assert result.lecture_number > 0
+        assert result.is_user_added is True
+        assert result.topic_hint == "Guest Lecture"
+        sb.table.assert_any_call("lecture_schedule_corrections")
+
+    @pytest.mark.asyncio
+    async def test_lecture_checklist_includes_user_added(self):
+        """GET checklist merges auto-generated + user-added lectures."""
+        from lecturelink_api.routers.onboarding import get_lecture_checklist
+
+        today = date.today()
+        sb, _ = self._make_sb({
+            "semester_start": (today - timedelta(days=14)).isoformat(),
+            "semester_end": (today + timedelta(days=60)).isoformat(),
+            "meeting_days": ["tuesday", "thursday"],
+            "holidays": [],
+        }, extra_tables={
+            "lecture_schedule_corrections": [
+                {
+                    "original_lecture_number": 99,
+                    "corrected_date": today.isoformat(),
+                    "corrected_title": "Added Lecture",
+                    "corrected_description": None,
+                    "is_addition": True,
+                },
+            ],
+        })
+
+        with patch(
+            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+        ):
+            result = await get_lecture_checklist(
+                course_id="course-1",
+                user={"id": "user-1", "token": "tok", "email": "a@b.com"},
+                settings=MagicMock(),
+            )
+
+        assert isinstance(result, list)
+        assert any(item.get("is_user_added") for item in result)

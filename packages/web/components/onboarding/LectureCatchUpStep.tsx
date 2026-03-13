@@ -2,7 +2,15 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
-import { Upload, Check, X, ChevronDown } from "lucide-react";
+import {
+  Upload,
+  Check,
+  X,
+  ChevronDown,
+  Pencil,
+  Plus,
+  Save,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,8 +30,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  addLectureChecklistItem,
   getLectureChecklist,
   getSemesterProgress,
+  updateLectureChecklistItem,
   uploadLecture,
 } from "@/lib/api";
 import type { LectureChecklistItem } from "@/types/database";
@@ -58,6 +68,20 @@ export function LectureCatchUpStep({
   const [bulkUploading, setBulkUploading] = useState(false);
   const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Editing state
+  const [editingLecture, setEditingLecture] = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+
+  // Add lecture state
+  const [addOpen, setAddOpen] = useState(false);
+  const [addTitle, setAddTitle] = useState("");
+  const [addDate, setAddDate] = useState("");
+  const [addDescription, setAddDescription] = useState("");
+  const [addSaving, setAddSaving] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -128,6 +152,83 @@ export function LectureCatchUpStep({
       ),
     );
   }, []);
+
+  const startEditing = useCallback((row: ChecklistRow) => {
+    setEditingLecture(row.lecture_number);
+    setEditTitle(row.topic_hint ?? "");
+    setEditDate(row.expected_date);
+    setEditDescription("");
+  }, []);
+
+  const cancelEditing = useCallback(() => {
+    setEditingLecture(null);
+    setEditTitle("");
+    setEditDate("");
+    setEditDescription("");
+  }, []);
+
+  const saveEdit = useCallback(async () => {
+    if (editingLecture === null) return;
+
+    setEditSaving(true);
+    try {
+      const updated = await updateLectureChecklistItem(
+        courseId,
+        editingLecture,
+        {
+          title: editTitle || undefined,
+          date: editDate || undefined,
+          description: editDescription || undefined,
+        },
+      );
+
+      setRows((prev) =>
+        prev.map((r) =>
+          r.lecture_number === editingLecture
+            ? {
+                ...r,
+                expected_date: updated.expected_date,
+                topic_hint: updated.topic_hint,
+              }
+            : r,
+        ),
+      );
+      toast.success(`Lecture ${editingLecture} updated`);
+      cancelEditing();
+    } catch {
+      toast.error("Failed to save changes");
+    } finally {
+      setEditSaving(false);
+    }
+  }, [courseId, editingLecture, editTitle, editDate, editDescription, cancelEditing]);
+
+  const handleAddLecture = useCallback(async () => {
+    setAddSaving(true);
+    try {
+      const added = await addLectureChecklistItem(courseId, {
+        title: addTitle || undefined,
+        date: addDate || undefined,
+        description: addDescription || undefined,
+      });
+
+      setRows((prev) => [
+        ...prev,
+        {
+          ...added,
+          localStatus: "pending" as const,
+        },
+      ]);
+      toast.success(`Lecture ${added.lecture_number} added`);
+      setAddOpen(false);
+      setAddTitle("");
+      setAddDate("");
+      setAddDescription("");
+    } catch {
+      toast.error("Failed to add lecture");
+    } finally {
+      setAddSaving(false);
+    }
+  }, [courseId, addTitle, addDate, addDescription]);
 
   const addBulkFiles = useCallback((files: File[]) => {
     const newEntries = files.map((file) => {
@@ -201,96 +302,257 @@ export function LectureCatchUpStep({
           Catch Up on Lectures
         </h2>
         <p className="text-sm text-muted-foreground">
-          {uploadedCount} of {rows.length} lectures uploaded
+          {uploadedCount} of {rows.length} lectures uploaded. Edit any lecture
+          details or add missing ones.
         </p>
       </div>
 
       {/* Checklist */}
       <div className="space-y-2">
         {rows.map((row) => (
-          <div
-            key={row.lecture_number}
-            className={cn(
-              "flex items-center gap-3 rounded-lg border p-3 transition-colors",
-              row.localStatus === "skipped" && "opacity-50",
-              row.localStatus === "uploaded" && "bg-green-50/50 border-green-200",
-            )}
-          >
-            {/* Status icon */}
-            <div className="shrink-0">
-              {row.localStatus === "uploaded" ? (
-                <Check className="h-4 w-4 text-green-600" />
-              ) : row.localStatus === "skipped" ? (
-                <X className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <div className="h-4 w-4 rounded border-2 border-muted-foreground/30" />
+          <div key={row.lecture_number}>
+            <div
+              className={cn(
+                "flex items-center gap-3 rounded-lg border p-3 transition-colors",
+                row.localStatus === "skipped" && "opacity-50",
+                row.localStatus === "uploaded" &&
+                  "bg-green-50/50 border-green-200",
+                row.is_user_added && "border-dashed border-blue-300",
               )}
-            </div>
-
-            {/* Info */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">
-                  Lecture {row.lecture_number}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  Week {row.week_number} ({row.expected_date})
-                </span>
+            >
+              {/* Status icon */}
+              <div className="shrink-0">
+                {row.localStatus === "uploaded" ? (
+                  <Check className="h-4 w-4 text-green-600" />
+                ) : row.localStatus === "skipped" ? (
+                  <X className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <div className="h-4 w-4 rounded border-2 border-muted-foreground/30" />
+                )}
               </div>
-              {row.topic_hint && (
-                <p className="text-xs text-muted-foreground italic truncate">
-                  {row.topic_hint}
-                </p>
-              )}
-              {row.fileName && row.localStatus === "uploaded" && (
-                <p className="text-xs text-green-600 truncate">
-                  {row.fileName}
-                </p>
-              )}
-            </div>
 
-            {/* Actions */}
-            {row.localStatus === "pending" && (
-              <div className="flex gap-1 shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    fileInputRefs.current[row.lecture_number]?.click()
-                  }
-                  disabled={row.localStatus !== "pending"}
-                >
-                  <Upload className="h-3 w-3 mr-1" />
-                  Upload
-                </Button>
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">
+                    Lecture {row.lecture_number}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {row.week_number > 0
+                      ? `Week ${row.week_number} (${row.expected_date})`
+                      : row.expected_date}
+                  </span>
+                  {row.is_user_added && (
+                    <Badge variant="outline" className="text-xs py-0">
+                      Added
+                    </Badge>
+                  )}
+                </div>
+                {row.topic_hint && (
+                  <p className="text-xs text-muted-foreground italic truncate">
+                    {row.topic_hint}
+                  </p>
+                )}
+                {row.fileName && row.localStatus === "uploaded" && (
+                  <p className="text-xs text-green-600 truncate">
+                    {row.fileName}
+                  </p>
+                )}
+              </div>
+
+              {/* Actions */}
+              {row.localStatus === "pending" && (
+                <div className="flex gap-1 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => startEditing(row)}
+                    title="Edit lecture details"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      fileInputRefs.current[row.lecture_number]?.click()
+                    }
+                    disabled={row.localStatus !== "pending"}
+                  >
+                    <Upload className="h-3 w-3 mr-1" />
+                    Upload
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleSkip(row.lecture_number)}
+                  >
+                    Skip
+                  </Button>
+                  <input
+                    ref={(el) => {
+                      fileInputRefs.current[row.lecture_number] = el;
+                    }}
+                    type="file"
+                    className="hidden"
+                    accept=".mp3,.wav,.m4a,.pdf,.pptx,.mp4"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileUpload(row.lecture_number, file);
+                    }}
+                  />
+                </div>
+              )}
+
+              {row.localStatus === "uploading" && (
+                <Badge variant="secondary">Uploading...</Badge>
+              )}
+
+              {row.localStatus === "uploaded" && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleSkip(row.lecture_number)}
+                  onClick={() => startEditing(row)}
+                  title="Edit lecture details"
                 >
-                  Skip
+                  <Pencil className="h-3 w-3" />
                 </Button>
-                <input
-                  ref={(el) => {
-                    fileInputRefs.current[row.lecture_number] = el;
-                  }}
-                  type="file"
-                  className="hidden"
-                  accept=".mp3,.wav,.m4a,.pdf,.pptx,.mp4"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleFileUpload(row.lecture_number, file);
-                  }}
-                />
-              </div>
-            )}
+              )}
+            </div>
 
-            {row.localStatus === "uploading" && (
-              <Badge variant="secondary">Uploading...</Badge>
+            {/* Inline edit form */}
+            {editingLecture === row.lecture_number && (
+              <div className="ml-7 mt-2 mb-1 space-y-2 rounded-lg border bg-muted/30 p-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Title
+                    </label>
+                    <Input
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      placeholder={`Lecture ${row.lecture_number}`}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Date
+                    </label>
+                    <Input
+                      type="date"
+                      value={editDate}
+                      onChange={(e) => setEditDate(e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Description / Topic
+                  </label>
+                  <Input
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    placeholder="e.g. Introduction to thermodynamics"
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={cancelEditing}
+                    disabled={editSaving}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={saveEdit}
+                    disabled={editSaving}
+                  >
+                    <Save className="h-3 w-3 mr-1" />
+                    {editSaving ? "Saving..." : "Save"}
+                  </Button>
+                </div>
+              </div>
             )}
           </div>
         ))}
       </div>
+
+      {/* Add lecture */}
+      <Collapsible open={addOpen} onOpenChange={setAddOpen}>
+        <CollapsibleTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-1">
+            <Plus className="h-3 w-3" />
+            Add Missing Lecture
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="pt-3 space-y-2">
+          <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Title
+                </label>
+                <Input
+                  value={addTitle}
+                  onChange={(e) => setAddTitle(e.target.value)}
+                  placeholder="e.g. Guest Lecture: AI Ethics"
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">
+                  Date
+                </label>
+                <Input
+                  type="date"
+                  value={addDate}
+                  onChange={(e) => setAddDate(e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">
+                Description / Topic
+              </label>
+              <Input
+                value={addDescription}
+                onChange={(e) => setAddDescription(e.target.value)}
+                placeholder="Brief description of the lecture"
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setAddOpen(false);
+                  setAddTitle("");
+                  setAddDate("");
+                  setAddDescription("");
+                }}
+                disabled={addSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleAddLecture}
+                disabled={addSaving}
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                {addSaving ? "Adding..." : "Add Lecture"}
+              </Button>
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Bulk upload */}
       <Collapsible open={bulkOpen} onOpenChange={setBulkOpen}>
@@ -344,7 +606,8 @@ export function LectureCatchUpStep({
               className="hidden"
               onChange={(e) => {
                 if (e.target.files) addBulkFiles(Array.from(e.target.files));
-                if (bulkFileInputRef.current) bulkFileInputRef.current.value = "";
+                if (bulkFileInputRef.current)
+                  bulkFileInputRef.current.value = "";
               }}
             />
           </div>

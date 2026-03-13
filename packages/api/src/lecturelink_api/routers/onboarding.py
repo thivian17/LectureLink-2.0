@@ -11,7 +11,9 @@ from supabase import create_client
 from lecturelink_api.auth import get_current_user
 from lecturelink_api.config import Settings, get_settings
 from lecturelink_api.models.api_models import (
+    LectureChecklistAdd,
     LectureChecklistItem,
+    LectureChecklistUpdate,
     OnboardingCompleteResponse,
     OnboardingStartResponse,
     OnboardingStatusResponse,
@@ -343,11 +345,59 @@ async def get_lecture_checklist(
 
     holidays = course.get("holidays")
 
-    return generate_lecture_checklist(
+    checklist = generate_lecture_checklist(
         course=course,
         syllabus_weekly_schedule=weekly_schedule,
         holidays=holidays,
     )
+
+    # Merge in user-added lectures
+    additions = (
+        sb.table("lecture_schedule_corrections")
+        .select("*")
+        .eq("course_id", course_id)
+        .eq("user_id", user["id"])
+        .eq("is_addition", True)
+        .execute()
+    )
+    for row in additions.data or []:
+        checklist.append({
+            "lecture_number": row["original_lecture_number"],
+            "expected_date": row["corrected_date"] or "",
+            "week_number": 0,
+            "topic_hint": row.get("corrected_title") or row.get("corrected_description"),
+            "day_of_week": "",
+            "status": "pending",
+            "is_user_added": True,
+        })
+
+    # Apply corrections to auto-generated items
+    edits = (
+        sb.table("lecture_schedule_corrections")
+        .select("*")
+        .eq("course_id", course_id)
+        .eq("user_id", user["id"])
+        .eq("is_addition", False)
+        .execute()
+    )
+    corrections_by_num = {
+        row["original_lecture_number"]: row for row in (edits.data or [])
+    }
+    for item in checklist:
+        correction = corrections_by_num.get(item["lecture_number"])
+        if correction:
+            if correction.get("corrected_date"):
+                item["expected_date"] = correction["corrected_date"]
+            if correction.get("corrected_title") or correction.get("corrected_description"):
+                item["topic_hint"] = (
+                    correction.get("corrected_title")
+                    or correction.get("corrected_description")
+                    or item.get("topic_hint")
+                )
+
+    checklist.sort(key=lambda x: x["lecture_number"])
+
+    return checklist
 
 
 # -----------------------------------------------------------------------
@@ -475,3 +525,166 @@ async def update_notification_preferences(
     ).execute()
 
     return {"email_notifications_enabled": bool(enabled)}
+
+
+# -----------------------------------------------------------------------
+# PATCH /api/courses/{course_id}/onboarding/lecture-checklist/{lecture_number}
+# -----------------------------------------------------------------------
+
+
+@router.patch(
+    "/onboarding/lecture-checklist/{lecture_number}",
+    response_model=LectureChecklistItem,
+)
+async def update_lecture_checklist_item(
+    course_id: str,
+    lecture_number: int,
+    body: LectureChecklistUpdate,
+    user: dict = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    """Edit the title, date, or description of an auto-generated lecture."""
+    sb = _sb(user, settings)
+    course = _get_course(sb, course_id, user["id"])
+
+    # Regenerate the checklist to find the original item
+    weekly_schedule = None
+    syllabus_result = (
+        sb.table("syllabi")
+        .select("raw_extraction")
+        .eq("course_id", course_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if syllabus_result.data:
+        extraction = syllabus_result.data[0].get("raw_extraction") or {}
+        weekly_schedule = extraction.get("weekly_schedule")
+
+    checklist = generate_lecture_checklist(
+        course=course,
+        syllabus_weekly_schedule=weekly_schedule,
+        holidays=course.get("holidays"),
+    )
+
+    original = next(
+        (item for item in checklist if item["lecture_number"] == lecture_number),
+        None,
+    )
+    if original is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Lecture {lecture_number} not found in checklist",
+        )
+
+    # Store correction for future improvement
+    sb.table("lecture_schedule_corrections").insert({
+        "course_id": course_id,
+        "user_id": user["id"],
+        "original_lecture_number": lecture_number,
+        "original_title": f"Lecture {lecture_number}",
+        "original_date": original["expected_date"],
+        "original_topic_hint": original.get("topic_hint"),
+        "corrected_title": body.title,
+        "corrected_date": body.lecture_date.isoformat() if body.lecture_date else None,
+        "corrected_description": body.description,
+        "is_addition": False,
+    }).execute()
+
+    # Return updated item
+    return LectureChecklistItem(
+        lecture_number=lecture_number,
+        expected_date=body.lecture_date.isoformat() if body.lecture_date else original["expected_date"],
+        week_number=original["week_number"],
+        topic_hint=body.title or body.description or original.get("topic_hint"),
+        day_of_week=original["day_of_week"],
+        status=original["status"],
+    )
+
+
+# -----------------------------------------------------------------------
+# POST /api/courses/{course_id}/onboarding/lecture-checklist
+# -----------------------------------------------------------------------
+
+
+@router.post(
+    "/onboarding/lecture-checklist",
+    response_model=LectureChecklistItem,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_lecture_checklist_item(
+    course_id: str,
+    body: LectureChecklistAdd,
+    user: dict = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    """Add a missing lecture to the checklist."""
+    sb = _sb(user, settings)
+    course = _get_course(sb, course_id, user["id"])
+
+    # Get current checklist to determine next lecture number
+    weekly_schedule = None
+    syllabus_result = (
+        sb.table("syllabi")
+        .select("raw_extraction")
+        .eq("course_id", course_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if syllabus_result.data:
+        extraction = syllabus_result.data[0].get("raw_extraction") or {}
+        weekly_schedule = extraction.get("weekly_schedule")
+
+    checklist = generate_lecture_checklist(
+        course=course,
+        syllabus_weekly_schedule=weekly_schedule,
+        holidays=course.get("holidays"),
+    )
+
+    # Also count user-added lectures
+    existing_additions = (
+        sb.table("lecture_schedule_corrections")
+        .select("original_lecture_number")
+        .eq("course_id", course_id)
+        .eq("user_id", user["id"])
+        .eq("is_addition", True)
+        .execute()
+    )
+    added_numbers = [
+        r["original_lecture_number"]
+        for r in (existing_additions.data or [])
+        if r.get("original_lecture_number") is not None
+    ]
+
+    max_existing = max(
+        [item["lecture_number"] for item in checklist] + added_numbers + [0]
+    )
+    new_number = max_existing + 1
+
+    # Store the addition for future improvement
+    sb.table("lecture_schedule_corrections").insert({
+        "course_id": course_id,
+        "user_id": user["id"],
+        "original_lecture_number": new_number,
+        "original_title": None,
+        "original_date": None,
+        "original_topic_hint": None,
+        "corrected_title": body.title,
+        "corrected_date": body.lecture_date.isoformat() if body.lecture_date else None,
+        "corrected_description": body.description,
+        "is_addition": True,
+    }).execute()
+
+    date_str = body.lecture_date.isoformat() if body.lecture_date else date.today().isoformat()
+    day_of_week = body.lecture_date.strftime("%A").lower() if body.lecture_date else ""
+
+    return LectureChecklistItem(
+        lecture_number=new_number,
+        expected_date=date_str,
+        week_number=body.week_number or 0,
+        topic_hint=body.title or body.description,
+        day_of_week=day_of_week,
+        status="pending",
+        is_user_added=True,
+    )

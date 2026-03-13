@@ -816,6 +816,52 @@ export async function getLectureChecklist(
   return resp.json();
 }
 
+export async function updateLectureChecklistItem(
+  courseId: string,
+  lectureNumber: number,
+  data: { title?: string; date?: string; description?: string },
+): Promise<LectureChecklistItem> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/onboarding/lecture-checklist/${lectureNumber}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        lecture_number: lectureNumber,
+        title: data.title,
+        lecture_date: data.date,
+        description: data.description,
+      }),
+    },
+  );
+  return resp.json();
+}
+
+export async function addLectureChecklistItem(
+  courseId: string,
+  data: {
+    title?: string;
+    date?: string;
+    description?: string;
+    week_number?: number;
+  },
+): Promise<LectureChecklistItem> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/onboarding/lecture-checklist`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: data.title,
+        lecture_date: data.date,
+        description: data.description,
+        week_number: data.week_number,
+      }),
+    },
+  );
+  return resp.json();
+}
+
 export async function getSemesterProgress(
   courseId: string,
 ): Promise<SemesterProgress> {
