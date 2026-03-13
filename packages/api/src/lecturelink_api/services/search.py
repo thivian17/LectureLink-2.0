@@ -163,7 +163,8 @@ def format_chunks_for_context(chunks: list[dict], max_tokens: int = 6000) -> str
     for i, chunk in enumerate(chunks):
         # Build source label
         source_parts = [f"Source {i + 1}"]
-        source_parts.append(f"Lecture: {chunk['lecture_title']}")
+        if chunk.get("lecture_title"):
+            source_parts.append(f"Lecture: {chunk['lecture_title']}")
         if chunk.get("start_time") is not None:
             mins = int(chunk["start_time"] // 60)
             secs = int(chunk["start_time"] % 60)

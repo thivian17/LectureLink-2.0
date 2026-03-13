@@ -62,11 +62,16 @@ async def fetch_concept_chunks(
         try:
             chunk_result = (
                 supabase.table("lecture_chunks")
-                .select("id, content, lecture_id, start_time, end_time, slide_number, metadata")
+                .select("id, content, lecture_id, start_time, end_time, slide_number, metadata, lectures(title)")
                 .in_("id", source_chunk_ids[:limit])
                 .execute()
             )
             chunks = chunk_result.data or []
+            # Flatten the joined lecture title into each chunk
+            for chunk in chunks:
+                lecture_rel = chunk.pop("lectures", None)
+                if lecture_rel and isinstance(lecture_rel, dict):
+                    chunk["lecture_title"] = lecture_rel.get("title", "")
             if chunks:
                 logger.debug(
                     "Fetched %d/%d pre-linked chunks for concept %s",
