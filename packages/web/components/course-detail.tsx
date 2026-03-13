@@ -81,6 +81,24 @@ function parseLocalDate(dateStr: string): Date {
   return new Date(year, month - 1, day);
 }
 
+/** Format "HH:MM-HH:MM" to "H:MM AM – H:MM PM". Falls back to raw string. */
+function formatMeetingTime(raw: string | null): string | null {
+  if (!raw) return null;
+  const parts = raw.split("-").map((s) => s.trim());
+  if (parts.length !== 2) return raw;
+
+  function to12h(hhmm: string): string {
+    const [hStr, mStr] = hhmm.split(":");
+    if (!hStr || !mStr) return hhmm;
+    const h = parseInt(hStr, 10);
+    const ampm = h < 12 ? "AM" : "PM";
+    const h12 = h % 12 || 12;
+    return `${h12}:${mStr} ${ampm}`;
+  }
+
+  return `${to12h(parts[0])} – ${to12h(parts[1])}`;
+}
+
 export function CourseDetail({
   course,
   assessmentCount,
@@ -215,7 +233,7 @@ export function CourseDetail({
           <Badge variant="outline">{course.meeting_days.join(", ")}</Badge>
         )}
         {course.meeting_time && (
-          <Badge variant="outline">{course.meeting_time}</Badge>
+          <Badge variant="outline">{formatMeetingTime(course.meeting_time)}</Badge>
         )}
         <Badge variant="outline">Target: {gradeLabel}</Badge>
       </div>
@@ -285,7 +303,7 @@ export function CourseDetail({
                   {course.meeting_days.length > 0
                     ? course.meeting_days.join(", ")
                     : "Not set"}
-                  {course.meeting_time && ` · ${course.meeting_time}`}
+                  {course.meeting_time && ` · ${formatMeetingTime(course.meeting_time)}`}
                 </p>
               </div>
               <div>

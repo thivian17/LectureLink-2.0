@@ -385,6 +385,89 @@ class TestHolidayHandling:
 
 
 # ---------------------------------------------------------------------------
+# Layer 2b — Class/Lecture-relative patterns
+# ---------------------------------------------------------------------------
+
+
+class TestClassRelative:
+    """Tests for 'Class N', 'Lecture N', 'Wednesday in Class 3', etc.
+
+    Semester: start=Jan 12 (Mon), meeting_days=[tuesday, thursday].
+    So class meetings are:
+      Class 1 = Jan 13 (Tue), Class 2 = Jan 15 (Thu),
+      Class 3 = Jan 20 (Tue), Class 4 = Jan 22 (Thu), ...
+    """
+
+    def test_class_1(self, semester):
+        """Class 1 → first meeting = Jan 13 (Tuesday)."""
+        result = resolve_date("Class 1", semester)
+        assert result.value == date(2026, 1, 13)
+        assert result.method == "class_relative"
+        assert result.confidence == 0.8
+
+    def test_class_4(self, semester):
+        """Class 4 → 4th meeting = Jan 22 (Thursday)."""
+        result = resolve_date("Class 4", semester)
+        assert result.value == date(2026, 1, 22)
+
+    def test_lecture_3(self, semester):
+        """'Lecture 3' works the same as 'Class 3'."""
+        result = resolve_date("Lecture 3", semester)
+        assert result.value == date(2026, 1, 20)
+        assert result.method == "class_relative"
+
+    def test_session_2(self, semester):
+        result = resolve_date("Session 2", semester)
+        assert result.value == date(2026, 1, 15)
+
+    def test_class_with_day_name(self, semester):
+        """'Class 3 Wed' → Wednesday of the week containing Class 3 (Jan 20 Tue)."""
+        result = resolve_date("Class 3 Wed", semester)
+        # Class 3 = Jan 20 (Tue), week's Wednesday = Jan 21
+        assert result.value == date(2026, 1, 21)
+        assert result.method == "class_relative"
+
+    def test_day_in_class(self, semester):
+        """'Wednesday in Class 3' → Wednesday of Class 3's week."""
+        result = resolve_date("Wednesday in Class 3", semester)
+        assert result.value == date(2026, 1, 21)
+
+    def test_wednes_in_class(self, semester):
+        """'wednes in Class 3' → handles truncated day abbreviation."""
+        result = resolve_date("wednes in Class 3", semester)
+        assert result.value == date(2026, 1, 21)
+        assert result.method == "class_relative"
+
+    def test_class_skips_holidays(self, semester):
+        """Class meetings skip holiday dates.
+
+        Spring Break: Mar 9–13. Meetings that would fall on Mar 10 (Tue)
+        and Mar 12 (Thu) are skipped, so class numbers after that are offset.
+        """
+        # Without Spring Break there would be 16 meetings in 8 weeks (Jan 12 – Mar 5).
+        # Class 16 = Mar 5 (Thu). Class 17 would naively be Mar 10 (Tue, Spring Break).
+        # With holiday skip: Class 17 = Mar 17 (Tue, first meeting after break).
+        result = resolve_date("Class 17", semester)
+        assert result.value == date(2026, 3, 17)
+
+    def test_class_beyond_semester(self, semester):
+        """A class number beyond the semester falls through."""
+        result = resolve_date("Class 999", semester)
+        assert result.method != "class_relative"
+
+    def test_day_of_lecture(self, semester):
+        """'Tue of Lecture 4' pattern."""
+        result = resolve_date("Tue of Lecture 4", semester)
+        # Lecture 4 = Jan 22 (Thu), week's Tuesday = Jan 20
+        assert result.value == date(2026, 1, 20)
+
+    def test_week_pattern_takes_priority(self, semester):
+        """'Week 3' should match week_relative before class_relative."""
+        result = resolve_date("Week 3", semester)
+        assert result.method == "week_relative"
+
+
+# ---------------------------------------------------------------------------
 # Layer 3 — dateparser fallback
 # ---------------------------------------------------------------------------
 

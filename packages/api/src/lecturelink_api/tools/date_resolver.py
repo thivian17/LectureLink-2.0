@@ -38,7 +38,9 @@ _DAY_ABBREV: dict[str, str] = {
     "tue": "tuesday",
     "tues": "tuesday",
     "wed": "wednesday",
+    "wednes": "wednesday",
     "thu": "thursday",
+    "thur": "thursday",
     "thurs": "thursday",
     "fri": "friday",
     "sat": "saturday",
@@ -60,6 +62,27 @@ _WEEK_ONLY_RE = re.compile(
 
 _END_OF_WEEK_RE = re.compile(
     r"(?:due\s+)?end\s+of\s+week\s+(\d+)",
+    re.IGNORECASE,
+)
+
+# "Class N" / "Lecture N" / "Session N" patterns — Nth class meeting
+_CLASS_KEYWORD = r"(?:class|lecture|session)"
+
+# "Class 4", "Lecture 10", "Session 3"
+_CLASS_ONLY_RE = re.compile(
+    rf"{_CLASS_KEYWORD}\s*(\d+)\b",
+    re.IGNORECASE,
+)
+
+# "Class 4 Tuesday", "Lecture 3 Wed"
+_CLASS_DAY_RE = re.compile(
+    rf"{_CLASS_KEYWORD}\s*(\d+)\s+({_DAY_NAMES})\b",
+    re.IGNORECASE,
+)
+
+# "Wednesday in Class 3", "wednes in Lecture 5", "Tue of Class 2"
+_DAY_IN_CLASS_RE = re.compile(
+    rf"({_DAY_NAMES})\s+(?:in|of|during)\s+{_CLASS_KEYWORD}\s*(\d+)",
     re.IGNORECASE,
 )
 
@@ -190,6 +213,30 @@ def _in_semester(d: date, semester: SemesterContext) -> bool:
     return semester.start <= d <= semester.end
 
 
+def _nth_meeting_date(n: int, semester: SemesterContext) -> date | None:
+    """Return the date of the *n*-th class meeting from semester start.
+
+    Uses ``semester.meeting_days`` to determine which weekdays have class.
+    Skips dates that fall in holiday periods.  Returns ``None`` if there
+    are no meeting days or *n* is beyond the semester.
+    """
+    if not semester.meeting_days or n < 1:
+        return None
+    meeting_weekdays = {DAY_MAP[d.lower()] for d in semester.meeting_days if d.lower() in DAY_MAP}
+    if not meeting_weekdays:
+        return None
+
+    count = 0
+    current = semester.start
+    while current <= semester.end:
+        if current.weekday() in meeting_weekdays and not _is_in_holiday(current, semester.holidays):
+            count += 1
+            if count == n:
+                return current
+        current += timedelta(days=1)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Layer 1 — LLM-resolved validation
 # ---------------------------------------------------------------------------
@@ -278,6 +325,73 @@ def _try_week_relative(
     return None
 
 
+def _try_class_relative(
+    raw_text: str,
+    semester: SemesterContext,
+) -> ResolvedDate | None:
+    """Parse patterns like 'Class 4', 'Lecture 3 Wed', 'Wednesday in Class 3'.
+
+    'Class N' means the Nth class meeting based on ``semester.meeting_days``.
+    If a day name is also specified, resolve to that day of the week containing
+    the Nth class meeting.
+    """
+    text = raw_text.strip()
+
+    # --- "DayName in/of Class N" (e.g. "wednes in Class 3") ---
+    m = _DAY_IN_CLASS_RE.search(text)
+    if m:
+        day_name = _normalize_day(m.group(1))
+        class_num = int(m.group(2))
+        day_offset = DAY_MAP.get(day_name)
+        meeting = _nth_meeting_date(class_num, semester)
+        if meeting is not None and day_offset is not None:
+            # Monday of the meeting's week
+            week_monday = meeting - timedelta(days=meeting.weekday())
+            target = week_monday + timedelta(days=day_offset)
+            target = _next_valid_day(target, day_offset, semester.holidays)
+            if _in_semester(target, semester):
+                return ResolvedDate(
+                    value=target,
+                    confidence=0.8,
+                    method="class_relative",
+                    original_text=raw_text,
+                )
+
+    # --- "Class N DayName" (e.g. "Lecture 3 Wed") ---
+    m = _CLASS_DAY_RE.search(text)
+    if m:
+        class_num = int(m.group(1))
+        day_name = _normalize_day(m.group(2))
+        day_offset = DAY_MAP.get(day_name)
+        meeting = _nth_meeting_date(class_num, semester)
+        if meeting is not None and day_offset is not None:
+            week_monday = meeting - timedelta(days=meeting.weekday())
+            target = week_monday + timedelta(days=day_offset)
+            target = _next_valid_day(target, day_offset, semester.holidays)
+            if _in_semester(target, semester):
+                return ResolvedDate(
+                    value=target,
+                    confidence=0.8,
+                    method="class_relative",
+                    original_text=raw_text,
+                )
+
+    # --- "Class N" (no day — return the meeting date itself) ---
+    m = _CLASS_ONLY_RE.search(text)
+    if m:
+        class_num = int(m.group(1))
+        meeting = _nth_meeting_date(class_num, semester)
+        if meeting is not None and _in_semester(meeting, semester):
+            return ResolvedDate(
+                value=meeting,
+                confidence=0.8,
+                method="class_relative",
+                original_text=raw_text,
+            )
+
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Layer 3 — dateparser fallback
 # ---------------------------------------------------------------------------
@@ -345,8 +459,13 @@ def resolve_date(
     if result is not None:
         return result
 
-    # Layer 2
+    # Layer 2a — week-relative patterns ("Week 3 Tuesday")
     result = _try_week_relative(raw_text, semester)
+    if result is not None:
+        return result
+
+    # Layer 2b — class/lecture-relative patterns ("Class 4", "wednes in Class 3")
+    result = _try_class_relative(raw_text, semester)
     if result is not None:
         return result
 

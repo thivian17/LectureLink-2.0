@@ -48,22 +48,34 @@ const GRADE_OPTIONS = [
   { label: "C (73%)", value: "0.73" },
 ];
 
-const courseFormSchema = z.object({
-  name: z.string().min(1, "Course name is required"),
-  code: z.string(),
-  semester_start: z.date({ error: "Start date is required" }),
-  semester_end: z.date({ error: "End date is required" }),
-  meeting_days: z.array(z.string()).min(1, "Select at least one meeting day"),
-  meeting_time: z.string(),
-  target_grade: z.string(),
-  holidays: z.array(
-    z.object({
-      name: z.string().min(1, "Holiday name is required"),
-      start_date: z.date({ error: "Start date is required" }),
-      end_date: z.date({ error: "End date is required" }),
-    }),
-  ),
-});
+const courseFormSchema = z
+  .object({
+    name: z.string().min(1, "Course name is required"),
+    code: z.string(),
+    semester_start: z.date({ error: "Start date is required" }),
+    semester_end: z.date({ error: "End date is required" }),
+    meeting_days: z.array(z.string()).min(1, "Select at least one meeting day"),
+    meeting_start_time: z.string(),
+    meeting_end_time: z.string(),
+    target_grade: z.string(),
+    holidays: z.array(
+      z.object({
+        name: z.string().min(1, "Holiday name is required"),
+        start_date: z.date({ error: "Start date is required" }),
+        end_date: z.date({ error: "End date is required" }),
+      }),
+    ),
+  })
+  .refine(
+    (data) => {
+      if (!data.meeting_start_time || !data.meeting_end_time) return true;
+      return data.meeting_start_time < data.meeting_end_time;
+    },
+    {
+      message: "Start time must be before end time",
+      path: ["meeting_end_time"],
+    },
+  );
 
 type CourseFormValues = z.infer<typeof courseFormSchema>;
 
@@ -77,9 +89,37 @@ function parseLocalDate(dateStr: string): Date {
   return new Date(year, month - 1, day);
 }
 
+/** Parse stored "HH:MM-HH:MM" into [start, end]. Falls back to ["", ""] */
+function parseMeetingTime(raw: string | null): [string, string] {
+  if (!raw) return ["", ""];
+  const parts = raw.split("-").map((s) => s.trim());
+  if (parts.length === 2 && /^\d{2}:\d{2}$/.test(parts[0]) && /^\d{2}:\d{2}$/.test(parts[1])) {
+    return [parts[0], parts[1]];
+  }
+  return ["", ""];
+}
+
+/** Generate time options in 15-minute increments from 06:00 to 23:00. */
+const TIME_OPTIONS: { label: string; value: string }[] = (() => {
+  const opts: { label: string; value: string }[] = [];
+  for (let h = 6; h <= 23; h++) {
+    for (const m of [0, 15, 30, 45]) {
+      const hh = h.toString().padStart(2, "0");
+      const mm = m.toString().padStart(2, "0");
+      const value = `${hh}:${mm}`;
+      const hour12 = h % 12 || 12;
+      const ampm = h < 12 ? "AM" : "PM";
+      const label = `${hour12}:${mm.padStart(2, "0")} ${ampm}`;
+      opts.push({ label, value });
+    }
+  }
+  return opts;
+})();
+
 export function CourseForm({ course, onSuccess }: CourseFormProps) {
   const router = useRouter();
   const isEditing = !!course;
+  const [defaultStart, defaultEnd] = parseMeetingTime(course?.meeting_time ?? null);
 
   const form = useForm<CourseFormValues>({
     resolver: zodResolver(courseFormSchema),
@@ -93,7 +133,8 @@ export function CourseForm({ course, onSuccess }: CourseFormProps) {
         ? parseLocalDate(course.semester_end)
         : undefined,
       meeting_days: course?.meeting_days ?? [],
-      meeting_time: course?.meeting_time ?? "",
+      meeting_start_time: defaultStart,
+      meeting_end_time: defaultEnd,
       target_grade: course?.target_grade?.toString() ?? "0.8",
       holidays:
         (
@@ -120,7 +161,10 @@ export function CourseForm({ course, onSuccess }: CourseFormProps) {
       semester_start: format(values.semester_start, "yyyy-MM-dd"),
       semester_end: format(values.semester_end, "yyyy-MM-dd"),
       meeting_days: values.meeting_days,
-      meeting_time: values.meeting_time || null,
+      meeting_time:
+        values.meeting_start_time && values.meeting_end_time
+          ? `${values.meeting_start_time}-${values.meeting_end_time}`
+          : null,
       target_grade: parseFloat(values.target_grade),
       holidays: values.holidays.map((h) => ({
         name: h.name,
@@ -290,25 +334,60 @@ export function CourseForm({ course, onSuccess }: CourseFormProps) {
           )}
         />
 
-        {/* Meeting Time + Target Grade */}
+        {/* Meeting Time */}
         <div className="grid gap-4 sm:grid-cols-2">
           <FormField
             control={form.control}
-            name="meeting_time"
+            name="meeting_start_time"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Meeting Time</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="2:00 PM - 3:15 PM"
-                    autoComplete="off"
-                    {...field}
-                  />
-                </FormControl>
+                <FormLabel>Start Time</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Start time" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {TIME_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}
           />
+          <FormField
+            control={form.control}
+            name="meeting_end_time"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>End Time</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="End time" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {TIME_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
+
+        {/* Target Grade */}
+        <div className="grid gap-4 sm:grid-cols-2">
           <FormField
             control={form.control}
             name="target_grade"
