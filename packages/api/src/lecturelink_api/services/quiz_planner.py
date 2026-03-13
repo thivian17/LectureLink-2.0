@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from .search import search_lectures
+from .chunk_fetcher import fetch_concept_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -141,21 +141,15 @@ async def plan_quiz(
 
         selected = prioritized[:num_questions]
 
-    # 3. For each concept, retrieve grounding chunks
+    # 3. For each concept, retrieve grounding chunks (deterministic via chunk_fetcher)
     quiz_plan: list[dict] = []
     for concept in selected:
-        query = f"{concept['title']}: {concept.get('description', '')}"
-        # Prefer the concept's own lecture, but fall back to lecture_ids filter
-        search_lecture_ids = (
-            [concept["lecture_id"]] if concept.get("lecture_id")
-            else lecture_ids
-        )
-        chunks = await search_lectures(
-            supabase=supabase,
+        chunks = await fetch_concept_chunks(
+            supabase,
+            concept_id=concept["id"],
             course_id=course_id,
-            query=query,
-            lecture_ids=search_lecture_ids,
             limit=3,
+            concept_title=concept.get("title", ""),
         )
 
         quiz_plan.append({

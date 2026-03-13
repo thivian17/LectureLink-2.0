@@ -6,8 +6,9 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from lecturelink_api.config import Settings, get_settings
 from lecturelink_api.routers import (
@@ -144,6 +145,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global exception handler — must manually attach CORS headers because
+# responses from exception_handler bypass CORSMiddleware.
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    logger.error("Unhandled exception on %s %s", request.method, request.url.path, exc_info=exc)
+    origin = request.headers.get("origin", "")
+    headers: dict[str, str] = {}
+    if origin in _allowed_origins:
+        headers["access-control-allow-origin"] = origin
+        headers["access-control-allow-credentials"] = "true"
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+        headers=headers,
+    )
+
 
 # REST routers
 app.include_router(courses.router)

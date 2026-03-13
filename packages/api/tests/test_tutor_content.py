@@ -467,7 +467,7 @@ class TestGetStudentContext:
             nonlocal call_count
             call_count += 1
             if table_name == "profiles":
-                return _mock_chain([{"full_name": "Alice Smith"}])
+                return _mock_chain({"first_name": "Alice Smith"})
             if table_name == "tutor_sessions":
                 # Table might not exist yet
                 raise Exception("relation does not exist")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from supabase import create_client
 
@@ -26,6 +28,8 @@ from lecturelink_api.services.learn_session import (
     submit_gut_check,
     submit_power_quiz_answer,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/learn", tags=["learn"])
 
@@ -103,6 +107,14 @@ async def get_concept(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(e)
+        ) from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Concept brief generation failed for session %s concept %d", session_id, index, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to generate concept brief. Please try again.",
         ) from e
 
 

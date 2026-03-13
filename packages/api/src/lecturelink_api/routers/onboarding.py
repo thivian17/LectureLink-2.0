@@ -279,12 +279,12 @@ async def get_personalized_message(
     try:
         profile_result = (
             sb.table("profiles")
-            .select("full_name")
+            .select("first_name")
             .eq("id", user["id"])
             .execute()
         )
         if profile_result.data:
-            student_name = profile_result.data[0].get("full_name")
+            student_name = profile_result.data[0].get("first_name")
     except Exception:
         pass
 

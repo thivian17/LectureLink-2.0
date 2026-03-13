@@ -236,13 +236,25 @@ async def send_notification_task(
         if not assessment_result.data:
             return {"status": "skipped", "reason": "assessment not found"}
 
-        # Get user email from Supabase Auth admin
+        # Get user email and name
         try:
             user_data = sb.auth.admin.get_user_by_id(body.user_id)
             user_email = user_data.user.email
-            user_name = user_email.split("@")[0].title()
         except Exception:
             return {"status": "skipped", "reason": "user email unavailable"}
+
+        # Prefer first_name from profiles, fall back to email prefix
+        try:
+            profile = (
+                sb.table("profiles")
+                .select("first_name")
+                .eq("id", body.user_id)
+                .maybe_single()
+                .execute()
+            )
+            user_name = (profile.data or {}).get("first_name") or user_email.split("@")[0].title()
+        except Exception:
+            user_name = user_email.split("@")[0].title()
 
         sent = await send_assessment_reminder(
             supabase=sb,

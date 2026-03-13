@@ -151,7 +151,7 @@ class TestGetFlashReviewCards:
                 return_value=mock_client,
             ),
             patch(
-                "lecturelink_api.services.flash_review.search_lectures",
+                "lecturelink_api.services.flash_review.fetch_concept_chunks",
                 new_callable=AsyncMock,
                 return_value=[{"content": "Entropy is disorder", "lecture_title": "L1"}],
             ),

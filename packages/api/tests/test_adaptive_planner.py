@@ -52,7 +52,7 @@ def _make_mastery(concept_id, accuracy=0.5, recent_accuracy=0.5, total_attempts=
 
 class TestAdaptivePlanQuiz:
     @pytest.mark.asyncio
-    @patch("lecturelink_api.services.quiz_planner.search_lectures", new_callable=AsyncMock)
+    @patch("lecturelink_api.services.quiz_planner.fetch_concept_chunks", new_callable=AsyncMock)
     async def test_adaptive_prioritizes_weak_concepts(self, mock_search):
         """Weak concepts (low mastery) should appear first in the plan."""
         from lecturelink_api.services.quiz_planner import plan_quiz
@@ -83,7 +83,7 @@ class TestAdaptivePlanQuiz:
         assert plan_titles[0] == "Weak Topic"
 
     @pytest.mark.asyncio
-    @patch("lecturelink_api.services.quiz_planner.search_lectures", new_callable=AsyncMock)
+    @patch("lecturelink_api.services.quiz_planner.fetch_concept_chunks", new_callable=AsyncMock)
     async def test_adaptive_returns_adaptive_difficulties(self, mock_search):
         """Plan should include adaptive_difficulties dict."""
         from lecturelink_api.services.quiz_planner import plan_quiz
@@ -107,7 +107,7 @@ class TestAdaptivePlanQuiz:
         assert "c1" in result["adaptive_difficulties"]
 
     @pytest.mark.asyncio
-    @patch("lecturelink_api.services.quiz_planner.search_lectures", new_callable=AsyncMock)
+    @patch("lecturelink_api.services.quiz_planner.fetch_concept_chunks", new_callable=AsyncMock)
     async def test_adaptive_difficulty_increases_for_strong_students(self, mock_search):
         """Strong students should get harder questions on their strong concepts."""
         from lecturelink_api.services.quiz_planner import plan_quiz
@@ -132,7 +132,7 @@ class TestAdaptivePlanQuiz:
         assert adaptive_diff > 0.5
 
     @pytest.mark.asyncio
-    @patch("lecturelink_api.services.quiz_planner.search_lectures", new_callable=AsyncMock)
+    @patch("lecturelink_api.services.quiz_planner.fetch_concept_chunks", new_callable=AsyncMock)
     async def test_non_adaptive_unchanged(self, mock_search):
         """Non-adaptive difficulty should use original band filtering."""
         from lecturelink_api.services.quiz_planner import plan_quiz
@@ -154,7 +154,7 @@ class TestAdaptivePlanQuiz:
         assert "adaptive_difficulties" not in result
 
     @pytest.mark.asyncio
-    @patch("lecturelink_api.services.quiz_planner.search_lectures", new_callable=AsyncMock)
+    @patch("lecturelink_api.services.quiz_planner.fetch_concept_chunks", new_callable=AsyncMock)
     async def test_adaptive_new_concepts_get_medium_priority(self, mock_search):
         """Concepts with no attempts should get medium priority (0.5)."""
         from lecturelink_api.services.quiz_planner import plan_quiz

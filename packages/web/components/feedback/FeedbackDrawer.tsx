@@ -57,6 +57,7 @@ export function FeedbackDrawer({ open, onClose }: FeedbackDrawerProps) {
   } | null>(null);
   const [description, setDescription] = useState("");
   const [isCapturing, setIsCapturing] = useState(false);
+  const [captureFailed, setCaptureFailed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const getConsoleErrors = useConsoleErrors();
@@ -69,6 +70,7 @@ export function FeedbackDrawer({ open, onClose }: FeedbackDrawerProps) {
     setAnnotationBounds(null);
     setDescription("");
     setSubmitted(false);
+    setCaptureFailed(false);
   }, []);
 
   // Capture screenshot when the drawer opens, excluding the Sheet itself.
@@ -94,26 +96,29 @@ export function FeedbackDrawer({ open, onClose }: FeedbackDrawerProps) {
           if (blob) {
             setScreenshotBlob(blob);
             setScreenshotDataUrl(canvas.toDataURL("image/png"));
+          } else {
+            setCaptureFailed(true);
           }
           setIsCapturing(false);
         },
         "image/png",
       );
     } catch {
+      setCaptureFailed(true);
       setIsCapturing(false);
     }
   }, []);
 
   // Capture as soon as drawer opens so the screenshot is ready by step 2
   useEffect(() => {
-    if (open && !screenshotDataUrl && !isCapturing) {
+    if (open && !screenshotDataUrl && !isCapturing && !captureFailed) {
       captureScreenshot();
     }
-  }, [open, screenshotDataUrl, isCapturing, captureScreenshot]);
+  }, [open, screenshotDataUrl, isCapturing, captureFailed, captureScreenshot]);
 
   function handleTypeSelect(type: FeedbackType) {
     setFeedbackType(type);
-    setStep(2);
+    setStep(captureFailed ? 3 : 2);
   }
 
   function handleAnnotationComplete(
@@ -128,6 +133,7 @@ export function FeedbackDrawer({ open, onClose }: FeedbackDrawerProps) {
     setScreenshotDataUrl(null);
     setScreenshotBlob(null);
     setAnnotationBounds(null);
+    setCaptureFailed(false);
     captureScreenshot();
   }
 

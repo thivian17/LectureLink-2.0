@@ -94,14 +94,25 @@ async def gather_briefing_context(supabase, user_id: str) -> dict:
 
     # --- Student profile ---
     try:
-        user_result = supabase.auth.get_user()
-        if user_result and user_result.user:
-            meta = user_result.user.user_metadata or {}
-            context["student_name"] = (
-                meta.get("full_name", "")
-                or meta.get("name", "")
-                or (user_result.user.email or "").split("@")[0]
-            )
+        profile = (
+            supabase.table("profiles")
+            .select("first_name")
+            .eq("id", user_id)
+            .maybe_single()
+            .execute()
+        )
+        if profile.data and profile.data.get("first_name"):
+            context["student_name"] = profile.data["first_name"]
+        else:
+            # Fallback to auth metadata or email prefix
+            user_result = supabase.auth.get_user()
+            if user_result and user_result.user:
+                meta = user_result.user.user_metadata or {}
+                context["student_name"] = (
+                    meta.get("first_name", "")
+                    or meta.get("full_name", "")
+                    or (user_result.user.email or "").split("@")[0]
+                )
     except Exception:
         pass
 

@@ -402,13 +402,13 @@ async def get_student_context(
     try:
         profile = (
             supabase.table("profiles")
-            .select("full_name")
+            .select("first_name")
             .eq("id", user_id)
             .maybe_single()
             .execute()
         )
         if profile.data:
-            student_name = profile.data.get("full_name")
+            student_name = profile.data.get("first_name")
     except Exception:
         logger.debug("Failed to fetch student profile", exc_info=True)
 

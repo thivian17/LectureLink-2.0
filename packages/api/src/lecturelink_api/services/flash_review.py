@@ -15,7 +15,7 @@ import logging
 import uuid
 
 from .genai_client import get_genai_client as _get_client
-from .search import search_lectures
+from .chunk_fetcher import fetch_concept_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -212,13 +212,14 @@ async def _generate_card_for_concept(
     concept_title: str,
 ) -> dict | None:
     """Generate a flash card for a concept using Gemini."""
-    # Get source chunks for grounding
+    # Get source chunks for grounding (deterministic via chunk_fetcher)
     try:
-        chunks = await search_lectures(
-            supabase=supabase,
+        chunks = await fetch_concept_chunks(
+            supabase,
+            concept_id=concept_id,
             course_id=course_id,
-            query=concept_title,
             limit=2,
+            concept_title=concept_title,
         )
     except Exception:
         logger.debug("Failed to get chunks for flash card: %s", concept_title)

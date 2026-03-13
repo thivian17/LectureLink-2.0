@@ -121,7 +121,7 @@ async def list_users(
     sb = _sb_service(settings)
     result = (
         sb.table("profiles")
-        .select("id, email, display_name, created_at")
+        .select("id, email, first_name, last_name, created_at")
         .order("created_at", desc=True)
         .range(offset, offset + limit - 1)
         .execute()

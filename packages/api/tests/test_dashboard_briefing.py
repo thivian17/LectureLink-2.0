@@ -33,7 +33,7 @@ def _mock_chain(final_data, count=None):
     chain.execute.return_value = _mock_execute(final_data, count=count)
     for method in (
         "select", "insert", "update", "delete",
-        "eq", "in_", "gte", "order", "limit", "single",
+        "eq", "in_", "gte", "order", "limit", "single", "maybe_single",
     ):
         getattr(chain, method).return_value = chain
     return chain
@@ -53,9 +53,9 @@ def _make_supabase(
     """Build a mock supabase client for gather_briefing_context."""
     sb = MagicMock()
 
-    # Auth
+    # Auth (fallback path — only reached when profiles table has no first_name)
     user_obj = MagicMock()
-    user_obj.user_metadata = user_meta or {"full_name": "Test Student"}
+    user_obj.user_metadata = user_meta or {"first_name": "Test Student"}
     user_obj.email = "test@example.com"
     auth_result = MagicMock()
     auth_result.user = user_obj
@@ -74,6 +74,8 @@ def _make_supabase(
 
     # Tables
     def table_side_effect(name):
+        if name == "profiles":
+            return _mock_chain({"first_name": "Test Student"})
         if name == "user_streaks":
             return _mock_chain(streak or {"current_streak": 3, "longest_streak": 10})
         if name == "user_levels":
