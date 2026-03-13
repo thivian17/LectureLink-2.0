@@ -288,6 +288,35 @@ async def gather_briefing_context(supabase, user_id: str) -> dict:
                 "reason": "assessment_prep",
                 "time_budget": 15,
             }
+        elif course_entry["next_assessment"]:
+            # Assessment upcoming but no quiz attempts yet — recommend starting
+            try:
+                concepts_result = (
+                    supabase.table("concepts")
+                    .select("title")
+                    .eq("course_id", cid)
+                    .order("created_at", desc=True)
+                    .limit(2)
+                    .execute()
+                )
+                concept_titles = [
+                    c["title"] for c in (concepts_result.data or []) if c.get("title")
+                ]
+                if concept_titles:
+                    course_entry["session_recommendation"] = {
+                        "concepts": concept_titles,
+                        "reason": "first_session",
+                        "time_budget": 15,
+                    }
+            except Exception:
+                pass
+        elif course_entry["weak_concepts"]:
+            # No upcoming assessment but has weak concepts — general review
+            course_entry["session_recommendation"] = {
+                "concepts": [c["title"] for c in course_entry["weak_concepts"][:2]],
+                "reason": "review",
+                "time_budget": 15,
+            }
 
         course_data_list.append(course_entry)
 

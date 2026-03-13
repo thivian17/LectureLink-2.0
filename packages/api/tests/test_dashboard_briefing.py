@@ -367,3 +367,103 @@ async def test_chat_cross_course():
     assert result["message"] == "Great question! Based on your data, I suggest..."
     assert result["context_used"] is True
     mock_client.aio.models.generate_content.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# Test 9: session_recommendation when assessment exists but no quiz attempts
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_session_recommendation_first_session():
+    """Generates a first_session recommendation when assessment exists but no attempts."""
+    courses = [
+        {
+            "id": "course-1",
+            "name": "Algorithms",
+            "code": "CS 301",
+            "semester_start": "2026-01-15",
+            "semester_end": "2026-05-15",
+            "meeting_days": ["Monday"],
+            "holidays": None,
+        }
+    ]
+    assessments = [
+        {
+            "id": "a-1",
+            "title": "Final Project",
+            "due_date": "2026-04-01",
+            "weight_percent": 30,
+            "type": "project",
+        }
+    ]
+    # No mastery rows → weak_concepts will be empty
+
+    sb = _make_supabase(
+        courses=courses,
+        assessments=assessments,
+        mastery_rows=[],
+    )
+
+    # The new code queries the concepts table for fallback titles
+    original_table = sb.table.side_effect
+
+    def table_with_concepts(name):
+        if name == "concepts":
+            return _mock_chain([
+                {"title": "Scope and Methods"},
+                {"title": "Linear Programming"},
+            ])
+        return original_table(name)
+
+    sb.table.side_effect = table_with_concepts
+
+    ctx = await gather_briefing_context(sb, "user-1")
+
+    course = ctx["courses"][0]
+    assert course["session_recommendation"] is not None
+    assert course["session_recommendation"]["reason"] == "first_session"
+    assert "Scope and Methods" in course["session_recommendation"]["concepts"]
+
+
+# ---------------------------------------------------------------------------
+# Test 10: session_recommendation for review (weak concepts, no assessment)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_session_recommendation_review():
+    """Generates a review recommendation when weak concepts exist but no upcoming assessment."""
+    courses = [
+        {
+            "id": "course-1",
+            "name": "Physics",
+            "code": "PHYS 201",
+            "semester_start": "2026-01-15",
+            "semester_end": "2026-05-15",
+            "meeting_days": ["Tuesday"],
+            "holidays": None,
+        }
+    ]
+    mastery_rows = [
+        {
+            "concept_id": "c1",
+            "concept_title": "Kinematics",
+            "accuracy": 0.3,
+            "recent_accuracy": 0.2,
+            "total_attempts": 4,
+        },
+    ]
+
+    sb = _make_supabase(
+        courses=courses,
+        assessments=[],  # No upcoming assessments
+        mastery_rows=mastery_rows,
+    )
+
+    ctx = await gather_briefing_context(sb, "user-1")
+
+    course = ctx["courses"][0]
+    assert course["session_recommendation"] is not None
+    assert course["session_recommendation"]["reason"] == "review"
+    assert "Kinematics" in course["session_recommendation"]["concepts"]
