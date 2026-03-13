@@ -71,33 +71,23 @@ export function FeedbackDrawer({ open, onClose }: FeedbackDrawerProps) {
     setSubmitted(false);
   }, []);
 
-  // Capture screenshot as soon as the drawer opens (before the Sheet overlay
-  // is painted) so html2canvas captures the actual page, not the drawer.
+  // Capture screenshot when the drawer opens, excluding the Sheet itself.
   const captureScreenshot = useCallback(async () => {
     setIsCapturing(true);
     try {
       const html2canvas = (await import("html2canvas")).default;
-      // Hide the Sheet portal so it doesn't appear in the screenshot
-      const sheetOverlay = document.querySelector<HTMLElement>(
-        "[data-slot='sheet-overlay']",
-      );
-      const sheetContent = document.querySelector<HTMLElement>(
-        "[data-slot='sheet-content']",
-      );
-      if (sheetOverlay) sheetOverlay.style.display = "none";
-      if (sheetContent) sheetContent.style.display = "none";
-
       const canvas = await html2canvas(document.body, {
         useCORS: true,
         scale: 0.5,
-        ignoreElements: (el) =>
-          el.closest("[data-slot='sheet-overlay']") !== null ||
-          el.closest("[data-slot='sheet-content']") !== null,
+        ignoreElements: (el) => {
+          // Exclude Radix Dialog portal elements (overlay + content)
+          if (el.getAttribute?.("data-slot") === "sheet-overlay") return true;
+          if (el.getAttribute?.("data-slot") === "sheet-content") return true;
+          if (el.closest?.("[data-slot='sheet-overlay']")) return true;
+          if (el.closest?.("[data-slot='sheet-content']")) return true;
+          return false;
+        },
       });
-
-      // Restore visibility
-      if (sheetOverlay) sheetOverlay.style.display = "";
-      if (sheetContent) sheetContent.style.display = "";
 
       canvas.toBlob(
         (blob) => {
