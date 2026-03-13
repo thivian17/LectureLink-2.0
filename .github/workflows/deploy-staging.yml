@@ -168,7 +168,7 @@ jobs:
             --region ${{ env.REGION }} \
             --platform managed \
             --command="python","-m","arq","lecturelink_api.worker.WorkerSettings" \
-            --memory 512Mi \
+            --memory 1Gi \
             --cpu 1 \
             --min-instances 0 \
             --max-instances 2 \

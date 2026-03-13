@@ -726,6 +726,20 @@ export interface WeeklyProgress {
 // Learn Mode (Track B)
 // ---------------------------------------------------------------------------
 
+export interface AvailableAssessment {
+  assessment_id: string;
+  title: string;
+  due_date: string | null;
+  weight_percent: number | null;
+}
+
+export interface AvailableConcept {
+  concept_id: string;
+  title: string;
+  mastery: number;
+  total_attempts: number;
+}
+
 export interface DailyBriefing {
   course_name: string;
   focus_description: string;
@@ -737,6 +751,9 @@ export interface DailyBriefing {
     mastery: number;
     total_attempts?: number;
   }>;
+  available_assessments?: AvailableAssessment[];
+  available_concepts?: AvailableConcept[];
+  is_custom?: boolean;
 }
 
 export interface FlashReviewCard {

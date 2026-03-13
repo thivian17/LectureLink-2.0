@@ -53,6 +53,8 @@ async def start_session(
         user_id=user["id"],
         course_id=course_id,
         time_budget_minutes=body.time_budget_minutes,
+        target_assessment_id=body.target_assessment_id,
+        target_concept_ids=body.target_concept_ids,
     )
     return StartSessionResponse(**result)
 

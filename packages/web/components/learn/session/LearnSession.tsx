@@ -63,16 +63,24 @@ export function LearnSession({ courseId }: LearnSessionProps) {
   // Celebration state
   const [celebrationData, setCelebrationData] = useState<LearnSessionComplete | null>(null);
 
+  // Targeting state for customization
+  const [targetAssessmentId, setTargetAssessmentId] = useState<string | undefined>();
+  const [targetConceptIds, setTargetConceptIds] = useState<string[] | undefined>();
+
   const sessionId = sessionData?.session_id ?? null;
   const totalConcepts = sessionData?.daily_briefing.concepts_planned.length ?? 0;
   const hasLoadedInitial = useRef(false);
 
   // Load initial briefing data
-  const loadBriefing = useCallback(async () => {
-    if (hasLoadedInitial.current) return;
+  const loadBriefing = useCallback(async (options?: {
+    targetAssessmentId?: string;
+    targetConceptIds?: string[];
+  }) => {
+    if (!options && hasLoadedInitial.current) return;
     hasLoadedInitial.current = true;
+    setLoading(true);
     try {
-      const data = await startLearnSession(courseId, timeBudget);
+      const data = await startLearnSession(courseId, timeBudget, options);
       setSessionData(data);
       trackEvent.learnSessionStarted(courseId, timeBudget);
     } catch (err) {
@@ -88,6 +96,20 @@ export function LearnSession({ courseId }: LearnSessionProps) {
 
   useEffect(() => {
     loadBriefing();
+  }, [loadBriefing]);
+
+  const handleCustomize = useCallback((options: {
+    targetAssessmentId?: string;
+    targetConceptIds?: string[];
+  }) => {
+    setTargetAssessmentId(options.targetAssessmentId);
+    setTargetConceptIds(options.targetConceptIds);
+    // Re-fetch session with new targeting
+    loadBriefing(
+      options.targetAssessmentId || options.targetConceptIds?.length
+        ? options
+        : undefined,
+    );
   }, [loadBriefing]);
 
   async function handleStartSession() {
@@ -222,6 +244,7 @@ export function LearnSession({ courseId }: LearnSessionProps) {
           timeBudget={timeBudget}
           onTimeBudgetChange={setTimeBudget}
           onStart={handleStartSession}
+          onCustomize={handleCustomize}
           starting={starting}
         />
       )}

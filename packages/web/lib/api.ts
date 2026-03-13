@@ -1157,13 +1157,21 @@ export async function getWeeklyProgress(): Promise<WeeklyProgress> {
 export async function startLearnSession(
   courseId: string,
   timeBudget: number,
+  options?: {
+    targetAssessmentId?: string;
+    targetConceptIds?: string[];
+  },
 ): Promise<LearnStartSessionResponse> {
+  const body: Record<string, unknown> = { time_budget_minutes: timeBudget };
+  if (options?.targetAssessmentId) body.target_assessment_id = options.targetAssessmentId;
+  if (options?.targetConceptIds?.length) body.target_concept_ids = options.targetConceptIds;
+
   const resp = await fetchWithAuth(
     `${API_BASE}/api/learn/${courseId}/session/start`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ time_budget_minutes: timeBudget }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(60_000),
     },
   );
