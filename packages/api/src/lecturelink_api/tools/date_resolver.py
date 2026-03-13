@@ -125,6 +125,49 @@ def _is_in_holiday(d: date, holidays: list[dict]) -> bool:
     return False
 
 
+def _is_break_week(week_monday: date, holidays: list[dict]) -> bool:
+    """Check if a calendar week is a break week (skipped in teaching week count).
+
+    A week is a break week if a holiday period of 3+ days overlaps with any
+    of its weekdays (Mon–Fri).  Single- or two-day holidays do NOT skip the
+    whole week — those are handled by ``_next_valid_day`` instead.
+    """
+    week_friday = week_monday + timedelta(days=4)
+    for h in holidays:
+        h_start = _parse_holiday_date(h["start"])
+        h_end = _parse_holiday_date(h["end"])
+        if (h_end - h_start).days + 1 < 3:
+            continue  # short holidays don't skip the whole week
+        # Check overlap between [week_monday, week_friday] and [h_start, h_end]
+        if max(week_monday, h_start) <= min(week_friday, h_end):
+            return True
+    return False
+
+
+def _teaching_week_to_calendar(week_num: int, semester: SemesterContext) -> date:
+    """Convert a teaching week number to the Monday of the corresponding
+    calendar week, skipping break weeks.
+
+    Syllabi that number weeks sequentially (Week 1, 2, … N) typically do
+    not count reading/break weeks.  This function iterates through calendar
+    weeks from the semester start, skips break weeks, and returns the Monday
+    of the *week_num*-th teaching week.
+    """
+    teaching_count = 0
+    calendar_offset = 0
+    while True:
+        candidate = semester.start + timedelta(weeks=calendar_offset)
+        if candidate > semester.end:
+            break
+        if not _is_break_week(candidate, semester.holidays):
+            teaching_count += 1
+            if teaching_count == week_num:
+                return candidate
+        calendar_offset += 1
+    # Fallback: naive calculation (no break weeks found / past semester end)
+    return semester.start + timedelta(weeks=week_num - 1)
+
+
 def _next_valid_day(d: date, weekday: int, holidays: list[dict]) -> date:
     """If *d* is inside a holiday, advance to the next occurrence of *weekday*
     that is not in a holiday period."""
@@ -187,7 +230,7 @@ def _try_week_relative(
     m = _END_OF_WEEK_RE.search(text)
     if m:
         week_num = int(m.group(1))
-        week_start = semester.start + timedelta(weeks=week_num - 1)
+        week_start = _teaching_week_to_calendar(week_num, semester)
         friday = week_start + timedelta(days=DAY_MAP["friday"])
         friday = _next_valid_day(friday, DAY_MAP["friday"], semester.holidays)
         if _in_semester(friday, semester):
@@ -205,7 +248,7 @@ def _try_week_relative(
         day_name = _normalize_day(m.group(2))
         day_offset = DAY_MAP.get(day_name)
         if day_offset is not None:
-            week_start = semester.start + timedelta(weeks=week_num - 1)
+            week_start = _teaching_week_to_calendar(week_num, semester)
             target = week_start + timedelta(days=day_offset)
             target = _next_valid_day(target, day_offset, semester.holidays)
             if _in_semester(target, semester):
@@ -220,7 +263,7 @@ def _try_week_relative(
     m = _WEEK_ONLY_RE.search(text)
     if m:
         week_num = int(m.group(1))
-        week_start = semester.start + timedelta(weeks=week_num - 1)
+        week_start = _teaching_week_to_calendar(week_num, semester)
         week_start = _next_valid_day(
             week_start, week_start.weekday(), semester.holidays
         )

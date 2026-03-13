@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { AssessmentCalendar } from "@/components/assessment-calendar";
-import type { CalendarAssessment } from "@/components/assessment-calendar";
+import type { CalendarAssessment, HolidayPeriod } from "@/components/assessment-calendar";
 import { UpcomingAssessments } from "@/components/upcoming-assessments";
 
 export default async function CalendarPage() {
@@ -33,6 +33,23 @@ export default async function CalendarPage() {
     };
   });
 
+  // Fetch holidays from all user courses and deduplicate by date range
+  const { data: courses } = await supabase
+    .from("courses")
+    .select("holidays");
+
+  const holidaySet = new Set<string>();
+  const holidays: HolidayPeriod[] = [];
+  for (const course of courses ?? []) {
+    for (const h of (course.holidays as HolidayPeriod[]) ?? []) {
+      if (!h.start || !h.end) continue;
+      const key = `${h.start}_${h.end}`;
+      if (holidaySet.has(key)) continue;
+      holidaySet.add(key);
+      holidays.push({ name: h.name ?? "Holiday", start: h.start, end: h.end });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -42,7 +59,7 @@ export default async function CalendarPage() {
         </p>
       </div>
 
-      <AssessmentCalendar assessments={assessments} />
+      <AssessmentCalendar assessments={assessments} holidays={holidays} />
 
       <UpcomingAssessments assessments={assessments} />
     </div>

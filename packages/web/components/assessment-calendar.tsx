@@ -34,8 +34,15 @@ export interface CalendarAssessment extends Assessment {
   course_code: string | null;
 }
 
+export interface HolidayPeriod {
+  name: string;
+  start: string; // "YYYY-MM-DD"
+  end: string;   // "YYYY-MM-DD"
+}
+
 interface AssessmentCalendarProps {
   assessments: CalendarAssessment[];
+  holidays?: HolidayPeriod[];
   /** When set, the calendar starts on this month instead of today's month. */
   initialDate?: Date;
 }
@@ -120,6 +127,20 @@ function groupByDate(
   return map;
 }
 
+/** Build a Map from "YYYY-MM-DD" → holiday name for all dates in holiday periods. */
+function buildHolidayMap(holidays: HolidayPeriod[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const h of holidays) {
+    const start = parseLocalDate(h.start);
+    const end = parseLocalDate(h.end);
+    const days = eachDayOfInterval({ start, end });
+    for (const d of days) {
+      map.set(format(d, "yyyy-MM-dd"), h.name);
+    }
+  }
+  return map;
+}
+
 const DAY_HEADERS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MAX_VISIBLE_BADGES = 3;
 
@@ -183,10 +204,12 @@ function DayCell({
   date,
   currentMonth,
   assessments,
+  holidayName,
 }: {
   date: Date;
   currentMonth: Date;
   assessments: CalendarAssessment[];
+  holidayName?: string;
 }) {
   const inMonth = isSameMonth(date, currentMonth);
   const today = isToday(date);
@@ -195,7 +218,11 @@ function DayCell({
   return (
     <div
       className={`min-h-[90px] border-t p-1 ${
-        !inMonth ? "bg-muted/30" : ""
+        holidayName && inMonth
+          ? "bg-orange-50 dark:bg-orange-950/20"
+          : !inMonth
+            ? "bg-muted/30"
+            : ""
       } ${today ? "bg-primary/5 ring-1 ring-inset ring-primary/30" : ""}`}
     >
       <span
@@ -209,6 +236,11 @@ function DayCell({
       >
         {format(date, "d")}
       </span>
+      {holidayName && inMonth && (
+        <p className="text-[10px] text-orange-600 dark:text-orange-400 font-medium px-0.5 truncate">
+          {holidayName}
+        </p>
+      )}
       <div className="mt-0.5 space-y-0.5">
         {assessments.slice(0, MAX_VISIBLE_BADGES).map((a) => (
           <AssessmentBadgePopover key={a.id} assessment={a} />
@@ -229,6 +261,7 @@ function DayCell({
 
 export function AssessmentCalendar({
   assessments,
+  holidays = [],
   initialDate,
 }: AssessmentCalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(
@@ -237,6 +270,7 @@ export function AssessmentCalendar({
 
   const grid = useMemo(() => getMonthGrid(currentMonth), [currentMonth]);
   const byDate = useMemo(() => groupByDate(assessments), [assessments]);
+  const holidayMap = useMemo(() => buildHolidayMap(holidays), [holidays]);
 
   return (
     <div className="space-y-4">
@@ -283,6 +317,7 @@ export function AssessmentCalendar({
               date={date}
               currentMonth={currentMonth}
               assessments={byDate.get(key) ?? []}
+              holidayName={holidayMap.get(key)}
             />
           );
         })}

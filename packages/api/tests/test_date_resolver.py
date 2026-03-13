@@ -222,8 +222,9 @@ class TestLayer2WeekRelative:
         assert result.value == date(2026, 2, 4)
 
     def test_week_10_monday(self, semester):
+        """Week 10 is the 10th teaching week; Spring Break (CW9) is skipped."""
         result = resolve_date("Week 10 Monday", semester)
-        assert result.value == date(2026, 3, 16)
+        assert result.value == date(2026, 3, 23)
 
     def test_week_with_tue_abbrev(self, semester):
         result = resolve_date("Wk 6 Tue", semester)
@@ -242,17 +243,18 @@ class TestLayer2WeekRelative:
         assert result.value == date(2026, 1, 28)
 
     def test_end_of_week_10(self, semester):
-        """'Due end of week 10' → Friday of week 10 = Mar 20."""
+        """'Due end of week 10' → Friday of teaching week 10 (Spring Break skipped)."""
         result = resolve_date("Due end of week 10", semester)
-        assert result.value == date(2026, 3, 20)
+        assert result.value == date(2026, 3, 27)
         assert result.method == "week_relative"
 
     def test_end_of_week_without_due_prefix(self, semester):
         result = resolve_date("end of week 5", semester)
         assert result.value == date(2026, 2, 13)
 
-    def test_week_15_saturday(self, semester):
-        result = resolve_date("Week 15 Saturday", semester)
+    def test_week_14_saturday(self, semester):
+        """Teaching week 14 (Spring Break skipped) = CW15, Saturday = Apr 25."""
+        result = resolve_date("Week 14 Saturday", semester)
         assert result.value == date(2026, 4, 25)
 
     def test_week_1_is_first_week(self, semester):
@@ -305,15 +307,39 @@ class TestHolidayHandling:
         result = resolve_date("Week 8 Thursday", semester)
         assert result.value == date(2026, 3, 5)
 
-    def test_week_10_not_affected(self, semester):
-        """Week 10 Tue = Mar 17, after Spring Break — untouched."""
+    def test_week_10_after_break(self, semester):
+        """Week 10 is the 10th teaching week; Spring Break (CW9) skipped → CW11 Tue."""
         result = resolve_date("Week 10 Tuesday", semester)
-        assert result.value == date(2026, 3, 17)
+        assert result.value == date(2026, 3, 24)
 
     def test_end_of_week_9_spring_break(self, semester):
         """End of week 9 = Fri Mar 13 → Spring Break → shifts to Mar 20."""
         result = resolve_date("end of week 9", semester)
         assert result.value == date(2026, 3, 20)
+
+    def test_weeks_after_break_all_offset(self, semester):
+        """All teaching weeks after Spring Break should be offset by +1 calendar week.
+
+        This verifies the fix for the off-by-one bug where syllabi using week
+        numbers would incorrectly place assessments during the break week,
+        then shift only that one while leaving subsequent weeks un-offset.
+        """
+        # Before break: TW8 = CW8
+        r8 = resolve_date("Week 8 Monday", semester)
+        assert r8.value == date(2026, 3, 2)
+
+        # After break: TW9-12 each shifted +1 calendar week
+        r9 = resolve_date("Week 9 Monday", semester)
+        assert r9.value == date(2026, 3, 16)  # CW10
+
+        r10 = resolve_date("Week 10 Monday", semester)
+        assert r10.value == date(2026, 3, 23)  # CW11
+
+        r11 = resolve_date("Week 11 Monday", semester)
+        assert r11.value == date(2026, 3, 30)  # CW12
+
+        r12 = resolve_date("Week 12 Monday", semester)
+        assert r12.value == date(2026, 4, 6)  # CW13
 
     def test_multiple_holidays(self):
         """Two holiday periods: MLK Day (Jan 19) and Spring Break."""

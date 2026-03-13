@@ -134,8 +134,8 @@ async def submit_feedback(
 
     row = {
         "user_id": user["id"],
-        "type": body.type,
-        "description": body.description,
+        "feedback_type": body.type,
+        "message": body.description,
         "page_url": body.page_url,
         "page_title": body.page_title,
         "screenshot_url": screenshot_url,
@@ -148,7 +148,7 @@ async def submit_feedback(
         "console_errors": body.console_errors,
     }
 
-    result = sb.table("feedback").insert(row).execute()
+    result = sb.table("user_feedback").insert(row).execute()
     feedback_id = result.data[0]["id"]
 
     # Create GitHub issue for actionable feedback types (not praise)
@@ -174,7 +174,7 @@ async def submit_feedback(
 
         if github_issue_url:
             (
-                sb.table("feedback")
+                sb.table("user_feedback")
                 .update({"github_issue_url": github_issue_url})
                 .eq("id", feedback_id)
                 .execute()
