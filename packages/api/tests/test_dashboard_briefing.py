@@ -280,63 +280,21 @@ async def test_generate_greeting_llm_failure_fallback():
 
 
 # ---------------------------------------------------------------------------
-# Test 6: get_briefing cache hit
+# Test 6: get_briefing — full pipeline (no caching)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_get_briefing_cache_hit():
-    """Returns cached data without making DB queries."""
-    cached_data = {"context": {"has_courses": True}, "greeting": {"greeting": "Hi!"}}
-
-    with patch(
-        "lecturelink_api.services.redis_client.cache_get",
-        new_callable=AsyncMock,
-        return_value=cached_data,
-    ):
-        sb = MagicMock()
-        result = await get_briefing(sb, "user-1")
-
-    assert result == cached_data
-    # Supabase should not have been called
-    sb.table.assert_not_called()
-    sb.auth.get_user.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# Test 7: get_briefing cache miss — full pipeline
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_get_briefing_cache_miss():
-    """Calls gather + generate + caches result on miss."""
+async def test_get_briefing_regenerates_every_visit():
+    """Calls gather + generate on every visit (no caching)."""
     sb = _make_supabase(courses=[])
 
-    mock_cache_get = AsyncMock(return_value=None)
-    mock_cache_set = AsyncMock()
-
-    with (
-        patch(
-            "lecturelink_api.services.redis_client.cache_get",
-            mock_cache_get,
-        ),
-        patch(
-            "lecturelink_api.services.redis_client.cache_set",
-            mock_cache_set,
-        ),
-    ):
-        result = await get_briefing(sb, "user-1")
+    result = await get_briefing(sb, "user-1")
 
     assert "context" in result
     assert "greeting" in result
     # No courses → static greeting
     assert result["greeting"] == NO_COURSES_GREETING
-    # Should have tried to cache
-    mock_cache_set.assert_awaited_once()
-    call_args = mock_cache_set.call_args
-    assert call_args[0][0] == "dashboard_briefing:user-1"
-    assert call_args[1]["ttl"] == 3 * 60 * 60
 
 
 # ---------------------------------------------------------------------------

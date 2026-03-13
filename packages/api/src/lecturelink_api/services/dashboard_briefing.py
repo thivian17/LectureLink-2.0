@@ -20,7 +20,7 @@ from .mastery import compute_mastery
 logger = logging.getLogger(__name__)
 
 BRIEFING_MODEL = "gemini-2.5-flash"
-CACHE_TTL_SECONDS = 3 * 60 * 60  # 3 hours
+CACHE_TTL_SECONDS = 0  # disabled — regenerate every visit
 
 GREETING_SYSTEM_PROMPT = """\
 You are a friendly study companion for a university student. Generate a personalized \
@@ -378,41 +378,21 @@ async def generate_greeting(context: dict) -> dict:
 
 
 async def get_briefing(supabase, user_id: str) -> dict:
-    """Orchestrator: cache check → gather data → generate greeting.
+    """Orchestrator: gather data → generate greeting.
 
-    Cached in Redis for 3 hours per user.
+    Regenerates on every visit for a fresh, contextual experience.
     """
-    from .redis_client import cache_get, cache_set
-
-    cache_key = f"dashboard_briefing:{user_id}"
-
-    # 1. Try cache
-    try:
-        cached = await cache_get(cache_key)
-        if cached is not None:
-            return cached
-    except Exception:
-        pass
-
-    # 2. Gather deterministic context
+    # 1. Gather deterministic context
     context = await gather_briefing_context(supabase, user_id)
 
-    # 3. Generate greeting (single LLM call or static fallback)
+    # 2. Generate greeting (single LLM call or static fallback)
     greeting = await generate_greeting(context)
 
-    # 4. Build response
-    result = {
+    # 3. Build response
+    return {
         "context": context,
         "greeting": greeting,
     }
-
-    # 5. Cache for 3 hours
-    try:
-        await cache_set(cache_key, result, ttl=CACHE_TTL_SECONDS)
-    except Exception:
-        pass
-
-    return result
 
 
 async def chat_cross_course(
