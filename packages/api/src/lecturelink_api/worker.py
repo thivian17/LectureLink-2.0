@@ -277,5 +277,5 @@ class WorkerSettings:
     on_startup = on_startup
     on_shutdown = on_shutdown
     redis_settings = _redis_settings()
-    max_jobs = 10
+    max_jobs = 3
     job_timeout = 600  # 10 minutes
