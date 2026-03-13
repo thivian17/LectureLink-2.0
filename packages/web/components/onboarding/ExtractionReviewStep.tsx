@@ -95,11 +95,8 @@ export function ExtractionReviewStep({
         assessments={assessments}
         pdfUrl={pdfUrl}
         hideConfidence
+        onSaveComplete={onComplete}
       />
-
-      <div className="flex justify-end pt-4">
-        <Button onClick={onComplete}>Accept &amp; Continue &rarr;</Button>
-      </div>
     </div>
   );
 }

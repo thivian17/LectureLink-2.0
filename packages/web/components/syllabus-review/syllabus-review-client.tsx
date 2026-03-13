@@ -30,6 +30,7 @@ interface SyllabusReviewClientProps {
   assessments: Assessment[];
   pdfUrl: string | null;
   hideConfidence?: boolean;
+  onSaveComplete?: () => void;
 }
 
 export function SyllabusReviewClient({
@@ -39,6 +40,7 @@ export function SyllabusReviewClient({
   assessments: initialAssessments,
   pdfUrl,
   hideConfidence,
+  onSaveComplete,
 }: SyllabusReviewClientProps) {
   const router = useRouter();
   const [extraction, setExtraction] =
@@ -224,8 +226,12 @@ export function SyllabusReviewClient({
 
       setIsDirty(false);
       toast.success("Syllabus review saved!");
-      router.push(`/dashboard/courses/${courseId}`);
-      router.refresh();
+      if (onSaveComplete) {
+        onSaveComplete();
+      } else {
+        router.push(`/dashboard/courses/${courseId}`);
+        router.refresh();
+      }
     } catch (err) {
       toast.error(
         `Failed to save: ${err instanceof Error ? err.message : "Unknown error"}`,
@@ -315,9 +321,9 @@ export function SyllabusReviewClient({
         </div>
       )}
 
-      {/* Two-column layout */}
-      <div className="flex flex-col lg:flex-row gap-6 pb-24 overflow-hidden">
-        {/* LEFT: Editable data */}
+      {/* Two-column layout: course info + grade breakdown with PDF */}
+      <div className="flex flex-col lg:flex-row gap-6 overflow-hidden">
+        {/* LEFT: Course info & grade breakdown */}
         <div className="flex-1 space-y-6 min-w-0">
           <CourseInfo
             extraction={extraction}
@@ -327,13 +333,6 @@ export function SyllabusReviewClient({
           <GradeBreakdown
             components={extraction.grade_breakdown}
             onChange={handleGradeChange}
-            hideConfidence={hideConfidence}
-          />
-          <AssessmentTable
-            assessments={extraction.assessments}
-            dbAssessments={assessments}
-            onUpdate={handleAssessmentUpdate}
-            onAcceptRow={handleAcceptRow}
             hideConfidence={hideConfidence}
           />
         </div>
@@ -364,6 +363,17 @@ export function SyllabusReviewClient({
             )}
           </div>
         </div>
+      </div>
+
+      {/* Assessments — full width below the two-column layout */}
+      <div className="pb-24">
+        <AssessmentTable
+          assessments={extraction.assessments}
+          dbAssessments={assessments}
+          onUpdate={handleAssessmentUpdate}
+          onAcceptRow={handleAcceptRow}
+          hideConfidence={hideConfidence}
+        />
       </div>
 
       {/* Action bar */}

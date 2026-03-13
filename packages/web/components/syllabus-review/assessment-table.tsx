@@ -155,7 +155,7 @@ export function AssessmentTable({
               <TableHead className="w-36">Due Date</TableHead>
               <TableHead className="w-24">Weight</TableHead>
               {!hideConfidence && <TableHead className="w-28">Confidence</TableHead>}
-              <TableHead className="w-20">Actions</TableHead>
+              <TableHead className={hideConfidence ? "w-12" : "w-20"}>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -342,14 +342,16 @@ export function AssessmentTable({
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-green-600 hover:text-green-700"
-                        onClick={() => onAcceptRow(i)}
-                      >
-                        <Check className="h-3.5 w-3.5" />
-                      </Button>
+                      {!hideConfidence && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-green-600 hover:text-green-700"
+                          onClick={() => onAcceptRow(i)}
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
