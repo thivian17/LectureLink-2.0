@@ -303,32 +303,51 @@ export function LectureCatchUpStep({
     }
 
     setBulkUploading(true);
+    let successCount = 0;
+    let failCount = 0;
 
     // Upload with concurrency limit of 3
-    const results: Promise<void>[] = [];
     for (let i = 0; i < toUpload.length; i += 3) {
       const batch = toUpload.slice(i, i + 3);
-      const batchPromises = batch.map(async (bf) => {
-        const formData = new FormData();
-        formData.append("files", bf.file);
-        formData.append("lecture_number", String(bf.assignedLecture));
-        await uploadLecture(courseId, formData);
+      const batchResults = await Promise.allSettled(
+        batch.map(async (bf) => {
+          const formData = new FormData();
+          formData.append("files", bf.file);
+          formData.append("lecture_number", String(bf.assignedLecture));
+          await uploadLecture(courseId, formData);
 
-        setRows((prev) =>
-          prev.map((r) =>
-            r.lecture_number === bf.assignedLecture && !r.is_user_added
-              ? { ...r, localStatus: "uploaded", fileName: bf.file.name }
-              : r,
-          ),
-        );
-      });
-      results.push(...batchPromises);
-      await Promise.allSettled(batchPromises);
+          // Mark the matching row as uploaded
+          setRows((prev) =>
+            prev.map((r) =>
+              r.lecture_number === bf.assignedLecture
+                ? { ...r, localStatus: "uploaded", fileName: bf.file.name }
+                : r,
+            ),
+          );
+        }),
+      );
+
+      for (const result of batchResults) {
+        if (result.status === "fulfilled") {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      }
     }
 
     setBulkUploading(false);
     setBulkFiles([]);
-    toast.success("Bulk upload complete");
+
+    if (failCount === 0) {
+      toast.success(`${successCount} lectures uploaded successfully`);
+    } else if (successCount > 0) {
+      toast.warning(
+        `${successCount} uploaded, ${failCount} failed. You can retry the failed ones individually.`,
+      );
+    } else {
+      toast.error("All uploads failed. Please try again.");
+    }
   }, [bulkFiles, courseId]);
 
   if (loading) {
