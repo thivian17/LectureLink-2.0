@@ -11,6 +11,9 @@ from supabase import create_client
 from lecturelink_api.auth import get_current_user
 from lecturelink_api.config import Settings, get_settings
 from lecturelink_api.models.api_models import (
+    FileMatchRequest,
+    FileMatchResponse,
+    FileMatchResult,
     LectureChecklistAdd,
     LectureChecklistItem,
     LectureChecklistUpdate,
@@ -398,6 +401,73 @@ async def get_lecture_checklist(
     checklist.sort(key=lambda x: x["lecture_number"])
 
     return checklist
+
+
+# -----------------------------------------------------------------------
+# POST /api/courses/{course_id}/onboarding/match-files
+# -----------------------------------------------------------------------
+
+
+@router.post(
+    "/onboarding/match-files",
+    response_model=FileMatchResponse,
+)
+async def match_files_endpoint(
+    course_id: str,
+    body: FileMatchRequest,
+    user: dict = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    """Match uploaded filenames to lecture numbers using LLM + heuristics."""
+    from lecturelink_api.services.file_matcher import match_files_to_lectures
+
+    sb = _sb(user, settings)
+    course = _get_course(sb, course_id, user["id"])
+
+    # Build checklist (same logic as get_lecture_checklist)
+    weekly_schedule = None
+    syllabus_result = (
+        sb.table("syllabi")
+        .select("raw_extraction")
+        .eq("course_id", course_id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if syllabus_result.data:
+        extraction = syllabus_result.data[0].get("raw_extraction") or {}
+        weekly_schedule = extraction.get("weekly_schedule")
+
+    checklist = generate_lecture_checklist(
+        course=course,
+        syllabus_weekly_schedule=weekly_schedule,
+        holidays=course.get("holidays"),
+    )
+
+    # Merge user-added lectures
+    additions = (
+        sb.table("lecture_schedule_corrections")
+        .select("*")
+        .eq("course_id", course_id)
+        .eq("user_id", user["id"])
+        .eq("is_addition", True)
+        .execute()
+    )
+    for row in additions.data or []:
+        checklist.append({
+            "lecture_number": row["original_lecture_number"],
+            "expected_date": row["corrected_date"] or "",
+            "week_number": 0,
+            "topic_hint": row.get("corrected_title") or row.get("corrected_description"),
+            "day_of_week": "",
+            "status": "pending",
+            "is_user_added": True,
+        })
+
+    matches = await match_files_to_lectures(body.filenames, checklist)
+    return FileMatchResponse(
+        matches=[FileMatchResult(**m) for m in matches],
+    )
 
 
 # -----------------------------------------------------------------------

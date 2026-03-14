@@ -816,6 +816,27 @@ export async function getLectureChecklist(
   return resp.json();
 }
 
+export async function matchFilesToLectures(
+  courseId: string,
+  filenames: string[],
+): Promise<{
+  matches: Array<{
+    filename: string;
+    lecture_number: number | null;
+    confidence: number;
+  }>;
+}> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/courses/${courseId}/onboarding/match-files`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ filenames }),
+    },
+  );
+  return resp.json();
+}
+
 export async function updateLectureChecklistItem(
   courseId: string,
   lectureNumber: number,

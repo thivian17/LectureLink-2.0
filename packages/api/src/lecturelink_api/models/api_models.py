@@ -391,6 +391,23 @@ class LectureChecklistAdd(BaseModel):
     week_number: int | None = None
 
 
+class FileMatchRequest(BaseModel):
+    """Request to match filenames to lecture numbers."""
+    filenames: list[str]
+
+
+class FileMatchResult(BaseModel):
+    """Single file-to-lecture match result."""
+    filename: str
+    lecture_number: int | None = None
+    confidence: float = 0.0
+
+
+class FileMatchResponse(BaseModel):
+    """Response with all file match results."""
+    matches: list[FileMatchResult]
+
+
 class SemesterProgressResponse(BaseModel):
     status: str
     progress_pct: int

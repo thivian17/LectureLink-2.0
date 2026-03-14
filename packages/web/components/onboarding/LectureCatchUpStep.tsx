@@ -33,6 +33,7 @@ import {
   addLectureChecklistItem,
   getLectureChecklist,
   getSemesterProgress,
+  matchFilesToLectures,
   updateLectureChecklistItem,
   uploadLecture,
 } from "@/lib/api";
@@ -243,13 +244,48 @@ export function LectureCatchUpStep({
     }
   }, [courseId, addTitle, addDate, addDescription]);
 
-  const addBulkFiles = useCallback((files: File[]) => {
-    const newEntries = files.map((file) => {
-      const suggested = suggestLectureNumber(file.name);
-      return { file, assignedLecture: suggested };
-    });
-    setBulkFiles((prev) => [...prev, ...newEntries]);
-  }, []);
+  const addBulkFiles = useCallback(
+    async (files: File[]) => {
+      // Immediate: use local regex heuristic so files appear instantly
+      const newEntries = files.map((file) => {
+        const suggested = suggestLectureNumber(file.name);
+        return { file, assignedLecture: suggested };
+      });
+      setBulkFiles((prev) => [...prev, ...newEntries]);
+
+      // Background: call LLM matcher for smarter assignments
+      try {
+        const { matches } = await matchFilesToLectures(
+          courseId,
+          files.map((f) => f.name),
+        );
+        setBulkFiles((prev) =>
+          prev.map((entry) => {
+            const match = matches.find(
+              (m) => m.filename === entry.file.name,
+            );
+            if (
+              match &&
+              match.lecture_number != null &&
+              match.confidence >= 0.7
+            ) {
+              // Only override if user hasn't manually changed it
+              const originalSuggestion = suggestLectureNumber(
+                entry.file.name,
+              );
+              if (entry.assignedLecture === originalSuggestion) {
+                return { ...entry, assignedLecture: match.lecture_number };
+              }
+            }
+            return entry;
+          }),
+        );
+      } catch {
+        // Silently fail — heuristic assignments remain
+      }
+    },
+    [courseId],
+  );
 
   const handleBulkDrop = useCallback(
     (e: React.DragEvent) => {
