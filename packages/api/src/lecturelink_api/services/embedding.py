@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from .genai_client import get_genai_client as _get_client
@@ -11,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 EMBEDDING_MODEL = "gemini-embedding-001"
 EMBEDDING_DIMENSIONS = 2000
+_EMBED_MAX_RETRIES = 3
+_EMBED_BASE_DELAY = 2
 
 
 async def embed_query(query: str) -> list[float]:
@@ -73,20 +76,10 @@ async def embed_texts(
 
     for i in range(0, len(texts), batch_size):
         batch = texts[i : i + batch_size]
-        try:
-            result = await _get_client().aio.models.embed_content(
-                model=EMBEDDING_MODEL,
-                contents=batch,
-                config={
-                    "task_type": task_type,
-                    "output_dimensionality": EMBEDDING_DIMENSIONS,
-                },
-            )
-            embeddings.extend([e.values for e in result.embeddings])
-        except RuntimeError as e:
-            if "Event loop is closed" in str(e):
-                logger.warning("Stale embedding client detected, recreating")
-                reset_genai_client()
+        batch_num = i // batch_size
+
+        for attempt in range(_EMBED_MAX_RETRIES):
+            try:
                 result = await _get_client().aio.models.embed_content(
                     model=EMBEDDING_MODEL,
                     contents=batch,
@@ -96,10 +89,23 @@ async def embed_texts(
                     },
                 )
                 embeddings.extend([e.values for e in result.embeddings])
-            else:
+                break
+            except RuntimeError as e:
+                if "Event loop is closed" in str(e):
+                    logger.warning("Stale embedding client detected, recreating")
+                    reset_genai_client()
+                    continue
                 raise
-        except Exception as e:
-            logger.error(f"Batch embedding failed for batch {i // batch_size}: {e}")
-            raise
+            except Exception as e:
+                if attempt < _EMBED_MAX_RETRIES - 1:
+                    delay = _EMBED_BASE_DELAY * (2 ** attempt)
+                    logger.warning(
+                        "Batch %d embedding failed (attempt %d/%d), retrying in %ds: %s",
+                        batch_num, attempt + 1, _EMBED_MAX_RETRIES, delay, e,
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    logger.error("Batch %d embedding failed after %d attempts: %s", batch_num, _EMBED_MAX_RETRIES, e)
+                    raise
 
     return embeddings

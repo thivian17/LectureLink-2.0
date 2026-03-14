@@ -152,17 +152,6 @@ async def process_lecture(
         aligned_segments = await align_content(transcript_segments, slide_analysis)
         logger.info("Lecture %s: aligned %d segments", lecture_id, len(aligned_segments))
 
-        # ── Title Generation (runs within alignment window) ──
-        generated_title = await generate_title(aligned_segments)
-        if generated_title:
-            logger.info("Lecture %s: generated title %r", lecture_id, generated_title)
-            (
-                supabase.table("lectures")
-                .update({"title": generated_title})
-                .eq("id", lecture_id)
-                .execute()
-            )
-
         # Calculate duration from transcript timestamps
         duration_seconds = None
         if transcript_segments:
@@ -170,7 +159,7 @@ async def process_lecture(
                 (seg.get("end", 0) for seg in transcript_segments), default=None
             )
 
-        # ── Stage 4: Concept Extraction ──
+        # ── Stage 4: Concept Extraction + Title Generation (parallel) ──
         update_processing_status(
             supabase, lecture_id, "processing",
             stage="extracting_concepts",
@@ -186,7 +175,19 @@ async def process_lecture(
         except Exception:
             pass
 
-        concepts = await extract_concepts(aligned_segments)
+        concepts, generated_title = await asyncio.gather(
+            extract_concepts(aligned_segments),
+            generate_title(aligned_segments),
+        )
+
+        if generated_title:
+            logger.info("Lecture %s: generated title %r", lecture_id, generated_title)
+            (
+                supabase.table("lectures")
+                .update({"title": generated_title})
+                .eq("id", lecture_id)
+                .execute()
+            )
 
         try:
             if _concept_span:
@@ -210,8 +211,10 @@ async def process_lecture(
             pass
 
         chunks = chunk_content(aligned_segments)
-        chunks = await embed_chunks(chunks)
-        concepts = await embed_concepts(concepts)
+        chunks, concepts = await asyncio.gather(
+            embed_chunks(chunks),
+            embed_concepts(concepts),
+        )
 
         try:
             if _embed_span:
