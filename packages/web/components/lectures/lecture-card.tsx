@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import Link from "next/link";
 import { format } from "date-fns";
 import { AlertTriangle, Clock, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
@@ -50,8 +49,8 @@ export const LectureCard = React.memo(function LectureCard({ lecture, courseId, 
   }
 
   return (
-    <Link href={`/dashboard/courses/${courseId}/lectures/${lecture.id}`}>
-      <Card className="h-full transition-colors hover:bg-accent/50">
+    <div>
+      <Card className="h-full">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
@@ -112,6 +111,6 @@ export const LectureCard = React.memo(function LectureCard({ lecture, courseId, 
           )}
         </CardContent>
       </Card>
-    </Link>
+    </div>
   );
 });

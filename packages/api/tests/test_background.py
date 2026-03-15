@@ -35,7 +35,9 @@ class TestSuccessfulProcessing:
         expected = {
             "lecture_id": LECTURE_ID,
             "chunks_stored": 10,
-            "concepts_stored": 5,
+            "concepts_merged": 2,
+            "concepts_inserted": 3,
+            "concepts_total": 5,
             "concept_links_created": 3,
             "processing_path": "audio_only",
             "duration_seconds": 12.5,

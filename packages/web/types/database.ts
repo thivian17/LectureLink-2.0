@@ -1025,3 +1025,101 @@ export interface SessionSummary {
     after: number;
   }[] | null;
 }
+
+// ---------------------------------------------------------------------------
+// Dashboard V2 — Academic Command Center
+// ---------------------------------------------------------------------------
+
+export interface ReadinessBreakdownV2 {
+  coverage: number;
+  practice: number;
+  freshness: number;
+  effort: number;
+}
+
+export interface WeakConcept {
+  concept_id: string;
+  title: string;
+  coverage: boolean;
+  practice_score: number;
+  freshness_score: number;
+  combined_score: number;
+}
+
+export interface SuggestedAction {
+  action_type: "study_session" | "practice_test" | "lecture_review" | "flash_review";
+  title: string;
+  description: string;
+  estimated_minutes: number;
+  target_course_id: string | null;
+  target_assessment_id: string | null;
+  urgency: "critical" | "high" | "medium" | "low";
+  expected_impact: string;
+}
+
+export interface AssessmentReadinessV2 {
+  assessment_id: string;
+  title: string;
+  course_id: string;
+  course_name: string | null;
+  assessment_type: string;
+  due_date: string | null;
+  days_until_due: number | null;
+  readiness: number;
+  breakdown: ReadinessBreakdownV2;
+  weak_concepts: WeakConcept[];
+  suggested_actions: SuggestedAction[];
+  urgency: "critical" | "high" | "medium" | "low";
+  concept_count: number;
+  covered_count: number;
+}
+
+export interface CourseIntelligenceV2 {
+  course_id: string;
+  course_name: string;
+  course_code: string | null;
+  readiness: number;
+  risk: "low" | "medium" | "high";
+  next_assessment: {
+    title: string;
+    type: string;
+    due_date: string | null;
+    days_until: number | null;
+    readiness: number | null;
+  } | null;
+  recommended_action: SuggestedAction | null;
+  assessment_count: number;
+}
+
+export interface TimelineItem {
+  date: string;
+  item_type: "exam" | "quiz" | "midterm" | "assignment" | "project" | "discussion" | "lecture_review";
+  title: string;
+  course_id: string;
+  course_name: string;
+  course_code: string | null;
+  assessment_id: string | null;
+  readiness: number | null;
+  urgency: "critical" | "high" | "medium" | "low" | null;
+  needs_review: boolean;
+}
+
+export interface DashboardTimeline {
+  items: TimelineItem[];
+  today: string;
+}
+
+export interface DashboardActions {
+  actions: SuggestedAction[];
+}
+
+export interface DashboardCourses {
+  courses: CourseIntelligenceV2[];
+}
+
+export interface DashboardStats {
+  streak: number;
+  xp_this_week: number;
+  study_minutes_this_week: number;
+  concepts_practiced_this_week: number;
+}

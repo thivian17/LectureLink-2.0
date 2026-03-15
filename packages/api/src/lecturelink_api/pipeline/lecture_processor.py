@@ -20,13 +20,18 @@ from datetime import datetime
 from ..agents.audio_transcriber import TranscriptionError, transcribe_audio
 from ..agents.chunker import EmbeddingError, chunk_content, embed_chunks, embed_concepts
 from ..agents.concept_chunk_linker import link_concepts_to_chunks
-from ..agents.concept_extractor import ConceptExtractionError, extract_concepts
+from ..agents.concept_extractor import (
+    ConceptExtractionError,
+    extract_concepts_v2,
+    format_existing_concepts_for_prompt,
+)
+from ..services.concept_registry import register_concepts
 from ..agents.concept_mapper import map_concepts_to_assessments
 from ..agents.content_aligner import align_content
 from ..agents.input_router import route_input
 from ..agents.slide_analyzer import SlideAnalysisError, analyze_slides
 from ..agents.title_generator import generate_title
-from ..services.lecture_storage import cleanup_lecture_data, store_chunks, store_concepts
+from ..services.lecture_storage import cleanup_lecture_data, store_chunks
 from ..services.processing import STAGE_PROGRESS, update_processing_status
 
 logger = logging.getLogger(__name__)
@@ -59,8 +64,8 @@ async def process_lecture(
         is_reprocess: If True, clean up existing data first.
 
     Returns:
-        Dict with lecture_id, chunks_stored, concepts_stored, concept_links_created,
-        processing_path, and duration_seconds.
+        Dict with lecture_id, chunks_stored, concepts_merged, concepts_inserted,
+        concepts_total, concept_links_created, processing_path, and duration_seconds.
     """
     start_time = datetime.utcnow()
 
@@ -159,12 +164,29 @@ async def process_lecture(
                 (seg.get("end", 0) for seg in transcript_segments), default=None
             )
 
-        # ── Stage 4: Concept Extraction + Title Generation (parallel) ──
+        # ── Stage 4: Concept Extraction (V2 — dedup-aware) + Title Generation ──
         update_processing_status(
             supabase, lecture_id, "processing",
             stage="extracting_concepts",
             progress=STAGE_PROGRESS["extracting_concepts"],
         )
+
+        # Fetch existing course concepts for dedup awareness
+        existing_concepts_data = []
+        try:
+            existing_result = (
+                supabase.table("concepts")
+                .select("title, description")
+                .eq("course_id", course_id)
+                .order("title")
+                .execute()
+            )
+            existing_concepts_data = existing_result.data or []
+        except Exception:
+            logger.debug("Failed to fetch existing concepts for dedup context")
+
+        existing_context = format_existing_concepts_for_prompt(existing_concepts_data)
+
         _concept_span = None
         try:
             if trace:
@@ -176,7 +198,7 @@ async def process_lecture(
             pass
 
         concepts, generated_title = await asyncio.gather(
-            extract_concepts(aligned_segments),
+            extract_concepts_v2(aligned_segments, existing_context),
             generate_title(aligned_segments),
         )
 
@@ -195,7 +217,7 @@ async def process_lecture(
         except Exception:
             pass
 
-        logger.info("Lecture %s: extracted %d concepts", lecture_id, len(concepts))
+        logger.info("Lecture %s: extracted %d concepts (V2)", lecture_id, len(concepts))
 
         # ── Stage 5: Chunking + Embedding ──
         update_processing_status(
@@ -228,46 +250,63 @@ async def process_lecture(
         )
 
         # ── Stage 6: Concept-Chunk Linking + Storage ──
-        # Store chunks first to get database IDs
         stored_chunks = store_chunks(supabase, lecture_id, user_id, chunks)
-
-        # Update chunk IDs from database response
         for chunk, stored in zip(chunks, stored_chunks, strict=False):
             chunk["id"] = stored["id"]
 
-        # Link concepts to stored chunks using real IDs
         concepts = link_concepts_to_chunks(concepts, chunks, top_k=5)
 
-        # Store concepts
-        stored_concepts = store_concepts(
-            supabase, lecture_id, course_id, user_id, concepts,
+        # Register concepts via the course-level registry (merge or insert)
+        registry_result = await register_concepts(
+            supabase, course_id, lecture_id, user_id, concepts,
         )
 
-        # ── Stage 7: Concept Mapping (bridge to syllabus) ──
+        logger.info(
+            "Lecture %s: %d concepts merged, %d new concepts inserted",
+            lecture_id,
+            len(registry_result["merged"]),
+            len(registry_result["inserted"]),
+        )
+
+        # ── Stage 7: Concept Mapping (new concepts only) ──
         update_processing_status(
             supabase, lecture_id, "processing",
             stage="mapping_concepts",
             progress=STAGE_PROGRESS["mapping_concepts"],
         )
 
-        # Get lecture metadata for mapping context
-        lecture_data = (
-            supabase.table("lectures")
-            .select("lecture_date, lecture_number")
-            .eq("id", lecture_id)
-            .execute()
-        )
+        concept_links = []
+        if registry_result["inserted"]:
+            new_concept_ids = [c["concept_id"] for c in registry_result["inserted"]]
+            new_stored = (
+                supabase.table("concepts")
+                .select("*")
+                .in_("id", new_concept_ids)
+                .execute()
+            ).data or []
 
-        lec_meta = lecture_data.data[0] if lecture_data.data else {}
-        concept_links = await map_concepts_to_assessments(
-            supabase=supabase,
-            lecture_id=lecture_id,
-            course_id=course_id,
-            user_id=user_id,
-            concepts=stored_concepts,
-            lecture_date=lec_meta.get("lecture_date"),
-            lecture_number=lec_meta.get("lecture_number"),
-        )
+            lec_meta = {}
+            try:
+                lecture_data = (
+                    supabase.table("lectures")
+                    .select("lecture_date, lecture_number")
+                    .eq("id", lecture_id)
+                    .execute()
+                )
+                lec_meta = lecture_data.data[0] if lecture_data.data else {}
+            except Exception:
+                pass
+
+            concept_links = await map_concepts_to_assessments(
+                supabase=supabase,
+                lecture_id=lecture_id,
+                course_id=course_id,
+                user_id=user_id,
+                concepts=new_stored,
+                lecture_date=lec_meta.get("lecture_date"),
+                lecture_number=lec_meta.get("lecture_number"),
+            )
+
         logger.info(
             "Lecture %s: created %d concept-assessment links",
             lecture_id, len(concept_links),
@@ -275,13 +314,16 @@ async def process_lecture(
 
         # ── Quality gate: flag lectures with suspiciously low concept yield ──
         LOW_CONCEPT_THRESHOLD = 3
-        low_concept_yield = len(stored_concepts) < LOW_CONCEPT_THRESHOLD
+        concepts_this_lecture = (
+            len(registry_result["merged"]) + len(registry_result["inserted"])
+        )
+        low_concept_yield = concepts_this_lecture < LOW_CONCEPT_THRESHOLD
 
         if low_concept_yield:
             logger.warning(
                 "Lecture %s: low concept yield (%d concepts extracted — threshold: %d). "
                 "Possible causes: short audio, poor quality, or abstract content.",
-                lecture_id, len(stored_concepts), LOW_CONCEPT_THRESHOLD,
+                lecture_id, concepts_this_lecture, LOW_CONCEPT_THRESHOLD,
             )
 
         # ── Update lecture record ──
@@ -325,7 +367,8 @@ async def process_lecture(
             if trace:
                 trace.update(output={
                     "chunks_stored": len(stored_chunks),
-                    "concepts_stored": len(stored_concepts),
+                    "concepts_merged": len(registry_result["merged"]),
+                    "concepts_inserted": len(registry_result["inserted"]),
                     "processing_path": processing_path,
                     "duration_seconds": elapsed,
                 })
@@ -339,7 +382,8 @@ async def process_lecture(
             track_event(user_id, "lecture_processing_complete", {
                 "lecture_id": lecture_id,
                 "chunks_stored": len(stored_chunks),
-                "concepts_stored": len(stored_concepts),
+                "concepts_merged": len(registry_result["merged"]),
+                "concepts_inserted": len(registry_result["inserted"]),
                 "duration_seconds": elapsed,
             })
         except Exception:
@@ -348,9 +392,11 @@ async def process_lecture(
         return {
             "lecture_id": lecture_id,
             "chunks_stored": len(stored_chunks),
-            "concepts_stored": len(stored_concepts),
+            "concepts_merged": len(registry_result["merged"]),
+            "concepts_inserted": len(registry_result["inserted"]),
+            "concepts_total": registry_result["total_concepts_in_course"],
             "concept_links_created": len(concept_links),
-            "processing_path": processing_path,
+            "processing_path": route_result.processing_path,
             "duration_seconds": elapsed,
             "low_concept_yield": low_concept_yield,
         }

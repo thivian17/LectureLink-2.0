@@ -53,6 +53,11 @@ import type {
   MaterialListResponse,
   DashboardBriefingResponse,
   DashboardChatResponse,
+  DashboardTimeline,
+  DashboardActions,
+  DashboardCourses,
+  DashboardStats,
+  AssessmentReadinessV2,
 } from "@/types/database";
 import {
   ApiError,
@@ -1588,4 +1593,45 @@ export async function invalidateBriefingCache(): Promise<void> {
   await fetchWithAuth(`${API_BASE}/api/dashboard/briefing/cache`, {
     method: "DELETE",
   });
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard V2 — Academic Command Center
+// ---------------------------------------------------------------------------
+
+export async function getDashboardTimeline(
+  days: number = 14,
+): Promise<DashboardTimeline> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/dashboard/timeline?days=${days}`,
+  );
+  return resp.json();
+}
+
+export async function getDashboardActions(
+  limit: number = 4,
+): Promise<DashboardActions> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/dashboard/actions?limit=${limit}`,
+  );
+  return resp.json();
+}
+
+export async function getDashboardCourses(): Promise<DashboardCourses> {
+  const resp = await fetchWithAuth(`${API_BASE}/api/dashboard/courses`);
+  return resp.json();
+}
+
+export async function getAssessmentReadinessV2(
+  assessmentId: string,
+): Promise<AssessmentReadinessV2> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/dashboard/readiness/${assessmentId}`,
+  );
+  return resp.json();
+}
+
+export async function getDashboardStats(): Promise<DashboardStats> {
+  const resp = await fetchWithAuth(`${API_BASE}/api/dashboard/stats`);
+  return resp.json();
 }

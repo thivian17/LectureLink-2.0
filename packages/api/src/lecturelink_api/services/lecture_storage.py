@@ -98,15 +98,80 @@ def store_concepts(
 
 
 def cleanup_lecture_data(supabase, lecture_id: str) -> None:
-    """Delete existing chunks, concepts, and concept_assessment_links for a lecture.
+    """Delete lecture-specific data for reprocessing.
 
-    Used before reprocessing to avoid duplicates.
-    Deletion order matters due to FK constraints:
-    1. concept_assessment_links (references concepts)
-    2. concepts (references lectures)
-    3. lecture_chunks (references lectures)
+    With the concept registry, concepts may be shared across lectures.
+    Only delete concepts that are exclusively linked to this lecture (orphans).
+    Shared concepts retain their rows — only the junction entry is removed.
+
+    Deletion order (FK constraints):
+    1. concept_lectures entries for this lecture
+    2. concept_assessment_links for orphan concepts
+    3. orphan concept rows
+    4. lecture_chunks
     """
-    # Get concept IDs for this lecture
+    # 1. Find orphan concepts BEFORE removing junction entries
+    orphan_ids = []
+    try:
+        orphan_result = supabase.rpc(
+            "get_orphan_concepts_for_lecture",
+            {"p_lecture_id": lecture_id},
+        ).execute()
+        orphan_ids = [c["id"] for c in (orphan_result.data or [])]
+    except Exception:
+        # Fallback: if the RPC doesn't exist yet (pre-migration),
+        # use the legacy behavior of deleting all concepts for the lecture
+        logger.warning(
+            "get_orphan_concepts_for_lecture RPC unavailable, "
+            "falling back to legacy cleanup for lecture %s",
+            lecture_id,
+        )
+        _legacy_cleanup(supabase, lecture_id)
+        return
+
+    # 2. Remove concept_lectures entries for this lecture
+    try:
+        supabase.table("concept_lectures").delete().eq(
+            "lecture_id", lecture_id
+        ).execute()
+    except Exception:
+        logger.warning(
+            "concept_lectures cleanup failed for lecture %s",
+            lecture_id, exc_info=True,
+        )
+
+    # 3. Delete orphan concepts (and their assessment links)
+    if orphan_ids:
+        (
+            supabase.table("concept_assessment_links")
+            .delete()
+            .in_("concept_id", orphan_ids)
+            .execute()
+        )
+        (
+            supabase.table("concepts")
+            .delete()
+            .in_("id", orphan_ids)
+            .execute()
+        )
+
+    # 4. Delete chunks (always lecture-specific)
+    (
+        supabase.table("lecture_chunks")
+        .delete()
+        .eq("lecture_id", lecture_id)
+        .execute()
+    )
+
+    logger.info(
+        "Cleaned up lecture %s: %d orphan concepts deleted, "
+        "shared concepts preserved",
+        lecture_id, len(orphan_ids),
+    )
+
+
+def _legacy_cleanup(supabase, lecture_id: str) -> None:
+    """Pre-migration cleanup path — deletes all concepts for a lecture."""
     concepts = (
         supabase.table("concepts")
         .select("id")
@@ -115,7 +180,6 @@ def cleanup_lecture_data(supabase, lecture_id: str) -> None:
     )
     concept_ids = [c["id"] for c in concepts.data]
 
-    # Delete concept_assessment_links for these concepts
     if concept_ids:
         (
             supabase.table("concept_assessment_links")
@@ -124,20 +188,7 @@ def cleanup_lecture_data(supabase, lecture_id: str) -> None:
             .execute()
         )
 
-    # Delete concepts
-    (
-        supabase.table("concepts")
-        .delete()
-        .eq("lecture_id", lecture_id)
-        .execute()
-    )
+    supabase.table("concepts").delete().eq("lecture_id", lecture_id).execute()
+    supabase.table("lecture_chunks").delete().eq("lecture_id", lecture_id).execute()
 
-    # Delete chunks
-    (
-        supabase.table("lecture_chunks")
-        .delete()
-        .eq("lecture_id", lecture_id)
-        .execute()
-    )
-
-    logger.info("Cleaned up existing data for lecture %s", lecture_id)
+    logger.info("Legacy cleanup for lecture %s: %d concepts deleted", lecture_id, len(concept_ids))

@@ -16,7 +16,7 @@ from ..services.genai_client import get_genai_client as _get_client
 
 logger = logging.getLogger(__name__)
 
-CONCEPT_EXTRACTION_PROMPT = """You are an expert educator analyzing lecture content.
+_LEGACY_PROMPT = """You are an expert educator analyzing lecture content.
 
 Extract the KEY concepts from this lecture using a two-level hierarchy:
 - **Parent concepts** are the major topics/ideas (8-15 per lecture).
@@ -76,6 +76,50 @@ LECTURE CONTENT:
 
 Output a JSON array of parent concepts with nested subconcepts. Output ONLY the \
 JSON array, no other text."""
+
+CONCEPT_EXTRACTION_PROMPT = _LEGACY_PROMPT
+
+CONCEPT_EXTRACTION_PROMPT_V2 = """You are an expert educator analyzing lecture content.
+
+Extract every distinct, testable concept from this lecture. A concept is a piece
+of knowledge a student could be quizzed on — a definition, theorem, process,
+formula, or idea.
+
+Guidelines:
+- Extract at the TESTABLE granularity level. If "Simplex Method" has four
+  independently testable sub-ideas (tableau setup, pivot selection, optimality
+  condition, degeneracy handling), extract each as its own concept.
+- Do NOT extract meta-content: "lecture overview", "homework reminder",
+  "review of last class", "recap", "Q&A session", "announcements",
+  "exam logistics", "office hours".
+- Do NOT extract the same idea twice under different names. If the professor
+  says "conservation of energy" and "first law of thermodynamics", that is
+  ONE concept — pick the more precise title.
+- A short recap lecture may have 3-5 concepts. A dense theory lecture may
+  have 20+. Let the content decide.
+- If two concepts have a clear prerequisite relationship, note it in
+  related_concepts.
+
+For each concept provide:
+1. title: Clear, specific name (e.g., "Pivot Column Selection Rule" not
+   just "Simplex Method")
+2. description: 2-3 sentence explanation of what a student should know
+3. category: One of: definition, theorem, process, concept, example, formula
+4. difficulty_estimate: 0.0 (recall) to 1.0 (synthesize) per Bloom's taxonomy:
+   0.0-0.2 Remember, 0.2-0.4 Understand, 0.4-0.6 Apply,
+   0.6-0.8 Analyze, 0.8-1.0 Evaluate/Create
+5. related_concepts: Titles of other concepts from THIS lecture it connects to
+6. key_terms: 2-5 keywords/phrases that uniquely identify this concept
+   (used for deduplication against previously extracted concepts)
+
+PREVIOUSLY EXTRACTED CONCEPTS FOR THIS COURSE (avoid re-extracting these
+under different names — use the existing title if the same idea appears):
+{existing_concepts}
+
+LECTURE CONTENT:
+{content}
+
+Output a JSON array of concepts. Output ONLY the JSON array, no other text."""
 
 
 async def extract_concepts(aligned_segments: list[dict]) -> list[dict]:
@@ -157,6 +201,19 @@ def format_content_for_extraction(segments: list[dict]) -> str:
 VALID_CATEGORIES = {
     "definition", "theorem", "process", "concept", "example", "formula",
 }
+
+META_PATTERNS = frozenset({
+    "lecture overview", "homework", "review of", "recap", "summary of last",
+    "q&a", "question and answer", "announcements", "reminder",
+    "office hours", "next class", "exam logistics", "course outline",
+    "grading policy", "attendance", "reading assignment",
+})
+
+
+def _is_meta_concept(title: str) -> bool:
+    """Return True if the title looks like a meta-concept (not testable content)."""
+    normalized = title.lower().strip()
+    return any(pattern in normalized for pattern in META_PATTERNS)
 
 
 def _normalize_title(title: str) -> str:
@@ -254,6 +311,129 @@ def validate_concepts(concepts: list[dict]) -> list[dict]:
         })
 
     return validated
+
+
+def validate_concepts_v2(concepts: list[dict]) -> list[dict]:
+    """Validate, clean, and dedup extracted concepts. No count bounds.
+
+    Differences from v1:
+    - No subconcepts handling (flat output)
+    - Meta-concept filtering via _is_meta_concept()
+    - key_terms field preserved
+    - No upper/lower count enforcement
+    """
+    validated = []
+    seen_keys: set[str] = set()
+
+    for c in concepts:
+        title = c.get("title", "").strip()
+        if not title:
+            continue
+
+        norm_key = _normalize_title(title)
+        if not norm_key:
+            continue
+        if norm_key in seen_keys:
+            logger.debug("Dedup: dropping %r (normalized: %r)", title, norm_key)
+            continue
+
+        if _is_meta_concept(title):
+            logger.debug("Meta-concept filtered: %r", title)
+            continue
+
+        seen_keys.add(norm_key)
+
+        category = c.get("category", "concept").lower()
+        if category not in VALID_CATEGORIES:
+            category = "concept"
+
+        difficulty = max(0.0, min(1.0, float(c.get("difficulty_estimate", 0.5))))
+
+        validated.append({
+            "title": title,
+            "description": c.get("description", ""),
+            "category": category,
+            "difficulty_estimate": difficulty,
+            "related_concepts": c.get("related_concepts", []),
+            "key_terms": c.get("key_terms", []),
+        })
+
+    return validated
+
+
+async def extract_concepts_v2(
+    aligned_segments: list[dict],
+    existing_concepts_context: str = "None yet — this is the first lecture.",
+) -> list[dict]:
+    """Extract concepts with V2 prompt (no count bounds, flat output, dedup-aware).
+
+    Args:
+        aligned_segments: Aligned segments from Content Aligner.
+        existing_concepts_context: Formatted string of existing course concepts
+            for dedup awareness in the prompt.
+
+    Returns:
+        List of flat concept dicts (no subconcepts).
+
+    Raises:
+        ConceptExtractionError: If extraction fails.
+    """
+    client = _get_client()
+    content_text = format_content_for_extraction(aligned_segments)
+    prompt = CONCEPT_EXTRACTION_PROMPT_V2.format(
+        content=content_text,
+        existing_concepts=existing_concepts_context,
+    )
+
+    try:
+        response = await client.aio.models.generate_content(
+            model="gemini-2.5-pro",
+            contents=[types.Content(role="user", parts=[types.Part(text=prompt)])],
+            config=types.GenerateContentConfig(
+                temperature=0.2,
+                max_output_tokens=16384,
+            ),
+        )
+
+        result_text = response.text.strip()
+        if result_text.startswith("```"):
+            result_text = result_text.split("```")[1]
+            if result_text.startswith("json"):
+                result_text = result_text[4:]
+
+        concepts = json.loads(result_text)
+        validated = validate_concepts_v2(concepts)
+
+        logger.info("Concept extraction V2 complete: %d concepts", len(validated))
+        return validated
+
+    except json.JSONDecodeError as e:
+        raise ConceptExtractionError(f"Failed to parse concepts JSON: {e}") from e
+    except ConceptExtractionError:
+        raise
+    except Exception as e:
+        logger.error("Concept extraction V2 failed: %s", e)
+        raise ConceptExtractionError(f"Concept extraction V2 failed: {e}") from e
+
+
+def format_existing_concepts_for_prompt(concepts_data: list[dict]) -> str:
+    """Format existing course concepts for the V2 extraction prompt context.
+
+    Args:
+        concepts_data: List of dicts with 'title' and 'description' keys,
+            fetched from the concepts table for the course.
+
+    Returns:
+        Formatted string for injection into the prompt.
+    """
+    if not concepts_data:
+        return "None yet — this is the first lecture."
+
+    lines = []
+    for c in concepts_data[:50]:  # Cap at 50 to avoid prompt bloat
+        desc = (c.get("description") or "")[:100]
+        lines.append(f"- {c['title']}: {desc}")
+    return "\n".join(lines)
 
 
 class ConceptExtractionError(Exception):

@@ -92,6 +92,17 @@ def _stored_concepts() -> list[dict]:
     ]
 
 
+def _registry_result() -> dict:
+    return {
+        "merged": [],
+        "inserted": [
+            {"concept_id": "db-concept-0", "title": "Energy Conservation"},
+            {"concept_id": "db-concept-1", "title": "Heat Transfer"},
+        ],
+        "total_concepts_in_course": 2,
+    }
+
+
 def _build_mock_supabase() -> MagicMock:
     """Build a mock Supabase client that supports chained method calls."""
     sb = MagicMock()
@@ -164,8 +175,8 @@ class TestFullAudioSlidesPath:
             call_order.append("align_content")
             return _aligned_segments()
 
-        async def mock_extract(segs):
-            call_order.append("extract_concepts")
+        async def mock_extract(segs, existing_context=""):
+            call_order.append("extract_concepts_v2")
             return _concepts()
 
         def mock_chunk(segs):
@@ -194,9 +205,9 @@ class TestFullAudioSlidesPath:
             call_order.append("store_chunks")
             return _stored_chunks()
 
-        def mock_store_concepts(sb, lid, cid, uid, concepts):
-            call_order.append("store_concepts")
-            return _stored_concepts()
+        async def mock_register(sb, cid, lid, uid, concepts):
+            call_order.append("register_concepts")
+            return _registry_result()
 
         async def mock_map(*, supabase, lecture_id, course_id, user_id, concepts, lecture_date, lecture_number):
             call_order.append("map_concepts")
@@ -210,13 +221,14 @@ class TestFullAudioSlidesPath:
             patch(f"{_MOD}.transcribe_audio", side_effect=mock_transcribe),
             patch(f"{_MOD}.analyze_slides", side_effect=mock_analyze),
             patch(f"{_MOD}.align_content", side_effect=mock_align),
-            patch(f"{_MOD}.extract_concepts", side_effect=mock_extract),
+            patch(f"{_MOD}.extract_concepts_v2", side_effect=mock_extract),
+            patch(f"{_MOD}.format_existing_concepts_for_prompt", MagicMock(return_value="None yet")),
             patch(f"{_MOD}.chunk_content", side_effect=mock_chunk),
             patch(f"{_MOD}.embed_chunks", side_effect=mock_embed_chunks),
             patch(f"{_MOD}.embed_concepts", side_effect=mock_embed_concepts),
             patch(f"{_MOD}.link_concepts_to_chunks", side_effect=mock_link),
             patch(f"{_MOD}.store_chunks", side_effect=mock_store_chunks),
-            patch(f"{_MOD}.store_concepts", side_effect=mock_store_concepts),
+            patch(f"{_MOD}.register_concepts", side_effect=mock_register),
             patch(f"{_MOD}.map_concepts_to_assessments", side_effect=mock_map),
             patch(f"{_MOD}.update_processing_status", side_effect=mock_status),
             patch(f"{_MOD}.cleanup_lecture_data", MagicMock()),
@@ -226,13 +238,13 @@ class TestFullAudioSlidesPath:
         # Verify correct order (transcribe + analyze may interleave due to gather)
         assert "route_input" in call_order
         assert "align_content" in call_order
-        assert "extract_concepts" in call_order
+        assert "extract_concepts_v2" in call_order
         assert "chunk_content" in call_order
         assert "embed_chunks" in call_order
         assert "embed_concepts" in call_order
         assert "link_concepts_to_chunks" in call_order
         assert "store_chunks" in call_order
-        assert "store_concepts" in call_order
+        assert "register_concepts" in call_order
         assert "map_concepts" in call_order
 
         # Route happens before transcribe/analyze
@@ -244,17 +256,17 @@ class TestFullAudioSlidesPath:
         assert call_order.index("align_content") > call_order.index("analyze_slides")
 
         # Extract happens after align
-        assert call_order.index("extract_concepts") > call_order.index("align_content")
+        assert call_order.index("extract_concepts_v2") > call_order.index("align_content")
 
         # Chunk/embed after extract
-        assert call_order.index("chunk_content") > call_order.index("extract_concepts")
+        assert call_order.index("chunk_content") > call_order.index("extract_concepts_v2")
 
         # Store before link
         assert call_order.index("store_chunks") > call_order.index("embed_chunks")
         assert call_order.index("link_concepts_to_chunks") > call_order.index("store_chunks")
 
-        # Map after store_concepts
-        assert call_order.index("map_concepts") > call_order.index("store_concepts")
+        # Map after register_concepts
+        assert call_order.index("map_concepts") > call_order.index("register_concepts")
 
     @pytest.mark.asyncio
     async def test_returns_correct_result(self):
@@ -265,13 +277,14 @@ class TestFullAudioSlidesPath:
             patch(f"{_MOD}.transcribe_audio", AsyncMock(return_value=_transcript_segments())),
             patch(f"{_MOD}.analyze_slides", AsyncMock(return_value=_slide_analysis())),
             patch(f"{_MOD}.align_content", AsyncMock(return_value=_aligned_segments())),
-            patch(f"{_MOD}.extract_concepts", AsyncMock(return_value=_concepts())),
+            patch(f"{_MOD}.extract_concepts_v2", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.chunk_content", MagicMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_chunks", AsyncMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_concepts", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.link_concepts_to_chunks", MagicMock(return_value=_concepts())),
             patch(f"{_MOD}.store_chunks", MagicMock(return_value=_stored_chunks())),
-            patch(f"{_MOD}.store_concepts", MagicMock(return_value=_stored_concepts())),
+            patch(f"{_MOD}.register_concepts", AsyncMock(return_value=_registry_result())),
+            patch(f"{_MOD}.format_existing_concepts_for_prompt", MagicMock(return_value="None yet")),
             patch(f"{_MOD}.map_concepts_to_assessments", AsyncMock(return_value=[{"id": "link-1"}])),
             patch(f"{_MOD}.update_processing_status", MagicMock()),
             patch(f"{_MOD}.cleanup_lecture_data", MagicMock()),
@@ -280,7 +293,9 @@ class TestFullAudioSlidesPath:
 
         assert result["lecture_id"] == LECTURE_ID
         assert result["chunks_stored"] == 2
-        assert result["concepts_stored"] == 2
+        assert result["concepts_merged"] == 0
+        assert result["concepts_inserted"] == 2
+        assert result["concepts_total"] == 2
         assert result["concept_links_created"] == 1
         assert result["processing_path"] == "audio+slides"
         assert result["duration_seconds"] >= 0
@@ -306,13 +321,14 @@ class TestFullAudioSlidesPath:
             patch(f"{_MOD}.transcribe_audio", side_effect=mock_transcribe),
             patch(f"{_MOD}.analyze_slides", side_effect=mock_analyze),
             patch(f"{_MOD}.align_content", AsyncMock(return_value=_aligned_segments())),
-            patch(f"{_MOD}.extract_concepts", AsyncMock(return_value=_concepts())),
+            patch(f"{_MOD}.extract_concepts_v2", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.chunk_content", MagicMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_chunks", AsyncMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_concepts", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.link_concepts_to_chunks", MagicMock(return_value=_concepts())),
             patch(f"{_MOD}.store_chunks", MagicMock(return_value=_stored_chunks())),
-            patch(f"{_MOD}.store_concepts", MagicMock(return_value=_stored_concepts())),
+            patch(f"{_MOD}.register_concepts", AsyncMock(return_value=_registry_result())),
+            patch(f"{_MOD}.format_existing_concepts_for_prompt", MagicMock(return_value="None yet")),
             patch(f"{_MOD}.map_concepts_to_assessments", AsyncMock(return_value=[])),
             patch(f"{_MOD}.update_processing_status", MagicMock()),
             patch(f"{_MOD}.cleanup_lecture_data", MagicMock()),
@@ -339,13 +355,14 @@ class TestAudioOnlyPath:
             patch(f"{_MOD}.transcribe_audio", AsyncMock(return_value=_transcript_segments())),
             patch(f"{_MOD}.analyze_slides", mock_analyze),
             patch(f"{_MOD}.align_content", AsyncMock(return_value=_aligned_segments())),
-            patch(f"{_MOD}.extract_concepts", AsyncMock(return_value=_concepts())),
+            patch(f"{_MOD}.extract_concepts_v2", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.chunk_content", MagicMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_chunks", AsyncMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_concepts", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.link_concepts_to_chunks", MagicMock(return_value=_concepts())),
             patch(f"{_MOD}.store_chunks", MagicMock(return_value=_stored_chunks())),
-            patch(f"{_MOD}.store_concepts", MagicMock(return_value=_stored_concepts())),
+            patch(f"{_MOD}.register_concepts", AsyncMock(return_value=_registry_result())),
+            patch(f"{_MOD}.format_existing_concepts_for_prompt", MagicMock(return_value="None yet")),
             patch(f"{_MOD}.map_concepts_to_assessments", AsyncMock(return_value=[])),
             patch(f"{_MOD}.update_processing_status", MagicMock()),
             patch(f"{_MOD}.cleanup_lecture_data", MagicMock()),
@@ -375,13 +392,14 @@ class TestSlidesOnlyPath:
             patch(f"{_MOD}.transcribe_audio", mock_transcribe),
             patch(f"{_MOD}.analyze_slides", AsyncMock(return_value=_slide_analysis())),
             patch(f"{_MOD}.align_content", AsyncMock(return_value=_aligned_segments())),
-            patch(f"{_MOD}.extract_concepts", AsyncMock(return_value=_concepts())),
+            patch(f"{_MOD}.extract_concepts_v2", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.chunk_content", MagicMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_chunks", AsyncMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_concepts", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.link_concepts_to_chunks", MagicMock(return_value=_concepts())),
             patch(f"{_MOD}.store_chunks", MagicMock(return_value=_stored_chunks())),
-            patch(f"{_MOD}.store_concepts", MagicMock(return_value=_stored_concepts())),
+            patch(f"{_MOD}.register_concepts", AsyncMock(return_value=_registry_result())),
+            patch(f"{_MOD}.format_existing_concepts_for_prompt", MagicMock(return_value="None yet")),
             patch(f"{_MOD}.map_concepts_to_assessments", AsyncMock(return_value=[])),
             patch(f"{_MOD}.update_processing_status", MagicMock()),
             patch(f"{_MOD}.cleanup_lecture_data", MagicMock()),
@@ -404,13 +422,14 @@ class TestSlidesOnlyPath:
             patch(f"{_MOD}.transcribe_audio", AsyncMock()),
             patch(f"{_MOD}.analyze_slides", AsyncMock(return_value=_slide_analysis())),
             patch(f"{_MOD}.align_content", AsyncMock(return_value=_aligned_segments())),
-            patch(f"{_MOD}.extract_concepts", AsyncMock(return_value=_concepts())),
+            patch(f"{_MOD}.extract_concepts_v2", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.chunk_content", MagicMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_chunks", AsyncMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_concepts", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.link_concepts_to_chunks", MagicMock(return_value=_concepts())),
             patch(f"{_MOD}.store_chunks", MagicMock(return_value=_stored_chunks())),
-            patch(f"{_MOD}.store_concepts", MagicMock(return_value=_stored_concepts())),
+            patch(f"{_MOD}.register_concepts", AsyncMock(return_value=_registry_result())),
+            patch(f"{_MOD}.format_existing_concepts_for_prompt", MagicMock(return_value="None yet")),
             patch(f"{_MOD}.map_concepts_to_assessments", AsyncMock(return_value=[])),
             patch(f"{_MOD}.update_processing_status", MagicMock()),
             patch(f"{_MOD}.cleanup_lecture_data", MagicMock()),
@@ -444,13 +463,14 @@ class TestReprocessing:
             patch(f"{_MOD}.transcribe_audio", AsyncMock(return_value=_transcript_segments())),
             patch(f"{_MOD}.analyze_slides", AsyncMock(return_value=_slide_analysis())),
             patch(f"{_MOD}.align_content", AsyncMock(return_value=_aligned_segments())),
-            patch(f"{_MOD}.extract_concepts", AsyncMock(return_value=_concepts())),
+            patch(f"{_MOD}.extract_concepts_v2", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.chunk_content", MagicMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_chunks", AsyncMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_concepts", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.link_concepts_to_chunks", MagicMock(return_value=_concepts())),
             patch(f"{_MOD}.store_chunks", MagicMock(return_value=_stored_chunks())),
-            patch(f"{_MOD}.store_concepts", MagicMock(return_value=_stored_concepts())),
+            patch(f"{_MOD}.register_concepts", AsyncMock(return_value=_registry_result())),
+            patch(f"{_MOD}.format_existing_concepts_for_prompt", MagicMock(return_value="None yet")),
             patch(f"{_MOD}.map_concepts_to_assessments", AsyncMock(return_value=[])),
             patch(f"{_MOD}.update_processing_status", MagicMock()),
             patch(f"{_MOD}.cleanup_lecture_data", mock_cleanup),
@@ -471,13 +491,14 @@ class TestReprocessing:
             patch(f"{_MOD}.transcribe_audio", AsyncMock(return_value=_transcript_segments())),
             patch(f"{_MOD}.analyze_slides", AsyncMock(return_value=_slide_analysis())),
             patch(f"{_MOD}.align_content", AsyncMock(return_value=_aligned_segments())),
-            patch(f"{_MOD}.extract_concepts", AsyncMock(return_value=_concepts())),
+            patch(f"{_MOD}.extract_concepts_v2", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.chunk_content", MagicMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_chunks", AsyncMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_concepts", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.link_concepts_to_chunks", MagicMock(return_value=_concepts())),
             patch(f"{_MOD}.store_chunks", MagicMock(return_value=_stored_chunks())),
-            patch(f"{_MOD}.store_concepts", MagicMock(return_value=_stored_concepts())),
+            patch(f"{_MOD}.register_concepts", AsyncMock(return_value=_registry_result())),
+            patch(f"{_MOD}.format_existing_concepts_for_prompt", MagicMock(return_value="None yet")),
             patch(f"{_MOD}.map_concepts_to_assessments", AsyncMock(return_value=[])),
             patch(f"{_MOD}.update_processing_status", MagicMock()),
             patch(f"{_MOD}.cleanup_lecture_data", mock_cleanup),
@@ -540,7 +561,8 @@ class TestFailureHandling:
             patch(f"{_MOD}.route_input", AsyncMock(return_value=_mock_route_result("audio_only"))),
             patch(f"{_MOD}.transcribe_audio", AsyncMock(return_value=_transcript_segments())),
             patch(f"{_MOD}.align_content", AsyncMock(return_value=_aligned_segments())),
-            patch(f"{_MOD}.extract_concepts", AsyncMock(side_effect=ConceptExtractionError("JSON parse fail"))),
+            patch(f"{_MOD}.extract_concepts_v2", AsyncMock(side_effect=ConceptExtractionError("JSON parse fail"))),
+            patch(f"{_MOD}.format_existing_concepts_for_prompt", MagicMock(return_value="None yet")),
             patch(f"{_MOD}.update_processing_status", MagicMock()),
             patch(f"{_MOD}.cleanup_lecture_data", MagicMock()),
         ):
@@ -559,7 +581,8 @@ class TestFailureHandling:
             patch(f"{_MOD}.route_input", AsyncMock(return_value=_mock_route_result("audio_only"))),
             patch(f"{_MOD}.transcribe_audio", AsyncMock(return_value=_transcript_segments())),
             patch(f"{_MOD}.align_content", AsyncMock(return_value=_aligned_segments())),
-            patch(f"{_MOD}.extract_concepts", AsyncMock(return_value=_concepts())),
+            patch(f"{_MOD}.extract_concepts_v2", AsyncMock(return_value=_concepts())),
+            patch(f"{_MOD}.format_existing_concepts_for_prompt", MagicMock(return_value="None yet")),
             patch(f"{_MOD}.chunk_content", MagicMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_chunks", AsyncMock(side_effect=EmbeddingError("Rate limited"))),
             patch(f"{_MOD}.update_processing_status", MagicMock()),
@@ -604,13 +627,14 @@ class TestStatusUpdates:
             patch(f"{_MOD}.transcribe_audio", AsyncMock(return_value=_transcript_segments())),
             patch(f"{_MOD}.analyze_slides", AsyncMock(return_value=_slide_analysis())),
             patch(f"{_MOD}.align_content", AsyncMock(return_value=_aligned_segments())),
-            patch(f"{_MOD}.extract_concepts", AsyncMock(return_value=_concepts())),
+            patch(f"{_MOD}.extract_concepts_v2", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.chunk_content", MagicMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_chunks", AsyncMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_concepts", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.link_concepts_to_chunks", MagicMock(return_value=_concepts())),
             patch(f"{_MOD}.store_chunks", MagicMock(return_value=_stored_chunks())),
-            patch(f"{_MOD}.store_concepts", MagicMock(return_value=_stored_concepts())),
+            patch(f"{_MOD}.register_concepts", AsyncMock(return_value=_registry_result())),
+            patch(f"{_MOD}.format_existing_concepts_for_prompt", MagicMock(return_value="None yet")),
             patch(f"{_MOD}.map_concepts_to_assessments", AsyncMock(return_value=[])),
             patch(f"{_MOD}.update_processing_status", side_effect=mock_status),
             patch(f"{_MOD}.cleanup_lecture_data", MagicMock()),
@@ -648,13 +672,14 @@ class TestDurationCalculation:
             patch(f"{_MOD}.route_input", AsyncMock(return_value=_mock_route_result("audio_only"))),
             patch(f"{_MOD}.transcribe_audio", AsyncMock(return_value=_transcript_segments())),
             patch(f"{_MOD}.align_content", AsyncMock(return_value=_aligned_segments())),
-            patch(f"{_MOD}.extract_concepts", AsyncMock(return_value=_concepts())),
+            patch(f"{_MOD}.extract_concepts_v2", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.chunk_content", MagicMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_chunks", AsyncMock(return_value=_chunks())),
             patch(f"{_MOD}.embed_concepts", AsyncMock(return_value=_concepts())),
             patch(f"{_MOD}.link_concepts_to_chunks", MagicMock(return_value=_concepts())),
             patch(f"{_MOD}.store_chunks", MagicMock(return_value=_stored_chunks())),
-            patch(f"{_MOD}.store_concepts", MagicMock(return_value=_stored_concepts())),
+            patch(f"{_MOD}.register_concepts", AsyncMock(return_value=_registry_result())),
+            patch(f"{_MOD}.format_existing_concepts_for_prompt", MagicMock(return_value="None yet")),
             patch(f"{_MOD}.map_concepts_to_assessments", AsyncMock(return_value=[])),
             patch(f"{_MOD}.update_processing_status", MagicMock()),
             patch(f"{_MOD}.cleanup_lecture_data", MagicMock()),

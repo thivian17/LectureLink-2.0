@@ -29,9 +29,9 @@ async def fetch_concept_chunks(
     """Fetch lecture chunks for a concept, preferring pre-linked source_chunk_ids.
 
     Resolution order:
-    1. Read source_chunk_ids from the concepts table (deterministic)
-    2. Fetch those chunks by ID from lecture_chunks (deterministic)
-    3. If no source_chunk_ids or fetch fails, fall back to search_lectures (non-deterministic)
+    1. Read source_chunk_ids from concept_lectures junction (multi-lecture)
+    2. Fall back to concepts.source_chunk_ids (single-lecture, backward compat)
+    3. Fall back to hybrid_search (non-deterministic)
 
     Args:
         supabase: Supabase client.
@@ -44,8 +44,53 @@ async def fetch_concept_chunks(
         List of chunk dicts with at minimum: id, content, lecture_id.
         May also include: start_time, end_time, slide_number, metadata.
     """
-    # --- Path 1: Deterministic (source_chunk_ids) ---
-    source_chunk_ids = []
+    # --- Path 1a: Junction table (cross-lecture chunks) ---
+    all_chunk_ids: list[str] = []
+    try:
+        cl_result = (
+            supabase.table("concept_lectures")
+            .select("source_chunk_ids")
+            .eq("concept_id", concept_id)
+            .execute()
+        )
+        for row in (cl_result.data or []):
+            all_chunk_ids.extend(row.get("source_chunk_ids") or [])
+    except Exception:
+        logger.debug(
+            "concept_lectures query failed for concept %s, "
+            "falling back to concepts table",
+            concept_id,
+        )
+
+    # Deduplicate while preserving order
+    if all_chunk_ids:
+        unique_ids = list(dict.fromkeys(all_chunk_ids))[:limit]
+        try:
+            chunk_result = (
+                supabase.table("lecture_chunks")
+                .select("id, content, lecture_id, start_time, end_time, slide_number, metadata, lectures(title)")
+                .in_("id", unique_ids)
+                .execute()
+            )
+            chunks = chunk_result.data or []
+            for chunk in chunks:
+                lecture_rel = chunk.pop("lectures", None)
+                if lecture_rel and isinstance(lecture_rel, dict):
+                    chunk["lecture_title"] = lecture_rel.get("title", "")
+            if chunks:
+                logger.debug(
+                    "Fetched %d cross-lecture chunks for concept %s",
+                    len(chunks), concept_id,
+                )
+                return chunks
+        except Exception:
+            logger.warning(
+                "Failed to fetch chunks from junction for concept %s",
+                concept_id, exc_info=True,
+            )
+
+    # --- Path 1b: concepts.source_chunk_ids (backward compat) ---
+    source_chunk_ids: list[str] = []
     try:
         concept_row = (
             supabase.table("concepts")

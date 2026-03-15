@@ -232,3 +232,178 @@ class TestFetchChunksForConcepts:
         assert len(result) == 2
         assert result[0]["id"] == "ch1"
         assert result[1]["id"] == "ch5"
+
+
+class TestFetchWithJunction:
+    """Tests for the concept_lectures junction table path (Path 1a)."""
+
+    @pytest.mark.asyncio
+    async def test_junction_chunks_returned_when_available(self):
+        """concept_lectures has source_chunk_ids → those chunks returned."""
+        from lecturelink_api.services.chunk_fetcher import fetch_concept_chunks
+
+        sb = MagicMock()
+
+        junction_chain = _mock_chain([{"source_chunk_ids": ["ch1", "ch2"]}])
+        chunk_chain = _mock_chain(SAMPLE_CHUNKS)
+
+        def table_side_effect(name):
+            if name == "concept_lectures":
+                return junction_chain
+            if name == "lecture_chunks":
+                return chunk_chain
+            return _mock_chain([])
+
+        sb.table.side_effect = table_side_effect
+
+        with patch(
+            "lecturelink_api.services.chunk_fetcher.search_lectures",
+            new_callable=AsyncMock,
+        ) as mock_search:
+            result = await fetch_concept_chunks(sb, concept_id="c1", course_id="course1")
+
+        assert len(result) == 2
+        assert result[0]["id"] == "ch1"
+        mock_search.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_concept_row_when_junction_empty(self):
+        """Junction table returns no rows → falls through to concepts table."""
+        from lecturelink_api.services.chunk_fetcher import fetch_concept_chunks
+
+        sb = MagicMock()
+
+        junction_chain = _mock_chain([])  # empty junction
+        concept_chain = _mock_chain({"source_chunk_ids": ["ch1", "ch2"]})
+        chunk_chain = _mock_chain(SAMPLE_CHUNKS)
+
+        def table_side_effect(name):
+            if name == "concept_lectures":
+                return junction_chain
+            if name == "concepts":
+                return concept_chain
+            if name == "lecture_chunks":
+                return chunk_chain
+            return _mock_chain([])
+
+        sb.table.side_effect = table_side_effect
+
+        with patch(
+            "lecturelink_api.services.chunk_fetcher.search_lectures",
+            new_callable=AsyncMock,
+        ) as mock_search:
+            result = await fetch_concept_chunks(sb, concept_id="c1", course_id="course1")
+
+        assert len(result) == 2
+        mock_search.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_search_when_both_empty(self):
+        """Junction and concept row both empty → falls back to search."""
+        from lecturelink_api.services.chunk_fetcher import fetch_concept_chunks
+
+        sb = MagicMock()
+
+        junction_chain = _mock_chain([])
+        concept_chain = _mock_chain({"source_chunk_ids": []})
+
+        def table_side_effect(name):
+            if name == "concept_lectures":
+                return junction_chain
+            if name == "concepts":
+                return concept_chain
+            return _mock_chain([])
+
+        sb.table.side_effect = table_side_effect
+
+        search_results = [{"id": "sr1", "content": "Search result", "lecture_id": "lec1"}]
+
+        with patch(
+            "lecturelink_api.services.chunk_fetcher.search_lectures",
+            new_callable=AsyncMock,
+            return_value=search_results,
+        ) as mock_search:
+            result = await fetch_concept_chunks(
+                sb, concept_id="c1", course_id="course1", concept_title="Entropy"
+            )
+
+        assert len(result) == 1
+        assert result[0]["id"] == "sr1"
+        mock_search.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_cross_lecture_dedup(self):
+        """Junction has chunk IDs from 2 lectures → deduplicated."""
+        from lecturelink_api.services.chunk_fetcher import fetch_concept_chunks
+
+        sb = MagicMock()
+
+        # Two junction rows with overlapping chunk IDs
+        junction_chain = _mock_chain([
+            {"source_chunk_ids": ["ch1", "ch2"]},
+            {"source_chunk_ids": ["ch2", "ch3"]},
+        ])
+
+        cross_lecture_chunks = [
+            {"id": "ch1", "content": "From lec1", "lecture_id": "lec1"},
+            {"id": "ch2", "content": "Shared", "lecture_id": "lec1"},
+            {"id": "ch3", "content": "From lec2", "lecture_id": "lec2"},
+        ]
+        chunk_chain = _mock_chain(cross_lecture_chunks)
+
+        def table_side_effect(name):
+            if name == "concept_lectures":
+                return junction_chain
+            if name == "lecture_chunks":
+                return chunk_chain
+            return _mock_chain([])
+
+        sb.table.side_effect = table_side_effect
+
+        with patch(
+            "lecturelink_api.services.chunk_fetcher.search_lectures",
+            new_callable=AsyncMock,
+        ) as mock_search:
+            result = await fetch_concept_chunks(sb, concept_id="c1", course_id="course1")
+
+        assert len(result) == 3
+        ids = {c["id"] for c in result}
+        assert ids == {"ch1", "ch2", "ch3"}
+        mock_search.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_junction_query_failure_graceful_fallback(self):
+        """Junction table query raises → falls through to concept row path."""
+        from lecturelink_api.services.chunk_fetcher import fetch_concept_chunks
+
+        sb = MagicMock()
+
+        # Junction query raises
+        junction_chain = MagicMock()
+        junction_chain.select.return_value = junction_chain
+        junction_chain.eq.return_value = junction_chain
+        junction_chain.execute.side_effect = Exception("Table not found")
+
+        concept_chain = _mock_chain({"source_chunk_ids": ["ch1"]})
+        chunk_chain = _mock_chain([SAMPLE_CHUNKS[0]])
+
+        def table_side_effect(name):
+            if name == "concept_lectures":
+                return junction_chain
+            if name == "concepts":
+                return concept_chain
+            if name == "lecture_chunks":
+                return chunk_chain
+            return _mock_chain([])
+
+        sb.table.side_effect = table_side_effect
+
+        with patch(
+            "lecturelink_api.services.chunk_fetcher.search_lectures",
+            new_callable=AsyncMock,
+        ) as mock_search:
+            result = await fetch_concept_chunks(sb, concept_id="c1", course_id="course1")
+
+        assert len(result) == 1
+        assert result[0]["id"] == "ch1"
+        mock_search.assert_not_called()
