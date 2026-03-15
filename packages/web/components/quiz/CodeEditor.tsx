@@ -58,45 +58,16 @@ export function CodeEditor({
   const displayLines = maxLines ?? Math.max(lineCount, 10);
   const editorHeight = Math.min(displayLines * LINE_HEIGHT_PX + 16, 600);
 
-  const handleMount: OnMount = (editor, monaco) => {
-    editorRef.current = editor;
-    monacoRef.current = monaco;
-
-    // Inject annotation CSS once
-    if (!document.getElementById("code-annotation-styles")) {
-      const style = document.createElement("style");
-      style.id = "code-annotation-styles";
-      style.textContent = `
-        .code-annotation-error { background: rgba(239,68,68,0.15); }
-        .code-annotation-suggestion { background: rgba(234,179,8,0.15); }
-        .code-annotation-praise { background: rgba(34,197,94,0.15); }
-        .code-glyph-error { background: rgb(239,68,68); width: 4px !important; margin-left: 3px; border-radius: 2px; }
-        .code-glyph-suggestion { background: rgb(234,179,8); width: 4px !important; margin-left: 3px; border-radius: 2px; }
-        .code-glyph-praise { background: rgb(34,197,94); width: 4px !important; margin-left: 3px; border-radius: 2px; }
-      `;
-      document.head.appendChild(style);
-    }
-
-    applyAnnotations(editor, monaco, lineAnnotations);
-  };
-
-  // Re-apply annotations when they change
-  useEffect(() => {
-    if (editorRef.current && monacoRef.current) {
-      applyAnnotations(editorRef.current, monacoRef.current, lineAnnotations);
-    }
-  }, [lineAnnotations]);
-
   function applyAnnotations(
     editorInstance: editor.IStandaloneCodeEditor,
-    monaco: Parameters<OnMount>[1],
+    monacoInstance: Parameters<OnMount>[1],
     annotations?: LineAnnotation[],
   ) {
     const decorations: editor.IModelDeltaDecoration[] = (annotations ?? []).map(
       (ann) => {
         const styles = ANNOTATION_STYLES[ann.type];
         return {
-          range: new monaco.Range(ann.line, 1, ann.line, 1),
+          range: new monacoInstance.Range(ann.line, 1, ann.line, 1),
           options: {
             isWholeLine: true,
             className: styles.className,
@@ -114,6 +85,35 @@ export function CodeEditor({
       decorationsRef.current = editorInstance.createDecorationsCollection(decorations);
     }
   }
+
+  const handleMount: OnMount = (editorInstance, monacoInstance) => {
+    editorRef.current = editorInstance;
+    monacoRef.current = monacoInstance;
+
+    // Inject annotation CSS once
+    if (!document.getElementById("code-annotation-styles")) {
+      const style = document.createElement("style");
+      style.id = "code-annotation-styles";
+      style.textContent = `
+        .code-annotation-error { background: rgba(239,68,68,0.15); }
+        .code-annotation-suggestion { background: rgba(234,179,8,0.15); }
+        .code-annotation-praise { background: rgba(34,197,94,0.15); }
+        .code-glyph-error { background: rgb(239,68,68); width: 4px !important; margin-left: 3px; border-radius: 2px; }
+        .code-glyph-suggestion { background: rgb(234,179,8); width: 4px !important; margin-left: 3px; border-radius: 2px; }
+        .code-glyph-praise { background: rgb(34,197,94); width: 4px !important; margin-left: 3px; border-radius: 2px; }
+      `;
+      document.head.appendChild(style);
+    }
+
+    applyAnnotations(editorInstance, monacoInstance, lineAnnotations);
+  };
+
+  // Re-apply annotations when they change
+  useEffect(() => {
+    if (editorRef.current && monacoRef.current) {
+      applyAnnotations(editorRef.current, monacoRef.current, lineAnnotations);
+    }
+  }, [lineAnnotations]);
 
   return (
     <div className="rounded-md border border-border overflow-hidden">

@@ -15,7 +15,6 @@ from lecturelink_api.models.readiness_v2 import (
     AssessmentReadinessV2,
     CourseIntelligenceV2,
     DashboardActionsResponse,
-    DashboardCoursesResponse,
     DashboardTimelineResponse,
     ReadinessBreakdown,
     StatsRow,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -336,9 +337,9 @@ export function LectureRecorder() {
             ) : courses.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No courses found. Please{" "}
-                <a href="/dashboard/courses/new" className="underline">
+                <Link href="/dashboard/courses/new" className="underline">
                   create a course
-                </a>{" "}
+                </Link>{" "}
                 first.
               </p>
             ) : (

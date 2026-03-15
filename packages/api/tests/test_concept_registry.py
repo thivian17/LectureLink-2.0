@@ -9,8 +9,6 @@ import pytest
 
 from lecturelink_api.services.concept_registry import (
     _confirm_merge,
-    _insert_concept,
-    _merge_concept,
     register_concepts,
 )
 
@@ -304,17 +302,6 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_llm_failure_defaults_to_no_merge(self):
         """LLM confirmation failure (exception) → defaults to no merge."""
-        existing = [
-            {"id": "ex-1", "title": "Heat Transfer", "description": "desc", "embedding": EMB_A},
-        ]
-        sb = _make_supabase(existing_concepts=existing)
-
-        new_concept = {
-            "title": "Thermal Conduction",
-            "description": "new desc",
-            "embedding": EMB_BORDERLINE_A,
-        }
-
         with patch(f"{_MOD}._confirm_merge", new_callable=AsyncMock, side_effect=Exception("LLM down")):
             # The exception in _confirm_merge is caught inside register_concepts
             # when it's called directly. But since we patched it to raise,
@@ -366,15 +353,6 @@ class TestEdgeCases:
             "source_chunk_ids": ["chunk-2", "chunk-3"],
         }
         await register_concepts(sb, "c1", "l2", "u1", [new_concept])
-
-        # Verify update was called on the concepts table
-        # Find the update call — we need to check that source_chunk_ids was unioned
-        update_calls = []
-        for call in sb.table.call_args_list:
-            if call[0][0] == "concepts":
-                mock_table = sb.table(call[0][0])
-                update_calls = mock_table.update.call_args_list
-                break
 
         # The merge function should have been called — verify via the mock chain
         # Since our mock chains, we verify the table was called with "concepts"

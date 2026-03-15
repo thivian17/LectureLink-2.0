@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from lecturelink_api.services.lecture_storage import (
-    _legacy_cleanup,
     cleanup_lecture_data,
     store_chunks,
     store_concepts,

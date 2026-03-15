@@ -139,12 +139,12 @@ function TimePicker({
   const [period, setPeriod] = useState(initial.period);
 
   // Sync local state when the parent value changes externally (e.g. form reset)
-  useEffect(() => {
-    const parsed = parse24h(value);
+  const parsed = parse24h(value);
+  if (parsed.hour !== hour || parsed.minute !== minute || parsed.period !== period) {
     setHour(parsed.hour);
     setMinute(parsed.minute);
     setPeriod(parsed.period);
-  }, [value]);
+  }
 
   function handleChange(field: "hour" | "minute" | "period", v: string) {
     const nextHour = field === "hour" ? v : hour;
