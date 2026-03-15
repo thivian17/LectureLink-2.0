@@ -6,12 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { AcademicCommandCenter } from "@/components/dashboard/AcademicCommandCenter";
 import { BestNextActions } from "@/components/dashboard/BestNextActions";
 import { CourseIntelligenceGrid } from "@/components/dashboard/CourseIntelligenceGrid";
@@ -101,21 +96,22 @@ export default function DashboardPage() {
       </div>
 
       {!hasCourses && !loading ? (
-        <Card className="flex flex-col items-center justify-center py-16">
-          <CardHeader className="items-center text-center">
-            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+        <Card className="py-16">
+          <div className="flex flex-col items-center text-center px-6">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
               <BookOpen className="h-6 w-6 text-primary" />
             </div>
-            <CardTitle>No courses yet</CardTitle>
-            <CardDescription>
-              Add your first course and upload a syllabus to get started.
-            </CardDescription>
-          </CardHeader>
-          <Button asChild>
-            <Link href="/dashboard/courses/new">
-              <Plus className="mr-2 h-4 w-4" /> Add Course
-            </Link>
-          </Button>
+            <h2 className="text-lg font-semibold">No courses yet</h2>
+            <p className="mt-1 text-sm text-muted-foreground max-w-sm">
+              Add your first course and upload a syllabus to get started with
+              personalized study sessions, quizzes, and mastery tracking.
+            </p>
+            <Button asChild className="mt-6">
+              <Link href="/dashboard/courses/new">
+                <Plus className="mr-2 h-4 w-4" /> Add Course
+              </Link>
+            </Button>
+          </div>
         </Card>
       ) : (
         <>

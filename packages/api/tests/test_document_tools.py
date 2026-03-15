@@ -182,3 +182,207 @@ async def test_pdf_extraction_handles_gemini_error():
     assert result["text"] == ""
     assert "error" in result
     assert "API quota exceeded" in result["error"]
+
+
+# ---------------------------------------------------------------------------
+# Text box extraction tests
+# ---------------------------------------------------------------------------
+
+
+class TestTextboxExtraction:
+    def test_finds_text_in_txbxContent(self):
+        from lecturelink_api.tools.document_tools import _extract_textbox_content
+        from lxml import etree
+
+        xml_str = (
+            '<mc:AlternateContent'
+            '  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"'
+            '  xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+            '  xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">'
+            '  <mc:Choice Requires="wps">'
+            '    <w:drawing><wps:wsp><wps:txbx><w:txbxContent>'
+            '      <w:p><w:r><w:t>MMAI 5090 3.00</w:t></w:r></w:p>'
+            '      <w:p><w:r><w:t>Business Applications of AI II</w:t></w:r></w:p>'
+            '    </w:txbxContent></wps:txbx></wps:wsp></w:drawing>'
+            '  </mc:Choice>'
+            '</mc:AlternateContent>'
+        )
+        element = etree.fromstring(xml_str)
+        texts = _extract_textbox_content(element)
+        assert len(texts) == 2
+        assert texts[0] == "MMAI 5090 3.00"
+        assert texts[1] == "Business Applications of AI II"
+
+    def test_skips_empty_paragraphs(self):
+        from lecturelink_api.tools.document_tools import _extract_textbox_content
+        from lxml import etree
+
+        xml_str = (
+            '<mc:AlternateContent'
+            '  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"'
+            '  xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+            '  xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">'
+            '  <mc:Choice Requires="wps">'
+            '    <wps:wsp><wps:txbx><w:txbxContent>'
+            '      <w:p></w:p>'
+            '      <w:p><w:r><w:t>Content</w:t></w:r></w:p>'
+            '    </w:txbxContent></wps:txbx></wps:wsp>'
+            '  </mc:Choice>'
+            '</mc:AlternateContent>'
+        )
+        element = etree.fromstring(xml_str)
+        texts = _extract_textbox_content(element)
+        assert texts == ["Content"]
+
+    def test_no_textboxes_returns_empty(self):
+        from lecturelink_api.tools.document_tools import _extract_textbox_content
+        from lxml import etree
+
+        xml_str = '<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:r><w:t>Text</w:t></w:r></w:p>'
+        element = etree.fromstring(xml_str)
+        assert _extract_textbox_content(element) == []
+
+    def test_multi_run_concatenation(self):
+        from lecturelink_api.tools.document_tools import _extract_textbox_content
+        from lxml import etree
+
+        xml_str = (
+            '<mc:AlternateContent'
+            '  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"'
+            '  xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+            '  xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">'
+            '  <mc:Choice Requires="wps">'
+            '    <wps:wsp><wps:txbx><w:txbxContent>'
+            '      <w:p><w:r><w:t>MMAI </w:t></w:r><w:r><w:t>5090</w:t></w:r></w:p>'
+            '    </w:txbxContent></wps:txbx></wps:wsp>'
+            '  </mc:Choice>'
+            '</mc:AlternateContent>'
+        )
+        element = etree.fromstring(xml_str)
+        texts = _extract_textbox_content(element)
+        assert texts == ["MMAI 5090"]
+
+
+# ---------------------------------------------------------------------------
+# Heading detection tests
+# ---------------------------------------------------------------------------
+
+
+class TestHeadingDetection:
+    def test_standard_headings(self):
+        from lecturelink_api.tools.document_tools import _get_heading_prefix
+
+        assert _get_heading_prefix("Heading 1") == "# "
+        assert _get_heading_prefix("Heading 2") == "## "
+        assert _get_heading_prefix("Heading 3") == "### "
+        assert _get_heading_prefix("Heading 4") == "#### "
+
+    def test_custom_heading_styles(self):
+        from lecturelink_api.tools.document_tools import _get_heading_prefix
+
+        assert _get_heading_prefix("Page 1 Heading 1") == "# "
+        assert _get_heading_prefix("Custom Heading 2") == "## "
+
+    def test_title_subtitle(self):
+        from lecturelink_api.tools.document_tools import _get_heading_prefix
+
+        assert _get_heading_prefix("Title") == "# "
+        assert _get_heading_prefix("Subtitle") == "## "
+        assert _get_heading_prefix("Course Title") == "# "
+
+    def test_toc_skipped(self):
+        from lecturelink_api.tools.document_tools import _get_heading_prefix
+
+        assert _get_heading_prefix("toc 1") is None
+        assert _get_heading_prefix("TOC Heading") is None
+
+    def test_normal_returns_empty(self):
+        from lecturelink_api.tools.document_tools import _get_heading_prefix
+
+        assert _get_heading_prefix("Normal") == ""
+        assert _get_heading_prefix("") == ""
+
+    def test_heading_without_number_defaults_to_h2(self):
+        from lecturelink_api.tools.document_tools import _get_heading_prefix
+
+        assert _get_heading_prefix("Custom Heading") == "## "
+
+
+# ---------------------------------------------------------------------------
+# Merged cell dedup tests
+# ---------------------------------------------------------------------------
+
+
+class TestMergedCellDedup:
+    @pytest.mark.asyncio
+    async def test_merged_cells_deduplicated(self):
+        doc = Document()
+        table = doc.add_table(rows=2, cols=3)
+        table.cell(0, 0).text = "DATE"
+        table.cell(0, 1).text = "DATE"
+        table.cell(0, 2).text = "TOPIC"
+        table.cell(1, 0).text = "Week 1"
+        table.cell(1, 1).text = "Week 1"
+        table.cell(1, 2).text = "Introduction"
+
+        buf = io.BytesIO()
+        doc.save(buf)
+
+        result = await extract_document_text(
+            file_bytes=buf.getvalue(),
+            file_name="test.docx",
+            mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        text = result["text"]
+        assert "| DATE | TOPIC |" in text
+        assert "| DATE | DATE |" not in text
+        assert "| Week 1 | Introduction |" in text
+
+
+# ---------------------------------------------------------------------------
+# List paragraph tests
+# ---------------------------------------------------------------------------
+
+
+class TestListParagraphs:
+    @pytest.mark.asyncio
+    async def test_list_paragraphs_get_bullet_prefix(self):
+        doc = Document()
+        doc.add_heading("Learning Outcomes", level=1)
+        for text in ["Understand AI", "Apply ML models"]:
+            para = doc.add_paragraph(text)
+            para.style = doc.styles["List Paragraph"]
+
+        buf = io.BytesIO()
+        doc.save(buf)
+
+        result = await extract_document_text(
+            file_bytes=buf.getvalue(),
+            file_name="test.docx",
+            mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        text = result["text"]
+        assert "- Understand AI" in text
+        assert "- Apply ML models" in text
+
+
+# ---------------------------------------------------------------------------
+# Regression tests
+# ---------------------------------------------------------------------------
+
+
+class TestDocxExtractionRegression:
+    @pytest.mark.asyncio
+    async def test_basic_extraction_still_works(self):
+        docx_bytes = _make_docx_bytes()
+        result = await extract_document_text(
+            file_bytes=docx_bytes,
+            file_name="syllabus.docx",
+            mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        assert result["method"] == "docx"
+        assert "error" not in result
+        assert "# Syllabus" in result["text"]
+        assert "## Course Overview" in result["text"]
+        assert "This is the course description." in result["text"]
+        assert "| Week | Topic |" in result["text"]

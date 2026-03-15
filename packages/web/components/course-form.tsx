@@ -139,12 +139,12 @@ function TimePicker({
   const [period, setPeriod] = useState(initial.period);
 
   // Sync local state when the parent value changes externally (e.g. form reset)
-  const parsed = parse24h(value);
-  if (parsed.hour !== hour || parsed.minute !== minute || parsed.period !== period) {
+  useEffect(() => {
+    const parsed = parse24h(value);
     setHour(parsed.hour);
     setMinute(parsed.minute);
     setPeriod(parsed.period);
-  }
+  }, [value]);
 
   function handleChange(field: "hour" | "minute" | "period", v: string) {
     const nextHour = field === "hour" ? v : hour;
@@ -169,7 +169,7 @@ function TimePicker({
           <SelectTrigger className="w-auto min-w-[72px]">
             <SelectValue placeholder="Hour" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper" className="max-h-60">
             {HOURS.map((h) => (
               <SelectItem key={h} value={h}>{h}</SelectItem>
             ))}
@@ -180,7 +180,7 @@ function TimePicker({
           <SelectTrigger className="w-auto min-w-[68px]">
             <SelectValue placeholder="Min" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper" className="max-h-60">
             {MINUTES.map((m) => (
               <SelectItem key={m} value={m}>{m}</SelectItem>
             ))}
@@ -190,7 +190,7 @@ function TimePicker({
           <SelectTrigger className="w-auto min-w-[68px]">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent position="popper">
             <SelectItem value="AM">AM</SelectItem>
             <SelectItem value="PM">PM</SelectItem>
           </SelectContent>

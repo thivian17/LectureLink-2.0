@@ -80,21 +80,100 @@ _HEADING_MARKERS: dict[str, str] = {
     "Subtitle": "## ",
 }
 
+_SKIP_STYLES: set[str] = {"toc 1", "toc 2", "toc 3", "toc heading"}
+
+
+def _get_heading_prefix(style_name: str) -> str | None:
+    """Get markdown heading prefix for a paragraph style.
+
+    Returns None if the style should be skipped (e.g., TOC entries).
+    Returns "" for normal body text.
+    Returns "# ", "## ", etc. for heading styles.
+
+    Handles custom heading styles by checking for 'Heading' keyword
+    and extracting the level number.
+    """
+    if not style_name:
+        return ""
+
+    if style_name.lower() in _SKIP_STYLES:
+        return None
+
+    if style_name in _HEADING_MARKERS:
+        return _HEADING_MARKERS[style_name]
+
+    style_lower = style_name.lower()
+    if "heading" in style_lower:
+        import re
+
+        match = re.search(r"heading\s*(\d)", style_lower)
+        if match:
+            level = min(int(match.group(1)), 4)
+            return "#" * level + " "
+        return "## "
+
+    if "title" in style_lower:
+        return "# "
+    if "subtitle" in style_lower:
+        return "## "
+
+    return ""
+
+
+def _extract_textbox_content(element) -> list[str]:
+    """Extract text from Word text boxes (w:txbxContent) nested within an element.
+
+    Text boxes in DOCX appear inside structures like:
+      mc:AlternateContent > mc:Choice > w:drawing > ... > wps:txbx > w:txbxContent > w:p
+
+    This function recursively searches for all w:txbxContent elements and
+    extracts paragraph text from each.
+    """
+    from docx.oxml.ns import qn
+
+    texts = []
+    for txbx_content in element.iter(qn("w:txbxContent")):
+        for p_elem in txbx_content.iterchildren(qn("w:p")):
+            runs_text = []
+            for r_elem in p_elem.iter(qn("w:t")):
+                if r_elem.text:
+                    runs_text.append(r_elem.text)
+            text = "".join(runs_text).strip()
+            if text:
+                texts.append(text)
+    return texts
+
 
 def _table_to_markdown(table) -> str:
-    """Convert a python-docx Table to a markdown-formatted table string."""
+    """Convert a python-docx Table to a markdown-formatted table string.
+
+    Handles merged cells by deduplicating adjacent cells with identical text
+    (Word reports the same text for each grid column a merged cell spans).
+    """
     rows: list[list[str]] = []
     for row in table.rows:
-        rows.append([cell.text.strip() for cell in row.cells])
+        cells_text = [cell.text.strip() for cell in row.cells]
+        # Deduplicate adjacent identical cells (merged cells)
+        deduped: list[str] = []
+        prev = None
+        for text in cells_text:
+            if text != prev:
+                deduped.append(text)
+            prev = text
+        rows.append(deduped)
 
     if not rows:
         return ""
 
+    # Normalize column count (merged cells may produce different lengths per row)
+    max_cols = max(len(r) for r in rows)
+    for r in rows:
+        while len(r) < max_cols:
+            r.append("")
+
     lines: list[str] = []
-    # header row
     lines.append("| " + " | ".join(rows[0]) + " |")
     lines.append("| " + " | ".join("---" for _ in rows[0]) + " |")
-    # data rows
     for row in rows[1:]:
         lines.append("| " + " | ".join(row) + " |")
 
@@ -108,33 +187,74 @@ async def _extract_docx(file_bytes: bytes) -> dict[str, Any]:
     def _do_extract() -> dict[str, Any]:
         doc = Document(io.BytesIO(file_bytes))
         parts: list[str] = []
+        seen_textbox_texts: set[str] = set()  # deduplicate mc:Choice + mc:Fallback
 
-        # Iterate over document body elements to preserve ordering of
-        # paragraphs and tables.
         from docx.oxml.ns import qn
 
+        # --- Extract header/footer content (often contains course code, dept) ---
+        header_footer_texts: list[str] = []
+        seen_hf: set[str] = set()
+
+        for section in doc.sections:
+            try:
+                for para in section.header.paragraphs:
+                    text = para.text.strip()
+                    if text and text not in seen_hf:
+                        seen_hf.add(text)
+                        header_footer_texts.append(text)
+            except Exception:
+                pass
+            try:
+                for para in section.footer.paragraphs:
+                    text = para.text.strip()
+                    if text and text not in seen_hf:
+                        seen_hf.add(text)
+                        header_footer_texts.append(text)
+            except Exception:
+                pass
+
+        if header_footer_texts:
+            parts.append("--- Document Header/Footer ---")
+            parts.extend(header_footer_texts)
+            parts.append("--- End Header/Footer ---")
+
+        # --- Iterate over body elements preserving document order ---
         for element in doc.element.body:
             tag = element.tag
 
             if tag == qn("w:p"):
-                # It's a paragraph
                 from docx.text.paragraph import Paragraph
 
                 para = Paragraph(element, doc)
                 style_name = para.style.name if para.style else "Normal"
-                prefix = _HEADING_MARKERS.get(style_name, "")
+
+                prefix = _get_heading_prefix(style_name)
+                if prefix is None:
+                    continue  # Skip TOC entries
+
+                # Bullet prefix for list paragraphs
+                if style_name == "List Paragraph":
+                    prefix = "- "
+
                 text = para.text.strip()
                 if text:
                     parts.append(f"{prefix}{text}")
 
             elif tag == qn("w:tbl"):
-                # It's a table
                 from docx.table import Table
 
                 tbl = Table(element, doc)
                 md = _table_to_markdown(tbl)
                 if md:
                     parts.append(md)
+
+            else:
+                # Handle text boxes inside mc:AlternateContent, w:drawing, etc.
+                textbox_texts = _extract_textbox_content(element)
+                for txt in textbox_texts:
+                    if txt not in seen_textbox_texts:
+                        seen_textbox_texts.add(txt)
+                        parts.append(txt)
 
         return {
             "text": "\n\n".join(parts),

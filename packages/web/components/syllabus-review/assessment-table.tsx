@@ -121,6 +121,15 @@ export function AssessmentTable({
     if (!date) return;
     onUpdate(row, {
       due_date: format(date, "yyyy-MM-dd"),
+      due_date_raw: null,
+      is_date_ambiguous: false,
+    });
+  }
+
+  function handleSetOngoing(row: number) {
+    onUpdate(row, {
+      due_date: null,
+      due_date_raw: "Ongoing",
       is_date_ambiguous: false,
     });
   }
@@ -226,42 +235,16 @@ export function AssessmentTable({
 
                   {/* Due Date */}
                   <TableCell>
-                    {ongoing ? (
-                      <Badge
-                        variant="outline"
-                        className="text-xs text-blue-700 border-blue-300 bg-blue-50"
-                      >
-                        Ongoing
-                      </Badge>
-                    ) : (
-                      <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1">
+                      {ongoing ? (
                         <Popover>
                           <PopoverTrigger asChild>
-                            <Button
+                            <Badge
                               variant="outline"
-                              size="sm"
-                              className={cn(
-                                "h-7 text-xs justify-start font-normal",
-                                isAmbiguous &&
-                                  "border-amber-400 text-amber-700",
-                                !db.due_date && "text-muted-foreground",
-                              )}
+                              className="text-xs text-blue-700 border-blue-300 bg-blue-50 cursor-pointer hover:bg-blue-100 transition-colors"
                             >
-                              {isAmbiguous && (
-                                <AlertTriangle className="mr-1 h-3 w-3 text-amber-500" />
-                              )}
-                              {db.due_date ? (
-                                <>
-                                  <CalendarIcon className="mr-1 h-3 w-3" />
-                                  {format(
-                                    parseLocalDate(db.due_date),
-                                    "MMM d, yyyy",
-                                  )}
-                                </>
-                              ) : (
-                                "Pick date"
-                              )}
-                            </Button>
+                              Ongoing
+                            </Badge>
                           </PopoverTrigger>
                           <PopoverContent
                             className="w-auto p-0"
@@ -269,23 +252,75 @@ export function AssessmentTable({
                           >
                             <Calendar
                               mode="single"
-                              selected={
-                                db.due_date
-                                  ? parseLocalDate(db.due_date)
-                                  : undefined
-                              }
                               onSelect={(d) => handleDateSelect(i, d)}
                               initialFocus
                             />
                           </PopoverContent>
                         </Popover>
-                        {isAmbiguous && db.due_date_raw && (
-                          <span className="text-[10px] text-amber-600 leading-tight">
-                            Original: &ldquo;{db.due_date_raw}&rdquo;
-                          </span>
-                        )}
-                      </div>
-                    )}
+                      ) : (
+                        <>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className={cn(
+                                  "h-7 text-xs justify-start font-normal",
+                                  isAmbiguous &&
+                                    "border-amber-400 text-amber-700",
+                                  !db.due_date && "text-muted-foreground",
+                                )}
+                              >
+                                {isAmbiguous && (
+                                  <AlertTriangle className="mr-1 h-3 w-3 text-amber-500" />
+                                )}
+                                {db.due_date ? (
+                                  <>
+                                    <CalendarIcon className="mr-1 h-3 w-3" />
+                                    {format(
+                                      parseLocalDate(db.due_date),
+                                      "MMM d, yyyy",
+                                    )}
+                                  </>
+                                ) : (
+                                  "Pick date"
+                                )}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              className="w-auto p-0"
+                              align="start"
+                            >
+                              <Calendar
+                                mode="single"
+                                selected={
+                                  db.due_date
+                                    ? parseLocalDate(db.due_date)
+                                    : undefined
+                                }
+                                onSelect={(d) => handleDateSelect(i, d)}
+                                initialFocus
+                              />
+                              <div className="border-t px-3 py-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="w-full text-xs text-blue-700 hover:text-blue-800 hover:bg-blue-50"
+                                  onClick={() => handleSetOngoing(i)}
+                                >
+                                  Mark as Ongoing
+                                </Button>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                          {isAmbiguous && db.due_date_raw && (
+                            <span className="text-[10px] text-amber-600 leading-tight">
+                              Original: &ldquo;{db.due_date_raw}&rdquo;
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </TableCell>
 
                   {/* Weight */}
