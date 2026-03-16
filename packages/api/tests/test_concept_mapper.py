@@ -11,7 +11,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import numpy as np
 import pytest
 from lecturelink_api.agents.concept_mapper import (
-    LINK_THRESHOLD,
     _get_syllabus_schedule,
     _lecture_week_number,
     _tokenize,
