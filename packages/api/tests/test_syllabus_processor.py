@@ -356,3 +356,66 @@ class TestRunnerIntegration:
             session_service=InMemorySessionService(),
         )
         assert runner.agent.name == "ParallelExtraction"
+
+
+# ---------------------------------------------------------------------------
+# Prompt content tests
+# ---------------------------------------------------------------------------
+
+
+class TestPromptContent:
+    """Verify agent prompts contain critical extraction guidance."""
+
+    def test_info_prompt_has_diverse_code_examples(self):
+        from lecturelink_api.agents.syllabus_processor import _INFO_INSTRUCTION
+        assert "MMAI 5090" in _INFO_INSTRUCTION
+        assert "SB/MBAN" in _INFO_INSTRUCTION
+
+    def test_info_prompt_warns_about_course_outline_heading(self):
+        from lecturelink_api.agents.syllabus_processor import _INFO_INSTRUCTION
+        assert "Course Outline" in _INFO_INSTRUCTION
+
+    def test_grading_prompt_handles_ongoing(self):
+        from lecturelink_api.agents.syllabus_processor import _GRADING_INSTRUCTION
+        assert "Ongoing" in _GRADING_INSTRUCTION
+
+    def test_grading_prompt_handles_multi_date(self):
+        from lecturelink_api.agents.syllabus_processor import _GRADING_INSTRUCTION
+        assert "LAST" in _GRADING_INSTRUCTION
+
+    def test_grading_prompt_handles_peer_eval(self):
+        from lecturelink_api.agents.syllabus_processor import _GRADING_INSTRUCTION
+        assert "peer eval" in _GRADING_INSTRUCTION.lower()
+
+    def test_schedule_prompt_handles_reading_week(self):
+        from lecturelink_api.agents.syllabus_processor import _SCHEDULE_INSTRUCTION
+        assert "READING WEEK" in _SCHEDULE_INSTRUCTION
+
+    def test_schedule_prompt_handles_merged_columns(self):
+        from lecturelink_api.agents.syllabus_processor import _SCHEDULE_INSTRUCTION
+        assert "merged" in _SCHEDULE_INSTRUCTION.lower() or "duplicated" in _SCHEDULE_INSTRUCTION.lower()
+
+
+# ---------------------------------------------------------------------------
+# Merge edge case tests
+# ---------------------------------------------------------------------------
+
+
+class TestMergeEdgeCases:
+    """Edge cases for merge_extraction_outputs."""
+
+    def test_merge_with_all_none(self):
+        result = merge_extraction_outputs(None, None, None)
+        assert result["course_name"] == {"value": None, "confidence": 0.0}
+        assert result["assessments"] == []
+        assert result["weekly_schedule"] == []
+
+    def test_merge_with_empty_strings(self):
+        result = merge_extraction_outputs("", "", "")
+        assert result["assessments"] == []
+
+    def test_merge_with_partial_info_only(self):
+        info = {"course_name": {"value": "Test Course", "confidence": 0.9}}
+        result = merge_extraction_outputs(None, None, info)
+        assert result["course_name"]["value"] == "Test Course"
+        assert result["assessments"] == []

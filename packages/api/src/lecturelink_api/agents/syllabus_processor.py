@@ -102,9 +102,21 @@ For each week, extract:
 - week_number: The week number (1-indexed).
 - date_range: The date range if specified (e.g. "Jan 15 – Jan 19"), with confidence \
 and source_text. Leave null if no dates are given.
-- topics: All topics covered that week.
-- readings: Assigned readings for the week.
-- due_items: Items due during the week (assignments, quizzes, exams, etc.).
+- topics: All topics covered that week. Include module names if the course uses modules \
+  (e.g. "Module 1: AI Strategy").
+- readings: Assigned readings for the week. Include case studies, textbook chapters, \
+  and research papers.
+- due_items: Items due during the week (assignments, quizzes, exams, etc.). Include \
+  the item title and any details like "submit by end of class".
+
+IMPORTANT:
+- If the schedule table has merged or duplicated columns, focus on extracting unique \
+  content only (ignore repeated column values).
+- If a week says "READING WEEK" or "NO CLASS" or "BREAK", still include it with \
+  week_number but set topics to ["No class - Reading Week"] or similar.
+- If week numbering skips (e.g., WK 1, WK 2, ... WK 6, WK 8 — no WK 7), do NOT \
+  invent the missing week. Only extract weeks explicitly listed.
+- Some syllabi use "WK" abbreviation instead of "Week" — treat identically.
 
 Semester context for resolving relative dates: {semester_context}
 
@@ -125,22 +137,34 @@ Grade breakdown — for each component extract:
 - drop_policy: Any drop policy (e.g. "lowest quiz dropped"), or null if none.
 
 Individual assessments — for each one extract:
-- title: Assessment name (e.g. "Midterm 1", "HW 3").
+- title: Assessment name (e.g. "Midterm 1", "HW 3", "Group Project #2").
 - type: One of: exam, quiz, homework, project, lab, paper, presentation, participation, other.
-- due_date_raw: The original date text as written in the syllabus. For assessments that \
-are ongoing throughout the semester (e.g. class participation, attendance), set this to "Ongoing".
-- due_date_resolved: Resolved calendar date in YYYY-MM-DD format, or null if ambiguous or ongoing. \
-IMPORTANT: When the syllabus uses relative references like "Week 5" or "Class 3", use the \
-semester context below to calculate the exact date. Never resolve a date to a holiday/break period — \
-if a week number falls on a break, skip the break week and count only teaching weeks.
+- due_date_raw: The original date text as written in the syllabus. Follow these rules:
+  * For assessments that are ongoing throughout the semester (e.g. class participation, \
+    attendance, weekly reflections), set this to "Ongoing".
+  * For assessments with a specific date, copy the exact text (e.g. "Feb 11, 2026", \
+    "Week 6", "WK 10").
+  * For assessments with multiple dates (e.g. "WK 6, 8, 9, 10, 11"), use the LAST \
+    date as the due date (e.g. "WK 11") since that represents the final deadline.
+- due_date_resolved: Resolved calendar date in YYYY-MM-DD format, or null if \
+  ambiguous, ongoing, or if you cannot determine the exact date.
 - weight_percent: Grade weight as a percentage.
 - topics: Related topics or chapters.
 
-Semester context for resolving relative dates: {semester_context}
+IMPORTANT RULES:
+1. Express all weights as percentages (25.0 for 25%, not 0.25). If the syllabus uses \
+   point values, convert to percentages.
+2. If a grade component has multiple sub-items (e.g. "Group Projects" = 45% total, with \
+   "Project #1" = 15% and "Project #2" = 30%), extract BOTH the component AND the \
+   individual assessments separately.
+3. For peer evaluations, set type to "other".
+4. For Data Camp modules, practice labs, or similar online exercises, set type to "homework".
+5. Grade breakdown weights should sum to approximately 100%. If they don't, flag \
+   low confidence on the weight_percent fields.
+6. If an assessment has quantity > 1 (e.g. "5 Data Camp Modules at 4% each = 20%"), \
+   create ONE assessment entry with the total weight (20%), not 5 separate entries.
 
-Express all weights as percentages (25.0 for 25%, not 0.25). If the syllabus uses \
-point values, convert to percentages. Set confidence and source_text on every \
-ExtractedField.
+Set confidence and source_text on every ExtractedField.
 
 Syllabus text:
 {raw_text}"""
@@ -150,14 +174,30 @@ You are an expert course information extractor. Analyze the syllabus text below 
 extract course metadata and policies.
 
 Extract:
-- course_name: Full course name.
-- course_code: Course code (e.g. "CS 101").
-- instructor_name: Primary instructor's full name.
+- course_name: Full official course name (e.g. "Business Applications of AI II", \
+"Introduction to Computer Science"). This is the formal course title, NOT a description \
+of the course topic. Look for it near the top of the document, often on a cover page, \
+in a header, or next to the course code.
+- course_code: Course code exactly as written. Examples of real formats: \
+"CS 101", "MMAI 5090 3.00", "SB/MBAN 5140", "EECS 4404", "OMIS 6750 3.00", \
+"MGMT 6100". Include credit hours if shown (e.g. "3.00"). \
+The code is usually 2-5 uppercase letters followed by 3-5 digits.
+- instructor_name: Primary instructor's full name (not TAs or assistants).
 - instructor_email: Instructor's email address.
-- office_hours: Office hours schedule as written.
+- office_hours: Office hours schedule as written. Include location if specified.
 - policies: A JSON object of course policies keyed by category. Use these keys where \
 applicable: late_policy, attendance, academic_integrity, grading_scale, extra_credit, \
 technology_policy, accommodation.
+
+IMPORTANT:
+- The course name and code may appear in document headers, footers, or at the very \
+beginning of the text (before any headings). Do not skip this content.
+- If the document begins with what looks like a cover page (course code + title on \
+separate lines), use that as the authoritative source for course_name and course_code.
+- If "Course Outline" or "Syllabus" appears as a heading, the course name is NOT \
+"Course Outline" — look for the actual course title nearby.
+- Do not confuse a course description paragraph with the course name. The name is \
+typically short (3-10 words), not a full sentence.
 
 Set confidence (0.0–1.0) on each ExtractedField based on clarity, and include \
 source_text with the exact span from the document.
@@ -406,6 +446,110 @@ def validate_assessment_completeness(extraction: SyllabusExtraction) -> list[str
     return issues
 
 
+def _normalize_assessment_types(extraction: SyllabusExtraction) -> None:
+    """Normalize assessment types to lowercase and map common variants."""
+    _type_map = {
+        "exam": "exam", "quiz": "quiz", "homework": "homework",
+        "project": "project", "lab": "lab", "paper": "paper",
+        "presentation": "presentation", "participation": "participation",
+        "other": "other",
+        "midterm": "exam", "final": "exam", "final exam": "exam",
+        "midterm exam": "exam", "test": "exam",
+        "assignment": "homework", "problem set": "homework",
+        "essay": "paper", "report": "paper",
+        "peer evaluation": "other", "peer review": "other",
+        "discussion": "participation", "attendance": "participation",
+        "reflection": "homework", "case study": "homework",
+        "data camp": "homework",
+    }
+    for assessment in extraction.assessments:
+        if assessment.type.value:
+            raw_type = str(assessment.type.value).strip().lower()
+            assessment.type.value = _type_map.get(raw_type, "other")
+
+
+def _fill_missing_fields(extraction: SyllabusExtraction) -> None:
+    """Fill missing required fields with sensible defaults."""
+    for i, assessment in enumerate(extraction.assessments):
+        if not assessment.title.value or not str(assessment.title.value).strip():
+            assessment.title.value = f"Assessment {i + 1}"
+            assessment.title.confidence = 0.1
+
+        if not assessment.type.value or not str(assessment.type.value).strip():
+            assessment.type.value = "other"
+            assessment.type.confidence = 0.1
+
+        if assessment.weight_percent.value is not None:
+            try:
+                assessment.weight_percent.value = float(
+                    assessment.weight_percent.value,
+                )
+            except (ValueError, TypeError):
+                assessment.weight_percent.value = None
+                assessment.weight_percent.confidence = 0.0
+
+
+def _reconcile_assessment_weights(extraction: SyllabusExtraction) -> None:
+    """Infer missing assessment weights from grade breakdown when possible."""
+    component_weights: dict[str, float] = {}
+    for comp in extraction.grade_breakdown:
+        name = str(comp.name.value or "").strip().lower()
+        weight = comp.weight_percent.value
+        if name and weight is not None:
+            component_weights[name] = float(weight)
+
+    for assessment in extraction.assessments:
+        if (
+            assessment.weight_percent.value is None
+            or assessment.weight_percent.value == 0
+        ):
+            title = str(assessment.title.value or "").strip().lower()
+            atype = str(assessment.type.value or "").strip().lower()
+
+            for comp_name, comp_weight in component_weights.items():
+                if (
+                    comp_name in title
+                    or title in comp_name
+                    or atype in comp_name
+                    or comp_name in atype
+                ):
+                    matching = [
+                        a
+                        for a in extraction.assessments
+                        if comp_name in str(a.title.value or "").lower()
+                        or str(a.title.value or "").lower() in comp_name
+                    ]
+                    if len(matching) == 1:
+                        assessment.weight_percent.value = comp_weight
+                        assessment.weight_percent.confidence = 0.6
+                    break
+
+
+def validate_no_near_duplicates(extraction: SyllabusExtraction) -> list[str]:
+    """Check for near-duplicate assessments (similar titles, same date)."""
+    issues: list[str] = []
+    for i, a in enumerate(extraction.assessments):
+        for j, b in enumerate(extraction.assessments):
+            if j <= i:
+                continue
+            title_a = str(a.title.value or "").strip().lower()
+            title_b = str(b.title.value or "").strip().lower()
+            date_a = str(a.due_date_resolved.value or "")
+            date_b = str(b.due_date_resolved.value or "")
+
+            if (
+                date_a
+                and date_a == date_b
+                and (title_a in title_b or title_b in title_a)
+                and title_a != title_b
+            ):
+                issues.append(
+                    f"Possible duplicate: '{a.title.value}' and "
+                    f"'{b.title.value}' on {date_a}"
+                )
+    return issues
+
+
 def _patch_extracted_fields(obj):
     """Ensure all ExtractedField-shaped dicts have the required 'value' key.
 
@@ -444,12 +588,21 @@ def post_process_extraction(
     _patch_extracted_fields(raw_result)
     extraction = SyllabusExtraction(**raw_result)
 
+    # Normalize and fill before validation
+    _normalize_assessment_types(extraction)
+    _fill_missing_fields(extraction)
+    _reconcile_assessment_weights(extraction)
+
     # Re-validate grade weights (don't trust the LLM's math)
     weight_issues = validate_grade_weights(extraction)
 
-    # Merge weight issues into missing_sections
+    # Check for duplicates
+    duplicate_issues = validate_no_duplicates(extraction)
+    near_dup_issues = validate_no_near_duplicates(extraction)
+
+    # Merge all issues into missing_sections
     existing_missing = list(extraction.missing_sections)
-    for issue in weight_issues:
+    for issue in weight_issues + duplicate_issues + near_dup_issues:
         if issue not in existing_missing:
             existing_missing.append(issue)
     extraction.missing_sections = existing_missing

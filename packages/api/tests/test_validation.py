@@ -6,12 +6,16 @@ from datetime import date
 
 import pytest
 from lecturelink_api.agents.syllabus_processor import (
+    _fill_missing_fields,
+    _normalize_assessment_types,
+    _reconcile_assessment_weights,
     finalize_extraction,
     post_process_extraction,
     validate_assessment_completeness,
     validate_date_boundaries,
     validate_grade_weights,
     validate_no_duplicates,
+    validate_no_near_duplicates,
 )
 from lecturelink_api.models.syllabus_models import SyllabusExtraction
 
@@ -442,5 +446,212 @@ class TestPostProcessExtraction:
         result = finalize_extraction(extraction, semester_ctx)
         low_conf_entries = [s for s in result.missing_sections if "low_confidence:" in s]
         assert len(low_conf_entries) >= 2  # title + weight_percent
+
+
+# ---------------------------------------------------------------------------
+# Assessment type normalization
+# ---------------------------------------------------------------------------
+
+
+class TestAssessmentTypeNormalization:
+    def test_lowercase_preserved(self):
+        data = _make_extraction(assessments=[_make_assessment(type=_field("quiz"))])
+        extraction = SyllabusExtraction(**data)
+        _normalize_assessment_types(extraction)
+        assert extraction.assessments[0].type.value == "quiz"
+
+    def test_uppercase_normalized(self):
+        data = _make_extraction(assessments=[_make_assessment(type=_field("Exam"))])
+        extraction = SyllabusExtraction(**data)
+        _normalize_assessment_types(extraction)
+        assert extraction.assessments[0].type.value == "exam"
+
+    def test_midterm_maps_to_exam(self):
+        data = _make_extraction(assessments=[_make_assessment(type=_field("midterm"))])
+        extraction = SyllabusExtraction(**data)
+        _normalize_assessment_types(extraction)
+        assert extraction.assessments[0].type.value == "exam"
+
+    def test_peer_eval_maps_to_other(self):
+        data = _make_extraction(
+            assessments=[_make_assessment(type=_field("peer evaluation"))],
+        )
+        extraction = SyllabusExtraction(**data)
+        _normalize_assessment_types(extraction)
+        assert extraction.assessments[0].type.value == "other"
+
+    def test_unknown_maps_to_other(self):
+        data = _make_extraction(
+            assessments=[_make_assessment(type=_field("portfolio"))],
+        )
+        extraction = SyllabusExtraction(**data)
+        _normalize_assessment_types(extraction)
+        assert extraction.assessments[0].type.value == "other"
+
+
+# ---------------------------------------------------------------------------
+# Fill missing fields
+# ---------------------------------------------------------------------------
+
+
+class TestFillMissingFields:
+    def test_missing_title_defaults(self):
+        data = _make_extraction(assessments=[_make_assessment(title=_field(None))])
+        extraction = SyllabusExtraction(**data)
+        _fill_missing_fields(extraction)
+        assert extraction.assessments[0].title.value == "Assessment 1"
+        assert extraction.assessments[0].title.confidence == 0.1
+
+    def test_missing_type_defaults(self):
+        data = _make_extraction(assessments=[_make_assessment(type=_field(None))])
+        extraction = SyllabusExtraction(**data)
+        _fill_missing_fields(extraction)
+        assert extraction.assessments[0].type.value == "other"
+        assert extraction.assessments[0].type.confidence == 0.1
+
+    def test_string_weight_to_float(self):
+        data = _make_extraction(
+            assessments=[_make_assessment(weight_percent=_field("15.5"))],
+        )
+        extraction = SyllabusExtraction(**data)
+        _fill_missing_fields(extraction)
+        assert extraction.assessments[0].weight_percent.value == 15.5
+
+    def test_invalid_weight_cleared(self):
+        data = _make_extraction(
+            assessments=[_make_assessment(weight_percent=_field("not_a_number"))],
+        )
+        extraction = SyllabusExtraction(**data)
+        _fill_missing_fields(extraction)
+        assert extraction.assessments[0].weight_percent.value is None
+        assert extraction.assessments[0].weight_percent.confidence == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Weight reconciliation
+# ---------------------------------------------------------------------------
+
+
+class TestWeightReconciliation:
+    def test_infers_weight_from_grade_breakdown(self):
+        """Single matching assessment gets weight from grade breakdown."""
+        data = _make_extraction(
+            grade_breakdown=[
+                _make_grade_component("Participation", 10.0),
+                _make_grade_component("Final", 40.0),
+                _make_grade_component("Homework", 50.0),
+            ],
+            assessments=[
+                _make_assessment(
+                    title=_field("Participation"),
+                    type=_field("participation"),
+                    weight_percent=_field(None),
+                ),
+            ],
+        )
+        extraction = SyllabusExtraction(**data)
+        _reconcile_assessment_weights(extraction)
+        assert extraction.assessments[0].weight_percent.value == 10.0
+        assert extraction.assessments[0].weight_percent.confidence == 0.6
+
+    def test_does_not_infer_when_multiple_match(self):
+        """Multiple assessments match a component — don't guess."""
+        data = _make_extraction(
+            grade_breakdown=[
+                _make_grade_component("Homework", 30.0),
+                _make_grade_component("Final", 70.0),
+            ],
+            assessments=[
+                _make_assessment(
+                    title=_field("Homework 1"),
+                    weight_percent=_field(None),
+                ),
+                _make_assessment(
+                    title=_field("Homework 2"),
+                    weight_percent=_field(None),
+                ),
+            ],
+        )
+        extraction = SyllabusExtraction(**data)
+        _reconcile_assessment_weights(extraction)
+        assert extraction.assessments[0].weight_percent.value is None
+        assert extraction.assessments[1].weight_percent.value is None
+
+
+# ---------------------------------------------------------------------------
+# Near-duplicate detection
+# ---------------------------------------------------------------------------
+
+
+class TestNearDuplicateDetection:
+    def test_substring_duplicates_detected(self):
+        data = _make_extraction(
+            assessments=[
+                _make_assessment(
+                    title=_field("Midterm Exam"),
+                    due_date_resolved=_field("2026-03-10"),
+                ),
+                _make_assessment(
+                    title=_field("Midterm"),
+                    due_date_resolved=_field("2026-03-10"),
+                ),
+            ],
+        )
+        extraction = SyllabusExtraction(**data)
+        issues = validate_no_near_duplicates(extraction)
+        assert len(issues) == 1
+        assert "Possible duplicate" in issues[0]
+
+    def test_same_title_different_date_ok(self):
+        data = _make_extraction(
+            assessments=[
+                _make_assessment(
+                    title=_field("Quiz"),
+                    due_date_resolved=_field("2026-02-10"),
+                ),
+                _make_assessment(
+                    title=_field("Quiz"),
+                    due_date_resolved=_field("2026-03-10"),
+                ),
+            ],
+        )
+        extraction = SyllabusExtraction(**data)
+        issues = validate_no_near_duplicates(extraction)
+        assert len(issues) == 0
+
+    def test_different_titles_same_date_ok(self):
+        data = _make_extraction(
+            assessments=[
+                _make_assessment(
+                    title=_field("Midterm"),
+                    due_date_resolved=_field("2026-03-10"),
+                ),
+                _make_assessment(
+                    title=_field("Project #1"),
+                    due_date_resolved=_field("2026-03-10"),
+                ),
+            ],
+        )
+        extraction = SyllabusExtraction(**data)
+        issues = validate_no_near_duplicates(extraction)
+        assert len(issues) == 0
+
+    def test_exact_same_titles_not_near_duplicate(self):
+        """Exact same titles are caught by validate_no_duplicates, not here."""
+        data = _make_extraction(
+            assessments=[
+                _make_assessment(
+                    title=_field("Quiz"),
+                    due_date_resolved=_field("2026-03-10"),
+                ),
+                _make_assessment(
+                    title=_field("Quiz"),
+                    due_date_resolved=_field("2026-03-10"),
+                ),
+            ],
+        )
+        extraction = SyllabusExtraction(**data)
+        issues = validate_no_near_duplicates(extraction)
+        assert len(issues) == 0
 
 
