@@ -112,7 +112,7 @@ class TestStartLearnSession:
         sb = _setup_supabase_for_start(
             priority_assessments=[
                 {"assessment_id": "a1", "title": "Midterm 1", "course_id": "course1",
-                 "due_date": "2026-03-15", "weight_percent": 25.0, "priority_score": 0.9},
+                 "due_date": "2027-06-15", "weight_percent": 25.0, "priority_score": 0.9},
             ],
             concept_links=[
                 {"concept_id": "c1", "relevance_score": 0.9},
@@ -143,7 +143,7 @@ class TestStartLearnSession:
         sb = _setup_supabase_for_start(
             priority_assessments=[
                 {"assessment_id": "a1", "title": "Midterm 1", "course_id": "course1",
-                 "due_date": "2026-03-15", "weight_percent": 25.0, "priority_score": 0.95},
+                 "due_date": "2027-06-15", "weight_percent": 25.0, "priority_score": 0.95},
             ],
             concept_links=[
                 {"concept_id": "c1", "relevance_score": 0.9},
@@ -178,7 +178,7 @@ class TestStartLearnSession:
         sb = _setup_supabase_for_start(
             priority_assessments=[
                 {"assessment_id": "a1", "title": "Exam", "course_id": "course1",
-                 "due_date": "2026-03-15", "weight_percent": 20.0, "priority_score": 0.9},
+                 "due_date": "2027-06-15", "weight_percent": 20.0, "priority_score": 0.9},
             ],
             concept_links=[
                 {"concept_id": "c1", "relevance_score": 0.9},
@@ -208,7 +208,7 @@ class TestStartLearnSession:
         sb = _setup_supabase_for_start(
             priority_assessments=[
                 {"assessment_id": "a1", "title": "Exam", "course_id": "course1",
-                 "due_date": "2026-03-15", "weight_percent": 20.0, "priority_score": 0.9},
+                 "due_date": "2027-06-15", "weight_percent": 20.0, "priority_score": 0.9},
             ],
             concept_links=[
                 {"concept_id": "c1", "relevance_score": 0.9},
@@ -337,7 +337,7 @@ class TestStartLearnSession:
             existing_sessions=[stale_session],
             priority_assessments=[
                 {"assessment_id": "a1", "title": "Midterm 1", "course_id": "course1",
-                 "due_date": "2026-03-15", "weight_percent": 25.0, "priority_score": 0.9},
+                 "due_date": "2027-06-15", "weight_percent": 25.0, "priority_score": 0.9},
             ],
             concept_links=[
                 {"concept_id": "c1", "relevance_score": 0.9},
@@ -397,7 +397,7 @@ class TestStartLearnSession:
         sb = _setup_supabase_for_start(
             priority_assessments=[
                 {"assessment_id": "a1", "title": "Midterm 1", "course_id": "course1",
-                 "due_date": "2026-03-15", "weight_percent": 25.0, "priority_score": 0.9},
+                 "due_date": "2027-06-15", "weight_percent": 25.0, "priority_score": 0.9},
             ],
             concept_links=[
                 {"concept_id": "c1", "relevance_score": 0.9},
@@ -437,7 +437,7 @@ class TestStartLearnSession:
         sb = _setup_supabase_for_start(
             priority_assessments=[
                 {"assessment_id": "a1", "title": "Midterm 1", "course_id": "course1",
-                 "due_date": "2026-03-15", "weight_percent": 25.0, "priority_score": 0.9},
+                 "due_date": "2027-06-15", "weight_percent": 25.0, "priority_score": 0.9},
             ],
             concept_links=[
                 {"concept_id": "c1", "relevance_score": 0.9},
