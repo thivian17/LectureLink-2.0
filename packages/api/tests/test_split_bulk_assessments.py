@@ -362,3 +362,32 @@ class TestFixSplitWeights:
 
         for a in extraction.assessments:
             assert a.weight_percent.value == 16.0  # unchanged
+
+    def test_different_weights_not_touched(self):
+        """Projects with different weights (10%, 28%, 32%) are NOT adjusted."""
+        assessments = [
+            _make_assessment("Project 1", atype="project", weight=10.0),
+            _make_assessment("Project 2", atype="project", weight=28.0),
+            _make_assessment("Project 3", atype="project", weight=32.0),
+        ]
+        grade_breakdown = [
+            GradeComponent(
+                name=ExtractedField(value="Project 1", confidence=0.9),
+                weight_percent=ExtractedField(value=10.0, confidence=0.9),
+            ),
+            GradeComponent(
+                name=ExtractedField(value="Project 2", confidence=0.9),
+                weight_percent=ExtractedField(value=28.0, confidence=0.9),
+            ),
+            GradeComponent(
+                name=ExtractedField(value="Project 3", confidence=0.9),
+                weight_percent=ExtractedField(value=32.0, confidence=0.9),
+            ),
+        ]
+        extraction = _make_extraction(assessments)
+        extraction.grade_breakdown = grade_breakdown
+
+        _fix_split_assessment_weights(extraction)
+
+        weights = [a.weight_percent.value for a in extraction.assessments]
+        assert weights == [10.0, 28.0, 32.0]  # unchanged

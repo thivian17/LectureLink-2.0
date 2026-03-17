@@ -171,6 +171,13 @@ IMPORTANT RULES:
    "Tableau Quiz 1" under a specific class or week.
 8. If due dates are listed as "Class N", "Session N", or "Week N", preserve that EXACT text \
    as the due_date_raw. Do NOT attempt to resolve it to a calendar date.
+9. RECURRING ASSESSMENT DUE DATES: For recurring assessments like discussion posts that \
+   have a SPECIFIC submission deadline different from the class meeting day, use that \
+   deadline as the due_date_raw. Example: If discussions open after Wednesday class but \
+   are due "Monday at 11:59pm", set due_date_raw to the specific Monday date or \
+   "Monday after Class N". Look for phrases like "due by", "must be posted by", \
+   "no later than", "deadline" to find the actual submission date, which may differ \
+   from the class meeting date.
 
 Set confidence and source_text on every ExtractedField.
 
@@ -742,15 +749,37 @@ def _fix_split_assessment_weights(extraction: SyllabusExtraction) -> None:
         if matching_comp_weight is None:
             continue
 
-        # Check if each instance has the TOTAL weight instead of per-instance
+        # Check if ALL instances have the SAME weight AND that weight matches
+        # the component total.  This detects: Gemini assigned the total group
+        # weight to each individual.
+        # Skip if weights differ — they're already individually weighted
+        # (e.g., Project 1=10%, Project 2=28%, Project 3=32%).
+        instance_weights = [
+            float(extraction.assessments[idx].weight_percent.value)
+            for idx in indices
+            if extraction.assessments[idx].weight_percent.value is not None
+        ]
+
+        if not instance_weights:
+            continue
+
+        # All weights must be the same to indicate a "total assigned to each" error
+        if len(set(instance_weights)) != 1:
+            continue  # Different weights = individually weighted, don't touch
+
+        common_weight = instance_weights[0]
+
+        # The common weight should match the component total (within tolerance)
+        if abs(common_weight - matching_comp_weight) > 0.5:
+            continue
+
+        # Fix: divide total by count
         per_instance_weight = round(matching_comp_weight / len(indices), 2)
 
         for idx in indices:
             a = extraction.assessments[idx]
-            current_weight = a.weight_percent.value
-            if current_weight is not None and abs(float(current_weight) - matching_comp_weight) < 0.5:
-                a.weight_percent.value = per_instance_weight
-                a.weight_percent.confidence = min(a.weight_percent.confidence, 0.7)
+            a.weight_percent.value = per_instance_weight
+            a.weight_percent.confidence = min(a.weight_percent.confidence, 0.7)
 
 
 def validate_no_near_duplicates(extraction: SyllabusExtraction) -> list[str]:
