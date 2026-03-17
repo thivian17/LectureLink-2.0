@@ -2,9 +2,10 @@
 #
 # Trigger: push to main branch, or manual dispatch.
 #
-# Job chain:
-#   lint-and-test → build-and-push-api ──→ deploy-api ───→ deploy-worker ──→ notify
-#                 → build-and-push-web ──→ deploy-web ──────────────────────↗
+# Job chain (optimized for speed):
+#   lint-and-test ──→ build-and-push-api ──→ deploy-api    ──→ notify
+#                  ├→ build-and-push-web ──→ deploy-web    ──↗
+#                  └→ (api image ready)  ──→ deploy-workers ─↗
 #
 # Required GitHub Secrets:
 #   GCP_PROJECT_ID              — Google Cloud project ID
@@ -41,7 +42,7 @@ permissions:
   id-token: write
 
 # ---------------------------------------------------------------------------
-# Job 1: Lint & Test
+# Job 1: Lint & Test (backend + frontend in parallel)
 # ---------------------------------------------------------------------------
 jobs:
   lint-and-test:
@@ -57,42 +58,38 @@ jobs:
 
       - uses: astral-sh/setup-uv@v4
 
-      - name: Install backend dependencies
-        run: uv sync --frozen --project packages/api
-
-      - name: Ruff lint
-        run: uvx ruff check packages/api/src/ packages/api/tests/ --config packages/api/pyproject.toml
-
-      - name: Pytest
-        run: uv run pytest packages/api/tests/ -v --tb=short --ignore=packages/api/tests/integration
-        env:
-          SUPABASE_URL: https://placeholder.supabase.co
-          SUPABASE_ANON_KEY: placeholder-anon-key
-
-      # -- Node / Frontend --
+      # -- Node / Frontend (setup in parallel with backend install) --
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: packages/web/package-lock.json
 
-      - name: Install frontend dependencies
-        run: npm ci
-        working-directory: packages/web
+      # Install backend + frontend deps in parallel
+      - name: Install dependencies
+        run: |
+          uv sync --frozen --project packages/api &
+          npm ci --prefix packages/web &
+          wait
 
-      - name: TypeScript check
-        run: npx tsc --noEmit
-        working-directory: packages/web
-
-      - name: Next.js build check
-        run: npm run build
-        working-directory: packages/web
+      # Run lint + test + typecheck in parallel
+      - name: Lint, test, typecheck
+        run: |
+          uvx ruff check packages/api/src/ packages/api/tests/ --config packages/api/pyproject.toml &
+          RUFF_PID=$!
+          uv run pytest packages/api/tests/ -v --tb=short -q --ignore=packages/api/tests/integration &
+          PYTEST_PID=$!
+          npx tsc --noEmit --project packages/web/tsconfig.json &
+          TSC_PID=$!
+          # Removed Next.js build — it runs again in the Docker build.
+          # tsc --noEmit catches type errors; the Docker build catches build errors.
+          wait $RUFF_PID $PYTEST_PID $TSC_PID
         env:
-          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+          SUPABASE_URL: https://placeholder.supabase.co
+          SUPABASE_ANON_KEY: placeholder-anon-key
 
   # ---------------------------------------------------------------------------
-  # Job 2a: Build & Push API image
+  # Job 2a: Build & Push API image (with Docker layer cache)
   # ---------------------------------------------------------------------------
   build-and-push-api:
     name: Build & Push API
@@ -113,21 +110,22 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
 
-      - name: Build API image
-        run: |
-          docker build \
-            -f packages/api/Dockerfile \
-            -t ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:${{ github.sha }} \
-            -t ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:latest \
-            .
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Push API image
-        run: |
-          docker push ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:${{ github.sha }}
-          docker push ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:latest
+      - name: Build & push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/api/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
 
   # ---------------------------------------------------------------------------
-  # Job 2b: Build & Push Web image (parallel with API)
+  # Job 2b: Build & Push Web image (parallel with API, with Docker layer cache)
   # ---------------------------------------------------------------------------
   build-and-push-web:
     name: Build & Push Web
@@ -148,21 +146,23 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
 
-      - name: Build Web image
-        run: |
-          docker build \
-            -f packages/web/Dockerfile \
-            -t ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/web:${{ github.sha }} \
-            -t ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/web:latest \
-            --build-arg NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }} \
-            --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }} \
-            --build-arg NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }} \
-            .
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Push Web image
-        run: |
-          docker push ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/web:${{ github.sha }}
-          docker push ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/web:latest
+      - name: Build & push Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/web/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/web:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/web:latest
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
 
   # ---------------------------------------------------------------------------
   # Job 3a: Deploy API to Cloud Run
@@ -222,11 +222,11 @@ jobs:
             --region ${{ env.REGION }}
 
   # ---------------------------------------------------------------------------
-  # Job 3b: Deploy Workers to Cloud Run (fast + slow queues)
+  # Job 3b: Deploy Workers (no dependency on deploy-api — just needs the image)
   # ---------------------------------------------------------------------------
   deploy-worker:
     name: Deploy Workers
-    needs: [build-and-push-api, deploy-api]
+    needs: build-and-push-api
     runs-on: ubuntu-latest
     steps:
       - name: Authenticate to Google Cloud
@@ -238,41 +238,44 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Deploy Fast Worker (syllabus, notifications)
-        run: >-
-          gcloud run deploy ${{ env.WORKER_FAST_SERVICE }}
-          --image ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:${{ github.sha }}
-          --region ${{ env.REGION }}
-          --platform managed
-          --command="python","-m","lecturelink_api.worker_main","--queue","fast"
-          --memory 1Gi
-          --cpu 1
-          --min-instances 1
-          --max-instances 3
-          --no-cpu-throttling
-          --vpc-connector=${{ env.VPC_CONNECTOR }}
-          --service-account=${{ secrets.RUNTIME_SERVICE_ACCOUNT }}
-          --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest"
-          --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},REDIS_URL=redis://${{ secrets.MEMORYSTORE_IP }}:6379,GOOGLE_GENAI_USE_VERTEXAI=TRUE,WORKER_QUEUE=fast"
-          --no-allow-unauthenticated
+      # Deploy both workers in parallel within one step
+      - name: Deploy Fast + Slow Workers
+        run: |
+          gcloud run deploy ${{ env.WORKER_FAST_SERVICE }} \
+            --image ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --command="python","-m","lecturelink_api.worker_main","--queue","fast" \
+            --memory 1Gi \
+            --cpu 1 \
+            --min-instances 1 \
+            --max-instances 3 \
+            --no-cpu-throttling \
+            --vpc-connector=${{ env.VPC_CONNECTOR }} \
+            --service-account=${{ secrets.RUNTIME_SERVICE_ACCOUNT }} \
+            --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest" \
+            --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},REDIS_URL=redis://${{ secrets.MEMORYSTORE_IP }}:6379,GOOGLE_GENAI_USE_VERTEXAI=TRUE,WORKER_QUEUE=fast" \
+            --no-allow-unauthenticated &
+          FAST_PID=$!
 
-      - name: Deploy Slow Worker (lectures, quizzes, materials)
-        run: >-
-          gcloud run deploy ${{ env.WORKER_SLOW_SERVICE }}
-          --image ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:${{ github.sha }}
-          --region ${{ env.REGION }}
-          --platform managed
-          --command="python","-m","lecturelink_api.worker_main","--queue","slow"
-          --memory 1Gi
-          --cpu 1
-          --min-instances 1
-          --max-instances 5
-          --no-cpu-throttling
-          --vpc-connector=${{ env.VPC_CONNECTOR }}
-          --service-account=${{ secrets.RUNTIME_SERVICE_ACCOUNT }}
-          --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest"
-          --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},REDIS_URL=redis://${{ secrets.MEMORYSTORE_IP }}:6379,GOOGLE_GENAI_USE_VERTEXAI=TRUE,WORKER_QUEUE=slow"
-          --no-allow-unauthenticated
+          gcloud run deploy ${{ env.WORKER_SLOW_SERVICE }} \
+            --image ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --command="python","-m","lecturelink_api.worker_main","--queue","slow" \
+            --memory 1Gi \
+            --cpu 1 \
+            --min-instances 1 \
+            --max-instances 5 \
+            --no-cpu-throttling \
+            --vpc-connector=${{ env.VPC_CONNECTOR }} \
+            --service-account=${{ secrets.RUNTIME_SERVICE_ACCOUNT }} \
+            --set-secrets="SUPABASE_URL=SUPABASE_URL:latest,SUPABASE_ANON_KEY=SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest" \
+            --set-env-vars="ENVIRONMENT=production,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},REDIS_URL=redis://${{ secrets.MEMORYSTORE_IP }}:6379,GOOGLE_GENAI_USE_VERTEXAI=TRUE,WORKER_QUEUE=slow" \
+            --no-allow-unauthenticated &
+          SLOW_PID=$!
+
+          wait $FAST_PID $SLOW_PID
 
   # ---------------------------------------------------------------------------
   # Job 3c: Deploy Web to Cloud Run
