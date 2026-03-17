@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-from lecturelink_api.agents.syllabus_processor import _split_bulk_assessments
+from lecturelink_api.agents.syllabus_processor import (
+    _dedup_assessments,
+    _fix_split_assessment_weights,
+    _split_bulk_assessments,
+)
 from lecturelink_api.models.syllabus_models import (
     AssessmentExtraction,
     ExtractedField,
+    GradeComponent,
     SyllabusExtraction,
 )
 
@@ -167,3 +172,193 @@ class TestSplitBulkAssessments:
 
         assert len(extraction.assessments) == 5
         assert all(a.weight_percent.value == 3.0 for a in extraction.assessments)
+
+
+# ---------------------------------------------------------------------------
+# Already-split detection
+# ---------------------------------------------------------------------------
+
+
+class TestAlreadySplitDetection:
+    def test_gemini_already_split_removes_bulk_parent(self):
+        """If Gemini created individual rows, remove the bulk parent, don't re-split."""
+        assessments = [
+            _make_assessment("Group Discussions", atype="participation", weight=9.0),
+            _make_assessment("Group Discussion 1", atype="participation", weight=1.5, due_raw="Class 2"),
+            _make_assessment("Group Discussion 2", atype="participation", weight=1.5, due_raw="Class 3"),
+            _make_assessment("Group Discussion 3", atype="participation", weight=1.5, due_raw="Class 5"),
+        ]
+        schedule = [
+            {"week_number": 2, "topics": [], "due_items": ["Group Discussion 1"]},
+            {"week_number": 3, "topics": [], "due_items": ["Group Discussion 2"]},
+            {"week_number": 5, "topics": [], "due_items": ["Group Discussion 3"]},
+        ]
+
+        extraction = _make_extraction(assessments, schedule)
+        _split_bulk_assessments(extraction, schedule)
+
+        titles = [str(a.title.value) for a in extraction.assessments]
+        assert "Group Discussions" not in titles  # bulk parent removed
+        assert titles.count("Group Discussion 1") == 1  # no duplicates
+        assert titles.count("Group Discussion 2") == 1
+        assert titles.count("Group Discussion 3") == 1
+
+    def test_gemini_split_no_duplicate_creation(self):
+        """When Gemini already split quizzes, don't create a second set."""
+        assessments = [
+            _make_assessment("Tableau Quizzes", atype="quiz", weight=16.0),
+            _make_assessment("Tableau Quiz 1", atype="quiz", weight=4.0, due_raw="Class 3"),
+            _make_assessment("Tableau Quiz 2", atype="quiz", weight=4.0, due_raw="Class 5"),
+            _make_assessment("Tableau Quiz 3", atype="quiz", weight=4.0, due_raw="Class 7"),
+            _make_assessment("Tableau Quiz 4", atype="quiz", weight=4.0, due_raw="Class 10"),
+        ]
+        schedule = [
+            {"week_number": 3, "topics": [], "due_items": ["Tableau Quiz 1"]},
+            {"week_number": 5, "topics": [], "due_items": ["Tableau Quiz 2"]},
+            {"week_number": 7, "topics": [], "due_items": ["Tableau Quiz 3"]},
+            {"week_number": 10, "topics": [], "due_items": ["Tableau Quiz 4"]},
+        ]
+
+        extraction = _make_extraction(assessments, schedule)
+        _split_bulk_assessments(extraction, schedule)
+
+        quizzes = [a for a in extraction.assessments if "quiz" in str(a.title.value).lower()]
+        assert len(quizzes) == 4  # NOT 8 (no double-split)
+        assert all(a.weight_percent.value == 4.0 for a in quizzes)
+
+    def test_numbered_individual_not_treated_as_bulk(self):
+        """An individual numbered assessment (e.g. 'Quiz 1') is not a bulk parent."""
+        assessments = [
+            _make_assessment("Quiz 1", atype="quiz", weight=4.0, due_raw="Class 3"),
+            _make_assessment("Quiz 2", atype="quiz", weight=4.0, due_raw="Class 5"),
+        ]
+        schedule = [
+            {"week_number": 3, "topics": [], "due_items": ["Quiz 1"]},
+            {"week_number": 5, "topics": [], "due_items": ["Quiz 2"]},
+        ]
+
+        extraction = _make_extraction(assessments, schedule)
+        _split_bulk_assessments(extraction, schedule)
+
+        # Both should remain (they're individuals, not bulk parents)
+        assert len(extraction.assessments) == 2
+
+
+# ---------------------------------------------------------------------------
+# Dedup assessments
+# ---------------------------------------------------------------------------
+
+
+class TestDedupAssessments:
+    def test_removes_exact_duplicates(self):
+        assessments = [
+            _make_assessment("Quiz 1", atype="quiz", weight=4.0, due_raw="Class 3"),
+            _make_assessment("Quiz 1", atype="quiz", weight=4.0, due_raw="Class 3"),
+            _make_assessment("Quiz 2", atype="quiz", weight=4.0, due_raw="Class 5"),
+        ]
+        extraction = _make_extraction(assessments)
+        _dedup_assessments(extraction)
+
+        assert len(extraction.assessments) == 2
+        titles = [str(a.title.value) for a in extraction.assessments]
+        assert titles.count("Quiz 1") == 1
+        assert titles.count("Quiz 2") == 1
+
+    def test_keeps_different_due_dates(self):
+        """Same title but different due dates are NOT duplicates."""
+        assessments = [
+            _make_assessment("Quiz 1", atype="quiz", weight=4.0, due_raw="Class 3"),
+            _make_assessment("Quiz 1", atype="quiz", weight=4.0, due_raw="Class 5"),
+        ]
+        extraction = _make_extraction(assessments)
+        _dedup_assessments(extraction)
+
+        assert len(extraction.assessments) == 2
+
+    def test_keeps_higher_confidence(self):
+        """When deduping, keep the one with higher confidence."""
+        a1 = _make_assessment("Quiz 1", atype="quiz", weight=4.0, due_raw="Class 3")
+        a1.title.confidence = 0.5
+        a2 = _make_assessment("Quiz 1", atype="quiz", weight=4.0, due_raw="Class 3")
+        a2.title.confidence = 0.9
+        extraction = _make_extraction([a1, a2])
+        _dedup_assessments(extraction)
+
+        assert len(extraction.assessments) == 1
+        assert extraction.assessments[0].title.confidence == 0.9
+
+    def test_no_duplicates_no_change(self):
+        assessments = [
+            _make_assessment("Quiz 1", atype="quiz", weight=4.0, due_raw="Class 3"),
+            _make_assessment("Quiz 2", atype="quiz", weight=4.0, due_raw="Class 5"),
+        ]
+        extraction = _make_extraction(assessments)
+        _dedup_assessments(extraction)
+
+        assert len(extraction.assessments) == 2
+
+
+# ---------------------------------------------------------------------------
+# Fix split assessment weights
+# ---------------------------------------------------------------------------
+
+
+class TestFixSplitWeights:
+    def test_corrects_total_weight_to_per_instance(self):
+        """6 discussions each at 9% -> corrected to 1.5% each."""
+        assessments = [
+            _make_assessment("Group Discussion 1", atype="participation", weight=9.0),
+            _make_assessment("Group Discussion 2", atype="participation", weight=9.0),
+            _make_assessment("Group Discussion 3", atype="participation", weight=9.0),
+            _make_assessment("Group Discussion 4", atype="participation", weight=9.0),
+            _make_assessment("Group Discussion 5", atype="participation", weight=9.0),
+            _make_assessment("Group Discussion 6", atype="participation", weight=9.0),
+        ]
+        grade_breakdown = [
+            GradeComponent(
+                name=ExtractedField(value="Group Discussions", confidence=0.9),
+                weight_percent=ExtractedField(value=9.0, confidence=0.9),
+            ),
+        ]
+        extraction = _make_extraction(assessments)
+        extraction.grade_breakdown = grade_breakdown
+
+        _fix_split_assessment_weights(extraction)
+
+        for a in extraction.assessments:
+            assert a.weight_percent.value == 1.5
+
+    def test_leaves_correct_weights_alone(self):
+        """If weights already per-instance, don't change them."""
+        assessments = [
+            _make_assessment("Quiz 1", atype="quiz", weight=4.0),
+            _make_assessment("Quiz 2", atype="quiz", weight=4.0),
+            _make_assessment("Quiz 3", atype="quiz", weight=4.0),
+            _make_assessment("Quiz 4", atype="quiz", weight=4.0),
+        ]
+        grade_breakdown = [
+            GradeComponent(
+                name=ExtractedField(value="Quizzes", confidence=0.9),
+                weight_percent=ExtractedField(value=16.0, confidence=0.9),
+            ),
+        ]
+        extraction = _make_extraction(assessments)
+        extraction.grade_breakdown = grade_breakdown
+
+        _fix_split_assessment_weights(extraction)
+
+        for a in extraction.assessments:
+            assert a.weight_percent.value == 4.0  # unchanged
+
+    def test_no_grade_breakdown_no_change(self):
+        """Without grade breakdown, can't detect the error."""
+        assessments = [
+            _make_assessment("Quiz 1", atype="quiz", weight=16.0),
+            _make_assessment("Quiz 2", atype="quiz", weight=16.0),
+        ]
+        extraction = _make_extraction(assessments)
+
+        _fix_split_assessment_weights(extraction)
+
+        for a in extraction.assessments:
+            assert a.weight_percent.value == 16.0  # unchanged

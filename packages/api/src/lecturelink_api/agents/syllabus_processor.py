@@ -562,6 +562,10 @@ def _split_bulk_assessments(
     - Schedule data has "Tableau Quiz 1" in week 3, "Tableau Quiz 2" in week 5, etc.
 
     Splits into individual assessments with per-instance weights and due dates.
+
+    IMPORTANT: If Gemini already split the assessments (individual numbered
+    entries already exist), this function skips the split to avoid duplication
+    and removes the bulk parent entry instead.
     """
     # Build map: normalized title → "Class N" from schedule due_items
     schedule_due_map: dict[str, str] = {}
@@ -574,6 +578,12 @@ def _split_bulk_assessments(
 
     if not schedule_due_map:
         return
+
+    # Build set of existing assessment titles for already-split detection
+    existing_titles = {
+        str(a.title.value or "").strip().lower()
+        for a in extraction.assessments
+    }
 
     indices_to_remove: list[int] = []
     new_assessments: list[AssessmentExtraction] = []
@@ -610,6 +620,21 @@ def _split_bulk_assessments(
             continue
 
         matching_instances.sort(key=lambda x: x["number"])
+
+        # Check if Gemini already created the individual entries
+        already_split = any(
+            inst["original_key"] in existing_titles
+            for inst in matching_instances
+        )
+
+        if already_split:
+            # Individual entries already exist — don't re-split.
+            # If this is the bulk parent (no trailing number), remove it.
+            if not re.search(r"\d+\s*$", title):
+                indices_to_remove.append(i)
+            continue
+
+        # Not already split — create individual assessments
         per_weight = round(float(weight) / len(matching_instances), 2)
 
         for inst in matching_instances:
@@ -631,11 +656,101 @@ def _split_bulk_assessments(
 
         indices_to_remove.append(i)
 
-    if indices_to_remove:
+    if indices_to_remove or new_assessments:
         extraction.assessments = [
             a for idx, a in enumerate(extraction.assessments)
             if idx not in indices_to_remove
         ] + new_assessments
+
+
+def _dedup_assessments(extraction: SyllabusExtraction) -> None:
+    """Remove duplicate assessments with the same title and due date.
+
+    Keeps the first occurrence (or higher-confidence one if tied).
+    Handles the case where Gemini AND the post-processor both created
+    the same individual assessment.
+    """
+    seen: dict[tuple[str, str], int] = {}  # (title, due_date) → index
+    to_keep: list[int] = []
+
+    for i, a in enumerate(extraction.assessments):
+        title = str(a.title.value or "").strip().lower()
+        due = str(a.due_date_raw.value or "").strip().lower()
+        key = (title, due)
+
+        if key not in seen:
+            seen[key] = i
+            to_keep.append(i)
+        else:
+            # Keep the one with higher confidence
+            existing_idx = seen[key]
+            existing = extraction.assessments[existing_idx]
+            existing_conf = existing.title.confidence or 0
+            new_conf = a.title.confidence or 0
+
+            if new_conf > existing_conf:
+                to_keep.remove(existing_idx)
+                to_keep.append(i)
+                seen[key] = i
+
+    if len(to_keep) < len(extraction.assessments):
+        extraction.assessments = [extraction.assessments[i] for i in sorted(to_keep)]
+
+
+def _fix_split_assessment_weights(extraction: SyllabusExtraction) -> None:
+    """Correct weights for assessments that Gemini split but assigned total weight to each.
+
+    Detects groups of assessments with the same base name and numbered suffixes
+    where each has the total group weight instead of per-instance weight.
+
+    Example: 6 × "Group Discussion N" each at 9% → should be 1.5% each.
+    Cross-references grade_breakdown to detect the error.
+    """
+    # Build component weight map from grade breakdown
+    component_weights: dict[str, float] = {}
+    for comp in extraction.grade_breakdown:
+        name = str(comp.name.value or "").strip().lower()
+        weight = comp.weight_percent.value
+        if name and weight is not None:
+            component_weights[name] = float(weight)
+
+    if not component_weights:
+        return
+
+    # Group assessments by base name (strip trailing numbers)
+    groups: dict[str, list[int]] = {}
+    for i, a in enumerate(extraction.assessments):
+        title = str(a.title.value or "").strip()
+        base = re.sub(r"\s*#?\d+\s*$", "", title).strip().lower()
+        if base:
+            groups.setdefault(base, []).append(i)
+
+    # For each group with 2+ members, check if weights match a component total
+    for base, indices in groups.items():
+        if len(indices) < 2:
+            continue
+
+        # Find matching grade breakdown component
+        matching_comp_weight = None
+        base_singular = _singularize(base)
+        for comp_name, comp_weight in component_weights.items():
+            comp_singular = _singularize(comp_name)
+            if base_singular in comp_singular or comp_singular in base_singular:
+                matching_comp_weight = comp_weight
+                break
+
+        if matching_comp_weight is None:
+            continue
+
+        # Check if each instance has the TOTAL weight instead of per-instance
+        per_instance_weight = round(matching_comp_weight / len(indices), 2)
+
+        for idx in indices:
+            a = extraction.assessments[idx]
+            current_weight = a.weight_percent.value
+            if current_weight is not None and abs(float(current_weight) - matching_comp_weight) < 0.5:
+                a.weight_percent.value = per_instance_weight
+                a.weight_percent.confidence = min(a.weight_percent.confidence, 0.7)
 
 
 def validate_no_near_duplicates(extraction: SyllabusExtraction) -> list[str]:
@@ -705,10 +820,12 @@ def post_process_extraction(
     _normalize_assessment_types(extraction)
     _fill_missing_fields(extraction)
     _reconcile_assessment_weights(extraction)
+    _fix_split_assessment_weights(extraction)
 
     # Split bulk assessments (e.g. "4 Quizzes at 4% each") into individuals
     schedule = raw_result.get("weekly_schedule", [])
     _split_bulk_assessments(extraction, schedule)
+    _dedup_assessments(extraction)
 
     # Re-validate grade weights (don't trust the LLM's math)
     weight_issues = validate_grade_weights(extraction)
