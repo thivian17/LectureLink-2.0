@@ -397,6 +397,96 @@ class TestSyllabi:
         assert resp.json()["needs_review"] is False
 
 
+class TestSyllabusLock:
+    """Tests for the confirmed-syllabus upload guard."""
+
+    @pytest.mark.asyncio
+    async def test_upload_blocked_when_syllabus_confirmed(self, client):
+        """Upload should return 409 if a confirmed syllabus exists."""
+        course_id = str(uuid.uuid4())
+
+        with patch("lecturelink_api.routers.syllabi.create_client") as mock_create:
+            sb = MagicMock()
+            mock_create.return_value = sb
+
+            course_chain = _mock_chain({"id": course_id})
+            confirmed_chain = _mock_chain([{
+                "id": str(uuid.uuid4()),
+                "needs_review": False,
+                "reviewed_at": _now_str(),
+            }])
+
+            sb.table.side_effect = lambda name: (
+                course_chain if name == "courses" else confirmed_chain
+            )
+
+            resp = await client.post(
+                "/api/syllabi/upload",
+                data={"course_id": course_id},
+                files={"file": ("syllabus.pdf", b"%PDF-1.4 fake", "application/pdf")},
+            )
+
+        assert resp.status_code == 409
+        assert "confirmed syllabus" in resp.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_upload_allowed_when_no_syllabus(self, client):
+        """Upload should succeed when no syllabus exists for the course."""
+        course_id = str(uuid.uuid4())
+        syllabus_id = str(uuid.uuid4())
+
+        with patch("lecturelink_api.routers.syllabi.create_client") as mock_create:
+            sb = MagicMock()
+            mock_create.return_value = sb
+
+            course_chain = _mock_chain({"id": course_id})
+            # No existing syllabus
+            no_syllabus_chain = _mock_chain([])
+            # General chain for deletes + insert
+            general_chain = _mock_chain([{"id": syllabus_id, "status": "processing"}])
+
+            call_count = {"syllabi": 0}
+
+            def table_side_effect(name):
+                if name == "courses":
+                    return course_chain
+                if name == "syllabi":
+                    call_count["syllabi"] += 1
+                    if call_count["syllabi"] == 1:
+                        return no_syllabus_chain  # existing syllabus check
+                    return general_chain  # delete old / insert new
+                return general_chain  # lectures, assessments deletes
+
+            sb.table.side_effect = table_side_effect
+            sb.storage.from_.return_value.upload.return_value = None
+
+            from unittest.mock import AsyncMock
+
+            from lecturelink_api.services.task_queue import TaskQueueService, get_task_queue
+
+            mock_tq = MagicMock(spec=TaskQueueService)
+            mock_tq.enqueue_syllabus_processing = AsyncMock()
+            app.dependency_overrides[get_task_queue] = lambda: mock_tq
+
+            try:
+                resp = await client.post(
+                    "/api/syllabi/upload",
+                    data={"course_id": course_id},
+                    files={"file": ("syllabus.pdf", b"%PDF-1.4 fake", "application/pdf")},
+                )
+            finally:
+                app.dependency_overrides.pop(get_task_queue, None)
+
+        assert resp.status_code == 201
+        assert resp.json()["status"] == "processing"
+
+    @pytest.mark.asyncio
+    async def test_re_extract_endpoint_removed(self, client):
+        """The re-extract endpoint should no longer exist."""
+        resp = await client.post(f"/api/syllabi/{uuid.uuid4()}/re-extract")
+        assert resp.status_code == 405 or resp.status_code == 404
+
+
 # ---------------------------------------------------------------------------
 # Assessment tests
 # ---------------------------------------------------------------------------

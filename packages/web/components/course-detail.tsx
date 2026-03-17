@@ -12,7 +12,6 @@ import {
   Pencil,
   Scale,
   Trash2,
-  UploadCloud,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -109,11 +108,9 @@ export function CourseDetail({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [syllabus, setSyllabus] = useState<Syllabus | null>(initialSyllabus);
-  const [reuploadOpen, setReuploadOpen] = useState(false);
 
   function handleUploadComplete(newSyllabus: Syllabus) {
     setSyllabus(newSyllabus);
-    setReuploadOpen(false);
     router.refresh();
   }
 
@@ -342,7 +339,7 @@ export function CourseDetail({
             </Card>
           )}
 
-          {!syllabus || reuploadOpen ? (
+          {!syllabus ? (
             <SyllabusUpload
               courseId={course.id}
               compact
@@ -351,26 +348,16 @@ export function CourseDetail({
           ) : (
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CardTitle>Syllabus</CardTitle>
-                    {syllabus.needs_review && !syllabus.reviewed_at && (
-                      <Badge
-                        variant="outline"
-                        className="text-amber-600 border-amber-300"
-                      >
-                        Needs Review
-                      </Badge>
-                    )}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setReuploadOpen(true)}
-                  >
-                    <UploadCloud className="mr-2 h-4 w-4" />
-                    Re-upload
-                  </Button>
+                <div className="flex items-center gap-2">
+                  <CardTitle>Syllabus</CardTitle>
+                  {syllabus.needs_review && !syllabus.reviewed_at && (
+                    <Badge
+                      variant="outline"
+                      className="text-amber-600 border-amber-300"
+                    >
+                      Needs Review
+                    </Badge>
+                  )}
                 </div>
                 <CardDescription>
                   {syllabus.file_name ?? "Uploaded syllabus"}
@@ -389,7 +376,7 @@ export function CourseDetail({
         </TabsContent>
 
         <TabsContent value="syllabus" className="mt-6 space-y-6">
-          {!syllabus || reuploadOpen ? (
+          {!syllabus ? (
             <SyllabusUpload
               courseId={course.id}
               onUploadComplete={handleUploadComplete}
@@ -397,22 +384,12 @@ export function CourseDetail({
           ) : syllabus.needs_review && !syllabus.reviewed_at ? (
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Review Extraction</CardTitle>
-                    <CardDescription>
-                      AI has extracted the following from your syllabus. Please
-                      review for accuracy.
-                    </CardDescription>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setReuploadOpen(true)}
-                  >
-                    <UploadCloud className="mr-2 h-4 w-4" />
-                    Re-upload
-                  </Button>
+                <div>
+                  <CardTitle>Review Extraction</CardTitle>
+                  <CardDescription>
+                    AI has extracted the following from your syllabus. Please
+                    review for accuracy.
+                  </CardDescription>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -453,47 +430,19 @@ export function CourseDetail({
           ) : (
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Syllabus Extraction</CardTitle>
-                    <CardDescription>
-                      {syllabus.reviewed_at
-                        ? `Reviewed on ${format(new Date(syllabus.reviewed_at), "MMMM d, yyyy")}`
-                        : "Extraction complete"}
-                    </CardDescription>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setReuploadOpen(true)}
-                  >
-                    <UploadCloud className="mr-2 h-4 w-4" />
-                    Re-upload
-                  </Button>
+                <div>
+                  <CardTitle>Syllabus</CardTitle>
+                  <CardDescription>
+                    {syllabus.reviewed_at
+                      ? "Reviewed and confirmed"
+                      : "Processed"}
+                  </CardDescription>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {syllabus.grade_breakdown.length > 0 && (
-                  <div>
-                    <p className="text-sm font-medium mb-2">Grade Breakdown</p>
-                    <div className="space-y-1">
-                      {syllabus.grade_breakdown.map((item, i) => {
-                        const gb = item as Record<string, unknown>;
-                        return (
-                          <div
-                            key={i}
-                            className="flex justify-between text-sm"
-                          >
-                            <span>{gb.component as string}</span>
-                            <span className="text-muted-foreground">
-                              {gb.weight as number}%
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  {syllabus.file_name}
+                </p>
               </CardContent>
             </Card>
           )}

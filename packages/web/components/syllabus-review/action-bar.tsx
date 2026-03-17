@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, RefreshCw, CheckCircle2, Save } from "lucide-react";
+import { Loader2, CheckCircle2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface ActionBarProps {
@@ -11,7 +11,6 @@ interface ActionBarProps {
   isSaving: boolean;
   onAcceptHighConfidence: () => void;
   onSave: () => void;
-  onReExtract: () => void;
   hideConfidence?: boolean;
 }
 
@@ -23,7 +22,6 @@ export function ActionBar({
   isSaving,
   onAcceptHighConfidence,
   onSave,
-  onReExtract,
   hideConfidence,
 }: ActionBarProps) {
   return (
@@ -57,15 +55,6 @@ export function ActionBar({
 
         {/* Actions */}
         <div className="flex items-center gap-2 shrink-0">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onReExtract}
-            disabled={isSaving}
-          >
-            <RefreshCw className="mr-2 h-3.5 w-3.5" />
-            Re-extract
-          </Button>
           {!hideConfidence && (
             <Button
               variant="secondary"

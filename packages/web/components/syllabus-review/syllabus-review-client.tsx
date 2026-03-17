@@ -248,11 +248,6 @@ export function SyllabusReviewClient({
     router,
   ]);
 
-  // --- Re-extract ---
-  const handleReExtract = useCallback(() => {
-    router.push(`/dashboard/courses/${courseId}`);
-  }, [router, courseId]);
-
   // --- Computed stats ---
   const highConfidenceCount = extraction.assessments.filter(
     (a) =>
@@ -385,7 +380,6 @@ export function SyllabusReviewClient({
         isSaving={isSaving}
         onAcceptHighConfidence={handleAcceptAllHigh}
         onSave={handleSave}
-        onReExtract={handleReExtract}
         hideConfidence={hideConfidence}
       />
     </div>

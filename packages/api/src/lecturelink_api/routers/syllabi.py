@@ -61,6 +61,22 @@ async def upload_syllabus(
     if not course.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
 
+    # Reject upload if a confirmed syllabus already exists for this course
+    existing_syllabus = (
+        sb.table("syllabi")
+        .select("id, needs_review, reviewed_at")
+        .eq("course_id", course_id)
+        .execute()
+    )
+    if existing_syllabus.data:
+        syl = existing_syllabus.data[0]
+        if not syl.get("needs_review", True) or syl.get("reviewed_at"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This course already has a confirmed syllabus. "
+                       "To upload a new syllabus, please delete the course and create a new one.",
+            )
+
     file_bytes = await file.read()
     file_name = file.filename or "syllabus"
     storage_path = f"{user['id']}/{course_id}/{file_name}"
