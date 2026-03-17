@@ -243,7 +243,9 @@ async def get_academic_timeline(
                 continue
 
             course = course_map.get(lec["course_id"], {})
-            lec_date = str(lec.get("lecture_date") or today_iso)[:10]
+            if not lec.get("lecture_date"):
+                continue
+            lec_date = str(lec["lecture_date"])[:10]
 
             items.append(
                 TimelineItem(
