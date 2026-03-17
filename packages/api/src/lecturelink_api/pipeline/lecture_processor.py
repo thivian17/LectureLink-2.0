@@ -90,6 +90,25 @@ async def process_lecture(
         pass  # observability is always non-fatal
 
     try:
+        # Guard: verify the lecture row still exists before starting.
+        # It may have been deleted (e.g. syllabus re-upload) between
+        # enqueue and worker pickup.
+        _lecture_check = (
+            supabase.table("lectures")
+            .select("id")
+            .eq("id", lecture_id)
+            .execute()
+        )
+        if not _lecture_check.data:
+            logger.warning(
+                "Lecture %s no longer exists in DB — aborting processing",
+                lecture_id,
+            )
+            raise LectureProcessingError(
+                f"Lecture {lecture_id} was deleted before processing could start",
+                stage="pre_check",
+            )
+
         # If reprocessing, clean up old data first
         if is_reprocess:
             cleanup_lecture_data(supabase, lecture_id)

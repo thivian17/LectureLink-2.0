@@ -74,5 +74,5 @@ class TestRateLimitValues:
         assert RATE_LIMITS["qa_question"]["window_hours"] == 1
 
     def test_lecture_upload(self):
-        assert RATE_LIMITS["lecture_upload"]["max_count"] == 30
+        assert RATE_LIMITS["lecture_upload"]["max_count"] == 100
         assert RATE_LIMITS["lecture_upload"]["window_hours"] == 24

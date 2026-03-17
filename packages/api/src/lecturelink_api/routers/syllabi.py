@@ -83,7 +83,10 @@ async def upload_syllabus(
 
     # Clean up old data for this course before re-upload (blank slate).
     # lectures CASCADE → lecture_chunks, concepts → concept_assessment_links, concept_bkt_state
-    sb.table("lectures").delete().eq("course_id", course_id).execute()
+    # Skip lectures that are currently processing to avoid FK violations in the pipeline.
+    sb.table("lectures").delete().eq("course_id", course_id).neq(
+        "processing_status", "processing"
+    ).execute()
     sb.table("assessments").delete().eq("course_id", course_id).execute()
     sb.table("syllabi").delete().eq("course_id", course_id).execute()
 
