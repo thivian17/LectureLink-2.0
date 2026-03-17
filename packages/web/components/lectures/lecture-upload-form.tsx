@@ -49,7 +49,7 @@ export function LectureUploadForm({
   const [lectureId, setLectureId] = useState<string | null>(null);
 
   const canSubmit =
-    audioFiles.length > 0 && lectureNumber.trim().length > 0 && !uploading;
+    slideFiles.length > 0 && lectureNumber.trim().length > 0 && !uploading;
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -125,35 +125,12 @@ export function LectureUploadForm({
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Audio recording */}
+        {/* Lecture slides */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Audio Recording *</CardTitle>
+            <CardTitle className="text-base">Lecture Slides *</CardTitle>
             <CardDescription>
-              Upload the lecture audio recording. At least one audio file is
-              required.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <UploadDropzone
-              files={audioFiles}
-              onFilesChange={setAudioFiles}
-              accept="audio"
-            />
-            {audioFiles.length === 0 && (
-              <p className="mt-2 text-xs text-destructive">
-                Please add at least one audio file.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Lecture slides (optional) */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Lecture Slides</CardTitle>
-            <CardDescription>
-              Optionally upload slide decks to align with the recording.
+              Upload the lecture slide deck. At least one file is required.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -161,6 +138,28 @@ export function LectureUploadForm({
               files={slideFiles}
               onFilesChange={setSlideFiles}
               accept="slides"
+            />
+            {slideFiles.length === 0 && (
+              <p className="mt-2 text-xs text-destructive">
+                Please add at least one slide file.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Audio recording (optional) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Audio Recording</CardTitle>
+            <CardDescription>
+              Optionally upload an audio recording to align with the slides.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <UploadDropzone
+              files={audioFiles}
+              onFilesChange={setAudioFiles}
+              accept="audio"
             />
           </CardContent>
         </Card>
