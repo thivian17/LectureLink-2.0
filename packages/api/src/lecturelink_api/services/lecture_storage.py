@@ -31,6 +31,10 @@ def store_chunks(
 
     rows = []
     for chunk in chunks:
+        # Ensure embedding is plain Python list[float] — numpy types break JSON serialization
+        raw_emb = chunk.get("embedding")
+        embedding = [float(v) for v in raw_emb] if raw_emb is not None else None
+
         row = {
             "lecture_id": lecture_id,
             "user_id": user_id,
@@ -39,7 +43,7 @@ def store_chunks(
             "start_time": chunk.get("start_time"),
             "end_time": chunk.get("end_time"),
             "slide_number": chunk.get("slide_number"),
-            "embedding": chunk.get("embedding"),
+            "embedding": embedding,
             "metadata": chunk.get("metadata", {}),
             # Do NOT include 'fts' — it's a GENERATED column
         }

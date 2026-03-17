@@ -261,6 +261,10 @@ async def _insert_concept(
     concept: dict,
 ) -> str:
     """Insert a genuinely new concept and its junction entry."""
+    # Ensure embedding is plain Python list[float] — numpy types break JSON serialization
+    raw_emb = concept.get("embedding")
+    embedding = [float(v) for v in raw_emb] if raw_emb is not None else None
+
     row = {
         "course_id": course_id,
         "lecture_id": lecture_id,
@@ -270,7 +274,7 @@ async def _insert_concept(
         "category": concept.get("category", "concept"),
         "difficulty_estimate": concept.get("difficulty_estimate", 0.5),
         "source_chunk_ids": concept.get("source_chunk_ids", []),
-        "embedding": concept.get("embedding"),
+        "embedding": embedding,
         "merged_titles": [concept["title"]],
         "subconcepts": [],
     }

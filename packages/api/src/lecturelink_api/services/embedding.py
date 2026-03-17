@@ -35,7 +35,7 @@ async def embed_query(query: str) -> list[float]:
                 "output_dimensionality": EMBEDDING_DIMENSIONS,
             },
         )
-        return result.embeddings[0].values
+        return [float(v) for v in result.embeddings[0].values]
     except RuntimeError as e:
         if "Event loop is closed" in str(e):
             logger.warning("Stale embedding client detected, recreating")
@@ -48,7 +48,7 @@ async def embed_query(query: str) -> list[float]:
                     "output_dimensionality": EMBEDDING_DIMENSIONS,
                 },
             )
-            return result.embeddings[0].values
+            return [float(v) for v in result.embeddings[0].values]
         raise
     except Exception as e:
         logger.error(f"Query embedding failed: {e}")
@@ -88,7 +88,9 @@ async def embed_texts(
                         "output_dimensionality": EMBEDDING_DIMENSIONS,
                     },
                 )
-                embeddings.extend([e.values for e in result.embeddings])
+                embeddings.extend(
+                    [float(v) for v in e.values] for e in result.embeddings
+                )
                 break
             except RuntimeError as e:
                 if "Event loop is closed" in str(e):

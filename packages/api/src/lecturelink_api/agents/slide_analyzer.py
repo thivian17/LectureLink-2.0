@@ -84,6 +84,12 @@ async def analyze_slides(slides_url: str) -> list[dict]:
         except SlideAnalysisError:
             raise
         except Exception as e:
+            # Don't retry on permanent errors (bad file, no pages, etc.)
+            err_str = str(e)
+            if "no pages" in err_str.lower() or "INVALID_ARGUMENT" in err_str:
+                raise SlideAnalysisError(
+                    f"Slide file is invalid or empty: {e}"
+                ) from e
             last_error = e
             delay = _RETRY_BASE_DELAY * (2**attempt)
             logger.warning(
