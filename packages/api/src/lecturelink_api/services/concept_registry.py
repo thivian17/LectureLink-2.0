@@ -12,6 +12,7 @@ Matching algorithm (two-pass):
 
 from __future__ import annotations
 
+import json
 import logging
 
 import numpy as np
@@ -89,9 +90,13 @@ async def register_concepts(
     existing_with_embeddings = [ec for ec in existing if ec.get("embedding")]
     existing_emb_matrix = None
     if existing_with_embeddings:
-        existing_emb_matrix = np.array(
-            [ec["embedding"] for ec in existing_with_embeddings]
-        )
+        parsed = []
+        for ec in existing_with_embeddings:
+            emb = ec["embedding"]
+            if isinstance(emb, str):
+                emb = json.loads(emb)
+            parsed.append(emb)
+        existing_emb_matrix = np.array(parsed, dtype=float)
         norms = np.linalg.norm(existing_emb_matrix, axis=1, keepdims=True)
         norms = np.maximum(norms, 1e-10)
         existing_emb_matrix = existing_emb_matrix / norms
@@ -312,7 +317,7 @@ async def _confirm_merge(
                 max_output_tokens=10,
             ),
         )
-        answer = response.text.strip().lower()
+        answer = (response.text or "").strip().lower()
         return answer.startswith("yes")
     except Exception:
         logger.warning("LLM merge confirmation failed, defaulting to no merge")

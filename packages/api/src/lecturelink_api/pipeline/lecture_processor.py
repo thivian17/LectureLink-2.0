@@ -448,7 +448,7 @@ def _handle_failure(
             error=error[:1000],
         )
         (
-            supabase.rpc("increment_retry_count", {"p_lecture_id": lecture_id})
+            supabase.rpc("increment_lecture_retry_count", {"p_lecture_id": lecture_id})
             .execute()
         )
     except Exception as update_err:

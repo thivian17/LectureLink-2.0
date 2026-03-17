@@ -62,7 +62,7 @@ async def generate_title(aligned_segments: list[dict]) -> str | None:
             ),
         )
 
-        title = response.text.strip().strip('"').strip("'")
+        title = (response.text or "").strip().strip('"').strip("'")
         if not title or len(title) > 200:
             return None
 
