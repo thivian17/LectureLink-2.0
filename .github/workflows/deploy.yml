@@ -262,7 +262,7 @@ jobs:
             --platform managed \
             --command="python","-m","lecturelink_api.worker_main","--queue","slow" \
             --memory 2Gi \
-            --cpu 1 \
+            --cpu 2 \
             --min-instances 1 \
             --max-instances 5 \
             --no-cpu-throttling \
