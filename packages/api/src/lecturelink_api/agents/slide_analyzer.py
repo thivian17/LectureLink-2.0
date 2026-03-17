@@ -187,9 +187,17 @@ def get_slide_mime_type(file_path: str) -> str:
 
 
 def _file_part(file_path: str, mime_type: str) -> types.Part:
-    """Create a Gemini Part from a local file or URL."""
+    """Create a Gemini Part from a local file or URL.
+
+    Always downloads remote files first — Gemini's from_uri cannot
+    reliably fetch Supabase signed URLs.
+    """
     if file_path.startswith(("http://", "https://")):
-        return types.Part.from_uri(file_uri=file_path, mime_type=mime_type)
+        import httpx
+
+        resp = httpx.get(file_path, follow_redirects=True)
+        resp.raise_for_status()
+        return types.Part.from_bytes(data=resp.content, mime_type=mime_type)
 
     data = Path(file_path).read_bytes()
     return types.Part.from_bytes(data=data, mime_type=mime_type)
