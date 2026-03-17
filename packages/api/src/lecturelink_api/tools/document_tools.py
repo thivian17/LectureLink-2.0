@@ -240,6 +240,14 @@ async def _extract_docx(file_bytes: bytes) -> dict[str, Any]:
                 if text:
                     parts.append(f"{prefix}{text}")
 
+                # Also extract text boxes embedded inside this paragraph
+                # (inline drawings, anchored shapes within w:p elements)
+                textbox_texts = _extract_textbox_content(element)
+                for txt in textbox_texts:
+                    if txt not in seen_textbox_texts:
+                        seen_textbox_texts.add(txt)
+                        parts.append(txt)
+
             elif tag == qn("w:tbl"):
                 from docx.table import Table
 
@@ -247,6 +255,13 @@ async def _extract_docx(file_bytes: bytes) -> dict[str, Any]:
                 md = _table_to_markdown(tbl)
                 if md:
                     parts.append(md)
+
+                # Extract text boxes inside table cells (rare but possible)
+                textbox_texts = _extract_textbox_content(element)
+                for txt in textbox_texts:
+                    if txt not in seen_textbox_texts:
+                        seen_textbox_texts.add(txt)
+                        parts.append(txt)
 
             else:
                 # Handle text boxes inside mc:AlternateContent, w:drawing, etc.

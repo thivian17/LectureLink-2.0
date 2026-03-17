@@ -242,6 +242,25 @@ class TestTextboxExtraction:
         element = etree.fromstring(xml_str)
         assert _extract_textbox_content(element) == []
 
+    def test_inline_textbox_inside_paragraph(self):
+        """Text boxes embedded inside w:p elements (inline drawings) should be extracted."""
+        from lecturelink_api.tools.document_tools import _extract_textbox_content
+        from lxml import etree
+
+        # Simulate a paragraph containing an inline drawing with a text box
+        xml_str = (
+            '<w:p xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+            '     xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">'
+            '  <w:r><w:t>Regular text</w:t></w:r>'
+            '  <w:r><w:drawing><wps:wsp><wps:txbx><w:txbxContent>'
+            '    <w:p><w:r><w:t>MMAI 5090 3.00</w:t></w:r></w:p>'
+            '  </w:txbxContent></wps:txbx></wps:wsp></w:drawing></w:r>'
+            '</w:p>'
+        )
+        element = etree.fromstring(xml_str)
+        texts = _extract_textbox_content(element)
+        assert texts == ["MMAI 5090 3.00"]
+
     def test_multi_run_concatenation(self):
         from lecturelink_api.tools.document_tools import _extract_textbox_content
         from lxml import etree
