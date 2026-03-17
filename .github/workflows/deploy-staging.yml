@@ -31,7 +31,8 @@ env:
   REGION: us-central1
   API_SERVICE: lecturelink-api-staging
   WEB_SERVICE: lecturelink-web-staging
-  WORKER_SERVICE: lecturelink-worker-staging
+  WORKER_FAST_SERVICE: lecturelink-worker-fast-staging
+  WORKER_SLOW_SERVICE: lecturelink-worker-slow-staging
   VPC_CONNECTOR: lecturelink-connector
 
 permissions:
@@ -145,10 +146,10 @@ jobs:
             --allow-unauthenticated
 
   # ---------------------------------------------------------------------------
-  # Job 3b: Deploy Worker to Cloud Run
+  # Job 3b: Deploy Workers to Cloud Run (fast + slow queues)
   # ---------------------------------------------------------------------------
   deploy-worker:
-    name: Deploy Worker
+    name: Deploy Workers
     needs: [build-and-push-api, deploy-api]
     runs-on: ubuntu-latest
     steps:
@@ -161,13 +162,31 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Deploy Worker
+      - name: Deploy Fast Worker (syllabus, notifications)
         run: |
-          gcloud run deploy ${{ env.WORKER_SERVICE }} \
+          gcloud run deploy ${{ env.WORKER_FAST_SERVICE }} \
             --image ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:staging-${{ github.sha }} \
             --region ${{ env.REGION }} \
             --platform managed \
-            --command="python","-m","arq","lecturelink_api.worker.WorkerSettings" \
+            --command="python","-m","lecturelink_api.worker_main","--queue","fast" \
+            --memory 1Gi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 3 \
+            --no-cpu-throttling \
+            --vpc-connector=${{ env.VPC_CONNECTOR }} \
+            --service-account=${{ secrets.RUNTIME_SERVICE_ACCOUNT }} \
+            --set-secrets="SUPABASE_URL=STAGING_SUPABASE_URL:latest,SUPABASE_ANON_KEY=STAGING_SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=STAGING_SUPABASE_SERVICE_ROLE_KEY:latest,GOOGLE_API_KEY=GEMINI_API_KEY:latest" \
+            --set-env-vars="ENVIRONMENT=staging,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},REDIS_URL=redis://${{ secrets.MEMORYSTORE_IP }}:6379,WORKER_QUEUE=fast" \
+            --no-allow-unauthenticated
+
+      - name: Deploy Slow Worker (lectures, quizzes, materials)
+        run: |
+          gcloud run deploy ${{ env.WORKER_SLOW_SERVICE }} \
+            --image ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/lecturelink/api:staging-${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --command="python","-m","lecturelink_api.worker_main","--queue","slow" \
             --memory 1Gi \
             --cpu 1 \
             --min-instances 0 \
@@ -176,7 +195,7 @@ jobs:
             --vpc-connector=${{ env.VPC_CONNECTOR }} \
             --service-account=${{ secrets.RUNTIME_SERVICE_ACCOUNT }} \
             --set-secrets="SUPABASE_URL=STAGING_SUPABASE_URL:latest,SUPABASE_ANON_KEY=STAGING_SUPABASE_ANON_KEY:latest,SUPABASE_SERVICE_KEY=STAGING_SUPABASE_SERVICE_ROLE_KEY:latest,GOOGLE_API_KEY=GEMINI_API_KEY:latest" \
-            --set-env-vars="ENVIRONMENT=staging,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},REDIS_URL=redis://${{ secrets.MEMORYSTORE_IP }}:6379" \
+            --set-env-vars="ENVIRONMENT=staging,GOOGLE_CLOUD_PROJECT=${{ secrets.GCP_PROJECT_ID }},REDIS_URL=redis://${{ secrets.MEMORYSTORE_IP }}:6379,WORKER_QUEUE=slow" \
             --no-allow-unauthenticated
 
   # ---------------------------------------------------------------------------

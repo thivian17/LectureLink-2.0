@@ -3,6 +3,12 @@
 Enqueues jobs to be picked up by the arq worker process. Falls back
 to direct execution if Redis is unavailable (e.g. local dev without
 Redis running).
+
+Jobs are routed to two queues:
+- **fast** (``arq:fast``) — syllabus processing, notifications, user refresh
+- **slow** (``arq:slow``) — lecture processing, quiz generation, material processing
+
+This prevents long-running lecture jobs from blocking quick syllabus extractions.
 """
 
 from __future__ import annotations
@@ -12,6 +18,11 @@ import logging
 from redis.asyncio import Redis
 
 logger = logging.getLogger(__name__)
+
+# Queue names for routing jobs to the correct worker.
+# Always use named queues — workers are configured to listen on the right one.
+FAST_QUEUE = "arq:fast"
+SLOW_QUEUE = "arq:slow"
 
 
 class TaskQueueService:
@@ -25,7 +36,9 @@ class TaskQueueService:
     def __init__(self, redis: Redis | None = None) -> None:
         self._redis = redis
 
-    async def _enqueue(self, func_name: str, **kwargs) -> str | None:
+    async def _enqueue(
+        self, func_name: str, *, _queue_name: str | None = None, **kwargs,
+    ) -> str | None:
         """Enqueue a job via arq. Returns the job ID or None on failure."""
         if self._redis is None:
             logger.warning("Redis unavailable — cannot enqueue %s", func_name)
@@ -34,11 +47,13 @@ class TaskQueueService:
         from arq.connections import ArqRedis
 
         pool = ArqRedis(pool_or_conn=self._redis.connection_pool)
-        job = await pool.enqueue_job(func_name, _job_id=None, **kwargs)
+        job = await pool.enqueue_job(
+            func_name, _job_id=None, _queue_name=_queue_name, **kwargs,
+        )
         if job is None:
             logger.warning("Job %s was not enqueued (duplicate?)", func_name)
             return None
-        logger.info("Enqueued %s → job %s", func_name, job.job_id)
+        logger.info("Enqueued %s → job %s (queue=%s)", func_name, job.job_id, _queue_name)
         return job.job_id
 
     async def enqueue_lecture_processing(
@@ -56,6 +71,7 @@ class TaskQueueService:
         """Enqueue lecture processing via arq."""
         job_id = await self._enqueue(
             "task_process_lecture",
+            _queue_name=SLOW_QUEUE,
             lecture_id=lecture_id,
             course_id=course_id,
             user_id=user_id,
@@ -117,6 +133,7 @@ class TaskQueueService:
         """Enqueue quiz generation via arq."""
         job_id = await self._enqueue(
             "task_generate_quiz",
+            _queue_name=SLOW_QUEUE,
             supabase_url=supabase_url,
             supabase_key=supabase_key,
             user_token=user_token,
@@ -185,6 +202,7 @@ class TaskQueueService:
         """Enqueue syllabus processing via arq."""
         job_id = await self._enqueue(
             "task_process_syllabus",
+            _queue_name=FAST_QUEUE,
             syllabus_id=syllabus_id,
             file_bytes_hex=file_bytes.hex(),
             file_name=file_name,
@@ -276,6 +294,7 @@ class TaskQueueService:
         """Enqueue material processing via arq."""
         job_id = await self._enqueue(
             "task_process_material",
+            _queue_name=SLOW_QUEUE,
             material_id=material_id,
             course_id=course_id,
             user_id=user_id,
@@ -330,6 +349,7 @@ class TaskQueueService:
         """Enqueue a notification delivery via arq."""
         job_id = await self._enqueue(
             "task_send_notification",
+            _queue_name=FAST_QUEUE,
             user_id=user_id,
             notification_type=notification_type,
             message=message,
@@ -344,7 +364,7 @@ class TaskQueueService:
 
     async def enqueue_user_refresh(self, user_id: str) -> None:
         """Enqueue a single-user study actions refresh."""
-        await self._enqueue("task_refresh_user", user_id=user_id)
+        await self._enqueue("task_refresh_user", _queue_name=FAST_QUEUE, user_id=user_id)
 
     async def enqueue_daily_refresh(self) -> None:
         """Enqueue the daily study actions refresh (fans out per-user)."""

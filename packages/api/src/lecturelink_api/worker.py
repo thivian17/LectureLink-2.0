@@ -89,14 +89,19 @@ async def task_process_lecture(
     user_token: str = "",
     is_reprocess: bool = False,
 ) -> dict | None:
-    """Process a lecture through the full pipeline."""
+    """Process a lecture through the full pipeline.
+
+    Uses the service-role Supabase client (from worker startup) instead of
+    the user's JWT token. User JWTs expire after a few minutes, which causes
+    ``PGRST303 JWT expired`` errors on long-running lecture processing.
+    """
     from lecturelink_api.pipeline.background import run_lecture_processing_async
 
     logger.info("Processing lecture %s", lecture_id)
     return await run_lecture_processing_async(
-        supabase_url=supabase_url or ctx["settings"].SUPABASE_URL,
-        supabase_key=supabase_key or ctx["settings"].SUPABASE_ANON_KEY,
-        user_token=user_token,
+        supabase_url=ctx["settings"].SUPABASE_URL,
+        supabase_key=ctx["settings"].SUPABASE_SERVICE_KEY or ctx["settings"].SUPABASE_ANON_KEY,
+        user_token="",  # Use service role — user JWTs expire during long processing
         lecture_id=lecture_id,
         course_id=course_id,
         user_id=user_id,
@@ -128,9 +133,9 @@ async def task_generate_quiz(
 
     logger.info("Generating quiz %s", quiz_id)
     await run_quiz_generation_async(
-        supabase_url=supabase_url or ctx["settings"].SUPABASE_URL,
-        supabase_key=supabase_key or ctx["settings"].SUPABASE_ANON_KEY,
-        user_token=user_token,
+        supabase_url=ctx["settings"].SUPABASE_URL,
+        supabase_key=ctx["settings"].SUPABASE_SERVICE_KEY or ctx["settings"].SUPABASE_ANON_KEY,
+        user_token="",  # Use service role — user JWTs expire during long processing
         quiz_id=quiz_id,
         course_id=course_id,
         user_id=user_id,
@@ -164,11 +169,10 @@ async def task_process_syllabus(
     from lecturelink_api.services.syllabus_service import process_syllabus
 
     logger.info("Processing syllabus %s", syllabus_id)
-    sb_url = supabase_url or ctx["settings"].SUPABASE_URL
-    sb_key = supabase_key or ctx["settings"].SUPABASE_ANON_KEY
-    sb = create_client(sb_url, sb_key)
-    if user_token:
-        sb.auth.set_session(user_token, "")
+    sb = create_client(
+        ctx["settings"].SUPABASE_URL,
+        ctx["settings"].SUPABASE_SERVICE_KEY or ctx["settings"].SUPABASE_ANON_KEY,
+    )
 
     await process_syllabus(
         syllabus_id=syllabus_id,
@@ -201,9 +205,9 @@ async def task_process_material(
 
     logger.info("Processing material %s", material_id)
     return await run_material_processing_async(
-        supabase_url=supabase_url or ctx["settings"].SUPABASE_URL,
-        supabase_key=supabase_key or ctx["settings"].SUPABASE_ANON_KEY,
-        user_token=user_token,
+        supabase_url=ctx["settings"].SUPABASE_URL,
+        supabase_key=ctx["settings"].SUPABASE_SERVICE_KEY or ctx["settings"].SUPABASE_ANON_KEY,
+        user_token="",  # Use service role — user JWTs expire during long processing
         material_id=material_id,
         course_id=course_id,
         user_id=user_id,
@@ -263,8 +267,17 @@ def _redis_settings() -> RedisSettings:
     )
 
 
+# Queue names — used by both worker settings and the enqueue side
+FAST_QUEUE = "arq:fast"
+SLOW_QUEUE = "arq:slow"
+
+
 class WorkerSettings:
-    """arq worker configuration."""
+    """arq worker — handles ALL queues (single-worker fallback).
+
+    Use this when running a single worker process that must handle
+    everything. For production, prefer FastWorkerSettings + SlowWorkerSettings.
+    """
 
     functions = [
         task_process_lecture,
@@ -277,5 +290,45 @@ class WorkerSettings:
     on_startup = on_startup
     on_shutdown = on_shutdown
     redis_settings = _redis_settings()
+    max_jobs = 3
+    job_timeout = 600  # 10 minutes
+
+
+class FastWorkerSettings:
+    """arq worker — fast queue only (syllabus, notifications, user refresh).
+
+    These jobs complete in under a minute and should never be blocked
+    by long-running lecture or quiz processing.
+    """
+
+    functions = [
+        task_process_syllabus,
+        task_refresh_user,
+        task_send_notification,
+    ]
+    on_startup = on_startup
+    on_shutdown = on_shutdown
+    redis_settings = _redis_settings()
+    queue_name = FAST_QUEUE
+    max_jobs = 3
+    job_timeout = 300  # 5 minutes
+
+
+class SlowWorkerSettings:
+    """arq worker — slow queue only (lectures, quizzes, materials).
+
+    These jobs can take several minutes. Runs separately so they
+    don't block fast syllabus processing.
+    """
+
+    functions = [
+        task_process_lecture,
+        task_generate_quiz,
+        task_process_material,
+    ]
+    on_startup = on_startup
+    on_shutdown = on_shutdown
+    redis_settings = _redis_settings()
+    queue_name = SLOW_QUEUE
     max_jobs = 3
     job_timeout = 600  # 10 minutes
