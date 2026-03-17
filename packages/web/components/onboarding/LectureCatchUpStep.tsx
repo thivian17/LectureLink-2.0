@@ -306,33 +306,25 @@ export function LectureCatchUpStep({
     let successCount = 0;
     let failCount = 0;
 
-    // Upload with concurrency limit of 3
-    for (let i = 0; i < toUpload.length; i += 3) {
-      const batch = toUpload.slice(i, i + 3);
-      const batchResults = await Promise.allSettled(
-        batch.map(async (bf) => {
-          const formData = new FormData();
-          formData.append("files", bf.file);
-          formData.append("lecture_number", String(bf.assignedLecture));
-          await uploadLecture(courseId, formData);
+    // Upload sequentially — concurrent uploads saturate bandwidth and
+    // cause timeouts, especially for large audio files.
+    for (const bf of toUpload) {
+      try {
+        const formData = new FormData();
+        formData.append("files", bf.file);
+        formData.append("lecture_number", String(bf.assignedLecture));
+        await uploadLecture(courseId, formData);
 
-          // Mark the matching row as uploaded
-          setRows((prev) =>
-            prev.map((r) =>
-              r.lecture_number === bf.assignedLecture
-                ? { ...r, localStatus: "uploaded", fileName: bf.file.name }
-                : r,
-            ),
-          );
-        }),
-      );
-
-      for (const result of batchResults) {
-        if (result.status === "fulfilled") {
-          successCount++;
-        } else {
-          failCount++;
-        }
+        setRows((prev) =>
+          prev.map((r) =>
+            r.lecture_number === bf.assignedLecture
+              ? { ...r, localStatus: "uploaded", fileName: bf.file.name }
+              : r,
+          ),
+        );
+        successCount++;
+      } catch {
+        failCount++;
       }
     }
 

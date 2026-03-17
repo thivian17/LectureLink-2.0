@@ -435,6 +435,7 @@ export async function uploadLecture(
   const resp = await fetchWithAuth(`${API_BASE}/api/lectures/upload`, {
     method: "POST",
     body: data,
+    signal: AbortSignal.timeout(120_000),
   });
   return resp.json();
 }

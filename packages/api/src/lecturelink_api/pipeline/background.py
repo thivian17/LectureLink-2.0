@@ -12,6 +12,7 @@ import logging
 
 from supabase import create_client
 
+from ..services.lecture_storage import cleanup_lecture_data
 from .lecture_processor import LectureProcessingError, process_lecture
 
 logger = logging.getLogger(__name__)
@@ -74,23 +75,13 @@ def run_lecture_processing(
         logger.exception(
             "Lecture %s: daemon thread crashed", lecture_id,
         )
-        # Best-effort: mark the lecture as failed so it doesn't stay
-        # stuck in "processing" forever.
+        # Clean up the failed lecture so it doesn't stay in the user's list
         try:
             sb_fallback = create_client(supabase_url, supabase_key)
-            from lecturelink_api.services.processing import (
-                update_processing_status,
-            )
-
-            update_processing_status(
-                sb_fallback, lecture_id,
-                status="failed",
-                stage="background_thread",
-                error="Processing thread crashed unexpectedly",
-            )
+            _delete_failed_lecture(sb_fallback, lecture_id)
         except Exception:
             logger.exception(
-                "Lecture %s: also failed to update status to failed",
+                "Lecture %s: also failed to clean up after crash",
                 lecture_id,
             )
         return None
@@ -123,12 +114,20 @@ async def _processing_loop(
             return result
 
         except LectureProcessingError as e:
+            # If the lecture was deleted, retrying is pointless
+            if e.stage == "pre_check":
+                logger.warning(
+                    "Lecture %s was deleted — skipping retries", lecture_id,
+                )
+                return None
+
             retry_count += 1
             if retry_count > MAX_RETRIES:
                 logger.error(
                     "Lecture %s failed after %d retries: %s",
                     lecture_id, MAX_RETRIES, e,
                 )
+                _delete_failed_lecture(supabase, lecture_id)
                 return None
 
             backoff = 2 ** retry_count  # 2, 4, 8 seconds
@@ -139,11 +138,59 @@ async def _processing_loop(
             await asyncio.sleep(backoff)
 
         except Exception:
-            # Unexpected error — don't retry, let it propagate so the
-            # caller (run_lecture_processing) can mark it as failed.
+            # Unexpected error — don't retry, clean up and let it propagate.
             logger.exception(
                 "Lecture %s: unexpected error in processing loop", lecture_id,
             )
+            _delete_failed_lecture(supabase, lecture_id)
             raise
 
     return None
+
+
+def _delete_failed_lecture(supabase, lecture_id: str) -> None:
+    """Remove a permanently-failed lecture and its associated data.
+
+    Cleans up chunks/concepts, storage files, and the lecture row itself
+    so the user isn't left with a dead entry in their lectures list.
+    """
+    try:
+        # 1. Clean up chunks and concepts
+        cleanup_lecture_data(supabase, lecture_id)
+
+        # 2. Fetch storage paths before deleting the row
+        lecture_row = (
+            supabase.table("lectures")
+            .select("audio_url, slides_url")
+            .eq("id", lecture_id)
+            .execute()
+        )
+        storage_paths = []
+        if lecture_row.data:
+            for key in ("audio_url", "slides_url"):
+                path = lecture_row.data[0].get(key)
+                if path:
+                    storage_paths.append(path)
+
+        # 3. Delete the lecture row
+        supabase.table("lectures").delete().eq("id", lecture_id).execute()
+
+        # 4. Clean up storage files (best-effort)
+        for path in storage_paths:
+            try:
+                supabase.storage.from_("lectures").remove([path])
+            except Exception:
+                logger.warning(
+                    "Failed to remove storage file %s for lecture %s",
+                    path, lecture_id,
+                )
+
+        logger.info(
+            "Deleted permanently-failed lecture %s and its storage files",
+            lecture_id,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to clean up lecture %s after permanent failure",
+            lecture_id,
+        )

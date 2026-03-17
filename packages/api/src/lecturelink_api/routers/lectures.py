@@ -173,6 +173,20 @@ async def upload_lecture(
         )
         file_urls.append(signed["signedURL"])
 
+    # Remove any existing non-completed lecture with the same lecture_number
+    # so re-uploads (e.g. after a failure) don't create duplicates.
+    existing = (
+        sb.table("lectures")
+        .select("id")
+        .eq("course_id", course_id)
+        .eq("lecture_number", lecture_number)
+        .neq("processing_status", "completed")
+        .execute()
+    )
+    for old in existing.data or []:
+        cleanup_lecture_data(sb_admin, old["id"])
+        sb_admin.table("lectures").delete().eq("id", old["id"]).execute()
+
     # Create lecture record
     effective_title = title.strip() if title else ""
     if not effective_title:
