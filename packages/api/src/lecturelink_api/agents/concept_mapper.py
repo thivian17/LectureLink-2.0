@@ -417,17 +417,12 @@ async def compute_llm_adjustments(
             contents=[types.Content(role="user", parts=[types.Part(text=prompt)])],
             config=types.GenerateContentConfig(
                 temperature=0.1,
-                max_output_tokens=4096,
+                max_output_tokens=8192,
+                response_mime_type="application/json",
             ),
         )
 
-        result_text = response.text.strip()
-        if result_text.startswith("```"):
-            result_text = result_text.split("```")[1]
-            if result_text.startswith("json"):
-                result_text = result_text[4:]
-
-        adjustments = json.loads(result_text)
+        adjustments = json.loads(response.text)
 
         result: dict[tuple[str, str], float] = {}
         for adj in adjustments:
