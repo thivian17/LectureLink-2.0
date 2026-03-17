@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { format } from "date-fns";
 import { AlertTriangle, Clock, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
@@ -14,10 +14,21 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { StatusBadge } from "@/components/lectures/status-badge";
 import { formatDuration } from "@/lib/format";
-import { retryLecture } from "@/lib/api";
+import { retryLecture, getLectureStatus } from "@/lib/api";
 import type { Lecture } from "@/types/database";
+
+const STAGE_LABELS: Record<string, string> = {
+  uploading: "Uploading files",
+  transcribing: "Transcribing audio",
+  analyzing_slides: "Analyzing slides",
+  aligning: "Aligning content",
+  extracting_concepts: "Extracting concepts",
+  generating_embeddings: "Indexing for search",
+  mapping_concepts: "Mapping to assessments",
+};
 
 function parseLocalDate(dateStr: string): Date {
   const [year, month, day] = dateStr.split("-").map(Number);
@@ -32,6 +43,43 @@ interface LectureCardProps {
 
 export const LectureCard = React.memo(function LectureCard({ lecture, courseId, onRetry }: LectureCardProps) {
   const [retrying, setRetrying] = useState(false);
+  const [progress, setProgress] = useState(lecture.processing_progress);
+  const [stage, setStage] = useState(lecture.processing_stage);
+  const [status, setStatus] = useState(lecture.processing_status);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const isActive = status === "processing" || status === "pending";
+
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isActive) return;
+
+    pollingRef.current = setInterval(async () => {
+      try {
+        const result = await getLectureStatus(lecture.id);
+        setProgress(result.processing_progress);
+        setStage(result.processing_stage);
+        setStatus(result.processing_status);
+
+        if (result.processing_status === "completed" || result.processing_status === "failed") {
+          stopPolling();
+          if (result.processing_status === "completed") {
+            onRetry?.(); // refresh list to show completed state
+          }
+        }
+      } catch {
+        // transient error, keep polling
+      }
+    }, 4000);
+
+    return () => stopPolling();
+  }, [isActive, lecture.id, stopPolling, onRetry]);
 
   async function handleRetry(e: React.MouseEvent) {
     e.preventDefault();
@@ -40,6 +88,9 @@ export const LectureCard = React.memo(function LectureCard({ lecture, courseId, 
     try {
       await retryLecture(lecture.id);
       toast.success("Lecture queued for retry");
+      setStatus("processing");
+      setProgress(0);
+      setStage("uploading");
       onRetry?.();
     } catch {
       toast.error("Failed to retry lecture");
@@ -47,6 +98,9 @@ export const LectureCard = React.memo(function LectureCard({ lecture, courseId, 
       setRetrying(false);
     }
   }
+
+  const progressPercent = Math.round(progress * 100);
+  const stageLabel = stage ? STAGE_LABELS[stage] ?? stage : "Queued";
 
   return (
     <div>
@@ -72,15 +126,15 @@ export const LectureCard = React.memo(function LectureCard({ lecture, courseId, 
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center gap-2">
-            <StatusBadge status={lecture.processing_status} />
-            {lecture.processing_status === "completed" &&
+            <StatusBadge status={status} />
+            {status === "completed" &&
               lecture.duration_seconds != null && (
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" />
                   {formatDuration(lecture.duration_seconds)}
                 </span>
               )}
-            {lecture.processing_status === "failed" && (
+            {status === "failed" && (
               <Button
                 variant="outline"
                 size="sm"
@@ -93,7 +147,15 @@ export const LectureCard = React.memo(function LectureCard({ lecture, courseId, 
               </Button>
             )}
           </div>
-          {lecture.processing_status === "completed" && lecture.low_concept_yield && (
+          {isActive && (
+            <div className="space-y-1.5">
+              <Progress value={progressPercent} className="h-1.5" />
+              <p className="text-xs text-muted-foreground">
+                {stageLabel} &middot; {progressPercent}%
+              </p>
+            </div>
+          )}
+          {status === "completed" && lecture.low_concept_yield && (
             <Badge
               variant="outline"
               className="gap-1 font-medium bg-amber-50 text-amber-700 border-amber-200"
@@ -102,7 +164,7 @@ export const LectureCard = React.memo(function LectureCard({ lecture, courseId, 
               Few concepts found
             </Badge>
           )}
-          {lecture.processing_status === "completed" && lecture.summary && (
+          {status === "completed" && lecture.summary && (
             <p className="text-sm text-muted-foreground line-clamp-2">
               {lecture.summary.length > 100
                 ? lecture.summary.slice(0, 100) + "..."

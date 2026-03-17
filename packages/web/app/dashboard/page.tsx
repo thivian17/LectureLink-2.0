@@ -12,6 +12,7 @@ import { BestNextActions } from "@/components/dashboard/BestNextActions";
 import { CourseIntelligenceGrid } from "@/components/dashboard/CourseIntelligenceGrid";
 import { AssessmentReadinessSection } from "@/components/dashboard/AssessmentReadinessSection";
 import { StudyToolsLibrary } from "@/components/dashboard/StudyToolsLibrary";
+import { ProcessingBanner } from "@/components/dashboard/ProcessingBanner";
 import {
   getCourses,
   getDashboardTimeline,
@@ -94,6 +95,8 @@ export default function DashboardPage() {
           </Link>
         </Button>
       </div>
+
+      {hasCourses && !loading && <ProcessingBanner />}
 
       {!hasCourses && !loading ? (
         <Card className="py-16">
