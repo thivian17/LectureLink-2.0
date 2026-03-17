@@ -12,6 +12,7 @@ applies deterministic validation — no extra LLM call needed.
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, datetime
 
 from google.adk.agents import LlmAgent, ParallelAgent
@@ -161,8 +162,15 @@ IMPORTANT RULES:
 4. For Data Camp modules, practice labs, or similar online exercises, set type to "homework".
 5. Grade breakdown weights should sum to approximately 100%. If they don't, flag \
    low confidence on the weight_percent fields.
-6. If an assessment has quantity > 1 (e.g. "5 Data Camp Modules at 4% each = 20%"), \
-   create ONE assessment entry with the total weight (20%), not 5 separate entries.
+6. When a syllabus lists a QUANTITY of assessments (e.g. "4 Tableau Quizzes × 4% = 16%", \
+   "6 Group Discussions × 1.5% = 9%"), create INDIVIDUAL assessment entries for each one. \
+   Example: "4 Tableau Quizzes × 4% = 16%" → create 4 assessments: \
+   "Tableau Quiz 1" (4%), "Tableau Quiz 2" (4%), "Tableau Quiz 3" (4%), "Tableau Quiz 4" (4%).
+7. For each individual assessment instance, search the ENTIRE document (including schedule \
+   tables, weekly overviews) to find its specific due date. Schedules often list \
+   "Tableau Quiz 1" under a specific class or week.
+8. If due dates are listed as "Class N", "Session N", or "Week N", preserve that EXACT text \
+   as the due_date_raw. Do NOT attempt to resolve it to a calendar date.
 
 Set confidence and source_text on every ExtractedField.
 
@@ -525,6 +533,111 @@ def _reconcile_assessment_weights(extraction: SyllabusExtraction) -> None:
                     break
 
 
+def _singularize(word: str) -> str:
+    """Rough English singularization for matching plural assessment names."""
+    w = word.lower().strip()
+    if w.endswith("zes"):  # quizzes → quiz
+        return w[:-3]
+    if w.endswith("ies"):  # activities → activit
+        return w[:-3] + "y"
+    if w.endswith("sses"):  # classes → class
+        return w[:-2]
+    if w.endswith("ses"):  # analyses → analys
+        return w[:-2]
+    if w.endswith("es"):  # exercises → exercis
+        return w[:-2]
+    if w.endswith("s") and not w.endswith("ss"):  # projects → project
+        return w[:-1]
+    return w
+
+
+def _split_bulk_assessments(
+    extraction: SyllabusExtraction,
+    schedule: list[dict],
+) -> None:
+    """Split bulk assessments into individual instances using schedule due dates.
+
+    Detects patterns like:
+    - Assessment list has "Tableau Quizzes" at 16%
+    - Schedule data has "Tableau Quiz 1" in week 3, "Tableau Quiz 2" in week 5, etc.
+
+    Splits into individual assessments with per-instance weights and due dates.
+    """
+    # Build map: normalized title → "Class N" from schedule due_items
+    schedule_due_map: dict[str, str] = {}
+    for week in schedule:
+        week_num = week.get("week_number")
+        for item in week.get("due_items") or []:
+            item_str = str(item).strip() if item else ""
+            if item_str:
+                schedule_due_map[item_str.lower()] = f"Class {week_num}" if week_num else ""
+
+    if not schedule_due_map:
+        return
+
+    indices_to_remove: list[int] = []
+    new_assessments: list[AssessmentExtraction] = []
+
+    for i, assessment in enumerate(extraction.assessments):
+        title = str(assessment.title.value or "").strip()
+        weight = assessment.weight_percent.value
+        if not title or weight is None or weight == 0:
+            continue
+
+        # Find numbered instances in schedule that match this assessment's base name
+        title_singular = _singularize(title)
+
+        matching_instances: list[dict] = []
+        for due_key, due_value in schedule_due_map.items():
+            # Strip the trailing number to get the base: "tableau quiz 1" → "tableau quiz"
+            due_base = re.sub(r"\s*#?\d+\s*$", "", due_key).strip()
+            due_singular = _singularize(due_base)
+
+            if not title_singular or not due_singular:
+                continue
+
+            # Check if bases match (either direction substring)
+            if title_singular in due_singular or due_singular in title_singular:
+                num_match = re.search(r"(\d+)\s*$", due_key)
+                if num_match:
+                    matching_instances.append({
+                        "number": int(num_match.group(1)),
+                        "due_raw": due_value,
+                        "original_key": due_key,
+                    })
+
+        if len(matching_instances) < 2:
+            continue
+
+        matching_instances.sort(key=lambda x: x["number"])
+        per_weight = round(float(weight) / len(matching_instances), 2)
+
+        for inst in matching_instances:
+            inst_title = inst["original_key"].title()
+            new_assessments.append(AssessmentExtraction(
+                title=ExtractedField(
+                    value=inst_title, confidence=0.8, source_text=inst["original_key"],
+                ),
+                type=ExtractedField(
+                    value=assessment.type.value, confidence=assessment.type.confidence,
+                ),
+                due_date_raw=ExtractedField(
+                    value=inst["due_raw"], confidence=0.7, source_text=inst["original_key"],
+                ),
+                due_date_resolved=ExtractedField(value=None, confidence=0.0),
+                weight_percent=ExtractedField(value=per_weight, confidence=0.7),
+                topics=list(assessment.topics),
+            ))
+
+        indices_to_remove.append(i)
+
+    if indices_to_remove:
+        extraction.assessments = [
+            a for idx, a in enumerate(extraction.assessments)
+            if idx not in indices_to_remove
+        ] + new_assessments
+
+
 def validate_no_near_duplicates(extraction: SyllabusExtraction) -> list[str]:
     """Check for near-duplicate assessments (similar titles, same date)."""
     issues: list[str] = []
@@ -592,6 +705,10 @@ def post_process_extraction(
     _normalize_assessment_types(extraction)
     _fill_missing_fields(extraction)
     _reconcile_assessment_weights(extraction)
+
+    # Split bulk assessments (e.g. "4 Quizzes at 4% each") into individuals
+    schedule = raw_result.get("weekly_schedule", [])
+    _split_bulk_assessments(extraction, schedule)
 
     # Re-validate grade weights (don't trust the LLM's math)
     weight_issues = validate_grade_weights(extraction)
