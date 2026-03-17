@@ -263,7 +263,7 @@ jobs:
             --command="python","-m","lecturelink_api.worker_main","--queue","slow" \
             --memory 4Gi \
             --cpu 8 \
-            --min-instances 0 \
+            --min-instances 1 \
             --max-instances 5 \
             --no-cpu-throttling \
             --vpc-connector=${{ env.VPC_CONNECTOR }} \
