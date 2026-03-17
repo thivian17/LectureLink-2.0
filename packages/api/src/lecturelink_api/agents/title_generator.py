@@ -14,7 +14,16 @@ from ..services.genai_client import get_genai_client as _get_client
 logger = logging.getLogger(__name__)
 
 TITLE_GENERATION_PROMPT = """\
-Generate a concise academic lecture title (5-10 words) from this content.
+Generate a specific, descriptive lecture title from this content.
+
+Rules:
+- Identify the SPECIFIC topics covered, not just the subject area
+- Include key terms, theories, or concepts that were discussed
+- 5-12 words, no generic words like "Review" or "Introduction" unless truly accurate
+- Bad example: "Review The Psychology" (too vague)
+- Good example: "Classical Conditioning and Operant Learning Paradigms"
+- Good example: "Supply and Demand Curves in Competitive Markets"
+
 Output only the title, no quotes or extra text.
 
 CONTENT:
