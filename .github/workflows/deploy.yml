@@ -79,10 +79,8 @@ jobs:
           RUFF_PID=$!
           uv run pytest packages/api/tests/ -v --tb=short -q --ignore=packages/api/tests/integration &
           PYTEST_PID=$!
-          npx tsc --noEmit --project packages/web/tsconfig.json &
+          (cd packages/web && npx tsc --noEmit) &
           TSC_PID=$!
-          # Removed Next.js build — it runs again in the Docker build.
-          # tsc --noEmit catches type errors; the Docker build catches build errors.
           wait $RUFF_PID $PYTEST_PID $TSC_PID
         env:
           SUPABASE_URL: https://placeholder.supabase.co
