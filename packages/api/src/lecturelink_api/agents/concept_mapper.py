@@ -311,8 +311,12 @@ def compute_embedding_signal(
     if concept_embedding is None or assessment_embedding is None:
         return 0.0
 
-    concept_vec = np.array(concept_embedding)
-    assessment_vec = np.array(assessment_embedding)
+    if isinstance(concept_embedding, str):
+        concept_embedding = json.loads(concept_embedding)
+    if isinstance(assessment_embedding, str):
+        assessment_embedding = json.loads(assessment_embedding)
+    concept_vec = np.array(concept_embedding, dtype=float)
+    assessment_vec = np.array(assessment_embedding, dtype=float)
 
     concept_norm = np.linalg.norm(concept_vec)
     assessment_norm = np.linalg.norm(assessment_vec)

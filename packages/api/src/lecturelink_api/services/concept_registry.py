@@ -127,7 +127,10 @@ async def register_concepts(
             existing_emb_matrix is not None
             and concept.get("embedding") is not None
         ):
-            concept_emb = np.array(concept["embedding"])
+            raw_emb = concept["embedding"]
+            if isinstance(raw_emb, str):
+                raw_emb = json.loads(raw_emb)
+            concept_emb = np.array(raw_emb, dtype=float)
             concept_norm = np.linalg.norm(concept_emb)
             if concept_norm > 1e-10:
                 concept_emb_normalized = concept_emb / concept_norm
@@ -173,7 +176,10 @@ async def register_concepts(
         existing_by_norm_title[norm_title] = new_entry
 
         if concept.get("embedding") is not None:
-            new_emb = np.array(concept["embedding"])
+            raw_new_emb = concept["embedding"]
+            if isinstance(raw_new_emb, str):
+                raw_new_emb = json.loads(raw_new_emb)
+            new_emb = np.array(raw_new_emb, dtype=float)
             new_emb_norm = np.linalg.norm(new_emb)
             if new_emb_norm > 1e-10:
                 new_emb_normalized = (new_emb / new_emb_norm).reshape(1, -1)

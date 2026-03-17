@@ -6,9 +6,17 @@ most relevant chunks for each concept.
 
 from __future__ import annotations
 
+import json
 import logging
 
 import numpy as np
+
+
+def _parse_embedding(emb):
+    """Parse embedding that may be a JSON string or already a list of floats."""
+    if isinstance(emb, str):
+        return json.loads(emb)
+    return emb
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +42,7 @@ def link_concepts_to_chunks(
         return concepts
 
     # Build chunk embedding matrix
-    chunk_embeddings = np.array([c["embedding"] for c in chunks])
+    chunk_embeddings = np.array([_parse_embedding(c["embedding"]) for c in chunks], dtype=float)
     # Normalize for cosine similarity
     chunk_norms = np.linalg.norm(chunk_embeddings, axis=1, keepdims=True)
     chunk_norms = np.maximum(chunk_norms, 1e-10)
@@ -45,7 +53,7 @@ def link_concepts_to_chunks(
             concept["source_chunk_ids"] = []
             continue
 
-        concept_emb = np.array(concept["embedding"])
+        concept_emb = np.array(_parse_embedding(concept["embedding"]), dtype=float)
         concept_norm = np.linalg.norm(concept_emb)
         if concept_norm < 1e-10:
             concept["source_chunk_ids"] = []
