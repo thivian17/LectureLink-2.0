@@ -106,6 +106,27 @@ async def analyze_slides(slides_url: str) -> list[dict]:
     )
 
 
+def _recover_truncated_json(text: str) -> list[dict]:
+    """Recover complete slide objects from a truncated JSON array.
+
+    When Gemini's response is cut off mid-JSON, we find the last complete
+    object boundary and parse everything up to that point.
+    """
+    # Find the last complete object: look for "},\n  {" or "}\n]" patterns
+    last_complete = text.rfind("}")
+    while last_complete > 0:
+        candidate = text[: last_complete + 1]
+        # Try closing the array
+        try:
+            result = json.loads(candidate + "]")
+            if isinstance(result, list):
+                return result
+        except json.JSONDecodeError:
+            pass
+        last_complete = text.rfind("}", 0, last_complete)
+    return []
+
+
 async def _call_gemini(slides_url: str) -> list[dict]:
     """Build content from slides_url, send to Gemini, and parse the JSON."""
     mime_type = get_slide_mime_type(slides_url)
@@ -127,10 +148,11 @@ async def _call_gemini(slides_url: str) -> list[dict]:
         config=types.GenerateContentConfig(
             temperature=0.1,
             max_output_tokens=65536,
+            response_mime_type="application/json",
         ),
     )
 
-    result_text = response.text.strip()
+    result_text = (response.text or "").strip()
 
     # Strip markdown code fences if present
     if result_text.startswith("```"):
@@ -140,8 +162,16 @@ async def _call_gemini(slides_url: str) -> list[dict]:
 
     try:
         slides = json.loads(result_text)
-    except json.JSONDecodeError as e:
-        raise SlideAnalysisError(f"Failed to parse slide analysis JSON: {e}") from e
+    except json.JSONDecodeError:
+        # Response may be truncated — recover complete slide objects
+        slides = _recover_truncated_json(result_text)
+        if not slides:
+            raise SlideAnalysisError(
+                "Failed to parse slide analysis JSON and no slides could be recovered"
+            )
+        logger.warning(
+            "Recovered %d slides from truncated Gemini response", len(slides),
+        )
 
     if not isinstance(slides, list):
         raise SlideAnalysisError("Slide analysis did not return a JSON array")
