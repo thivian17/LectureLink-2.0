@@ -194,10 +194,10 @@ class TestAnalyzeSlides:
 
 
 class TestCallGemini:
-    """Tests for _call_gemini parsing logic with mocked genai.Client + _file_part."""
+    """Tests for _call_gemini parsing logic with mocked Gemini + file I/O."""
 
     def _mock_gemini(self, response_text):
-        """Return (mock_client, _file_part_mock) pair for _call_gemini tests."""
+        """Return a mock genai.Client that returns the given text."""
         mock_response = MagicMock()
         mock_response.text = response_text
 
@@ -207,19 +207,29 @@ class TestCallGemini:
         )
         return mock_client
 
+    def _patch_file_io(self):
+        """Patch _download_file and _split_pdf for PDF tests."""
+        # Fake a 3-page PDF (content doesn't matter — Gemini is mocked)
+        fake_page = b"%PDF-fake"
+        return patch(
+            "lecturelink_api.agents.slide_analyzer._download_file",
+            return_value=b"%PDF-fake-full",
+        ), patch(
+            "lecturelink_api.agents.slide_analyzer._split_pdf",
+            return_value=[fake_page, fake_page, fake_page],
+        )
+
     @pytest.mark.asyncio
     async def test_parses_valid_json(self):
         from lecturelink_api.agents.slide_analyzer import _call_gemini
 
         mock_client = self._mock_gemini(json.dumps(VALID_SLIDE_RESPONSE))
+        dl_patch, split_patch = self._patch_file_io()
 
         with patch(
             "lecturelink_api.agents.slide_analyzer.genai.Client",
             return_value=mock_client,
-        ), patch(
-            "lecturelink_api.agents.slide_analyzer._file_part",
-            return_value=MagicMock(spec=types.Part),
-        ):
+        ), dl_patch, split_patch:
             result = await _call_gemini("lecture.pdf")
 
         assert len(result) == 3
@@ -231,14 +241,12 @@ class TestCallGemini:
 
         fenced = "```json\n" + json.dumps(VALID_SLIDE_RESPONSE) + "\n```"
         mock_client = self._mock_gemini(fenced)
+        dl_patch, split_patch = self._patch_file_io()
 
         with patch(
             "lecturelink_api.agents.slide_analyzer.genai.Client",
             return_value=mock_client,
-        ), patch(
-            "lecturelink_api.agents.slide_analyzer._file_part",
-            return_value=MagicMock(spec=types.Part),
-        ):
+        ), dl_patch, split_patch:
             result = await _call_gemini("lecture.pdf")
 
         assert len(result) == 3
@@ -248,14 +256,12 @@ class TestCallGemini:
         from lecturelink_api.agents.slide_analyzer import _call_gemini
 
         mock_client = self._mock_gemini("This is not JSON at all")
+        dl_patch, split_patch = self._patch_file_io()
 
         with patch(
             "lecturelink_api.agents.slide_analyzer.genai.Client",
             return_value=mock_client,
-        ), patch(
-            "lecturelink_api.agents.slide_analyzer._file_part",
-            return_value=MagicMock(spec=types.Part),
-        ), pytest.raises(SlideAnalysisError, match="Failed to parse"):
+        ), dl_patch, split_patch, pytest.raises(SlideAnalysisError, match="no slides could be recovered"):
             await _call_gemini("lecture.pdf")
 
     @pytest.mark.asyncio
@@ -263,12 +269,10 @@ class TestCallGemini:
         from lecturelink_api.agents.slide_analyzer import _call_gemini
 
         mock_client = self._mock_gemini('{"not": "an array"}')
+        dl_patch, split_patch = self._patch_file_io()
 
         with patch(
             "lecturelink_api.agents.slide_analyzer.genai.Client",
             return_value=mock_client,
-        ), patch(
-            "lecturelink_api.agents.slide_analyzer._file_part",
-            return_value=MagicMock(spec=types.Part),
-        ), pytest.raises(SlideAnalysisError, match="did not return"):
+        ), dl_patch, split_patch, pytest.raises(SlideAnalysisError, match="did not return"):
             await _call_gemini("lecture.pdf")

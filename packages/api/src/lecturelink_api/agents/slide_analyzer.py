@@ -127,18 +127,139 @@ def _recover_truncated_json(text: str) -> list[dict]:
     return []
 
 
+_BATCH_SIZE = 15  # max pages per Gemini call to avoid output truncation
+
+
 async def _call_gemini(slides_url: str) -> list[dict]:
-    """Build content from slides_url, send to Gemini, and parse the JSON."""
+    """Build content from slides_url, send to Gemini, and parse the JSON.
+
+    For PDFs with many pages, splits into batches to avoid output truncation.
+    """
     mime_type = get_slide_mime_type(slides_url)
 
-    # PPTX: Gemini can't process natively — extract slide text
+    # PPTX: extract text per slide, then batch
     if mime_type.endswith("presentationml.presentation"):
-        parts = _pptx_to_image_parts(slides_url)
-    else:
-        # PDF: Gemini handles natively via URI or inline bytes
-        parts = [_file_part(slides_url, mime_type)]
+        all_parts = _pptx_to_image_parts(slides_url)
+        batches = [
+            all_parts[i : i + _BATCH_SIZE]
+            for i in range(0, len(all_parts), _BATCH_SIZE)
+        ]
+        batch_offsets = [i * _BATCH_SIZE for i in range(len(batches))]
+        results = await asyncio.gather(
+            *[
+                _analyze_parts_batch(parts, offset)
+                for parts, offset in zip(batches, batch_offsets)
+            ]
+        )
+        all_slides = [s for batch in results for s in batch]
+        validated = validate_slide_analysis(all_slides)
+        logger.info("Slide analysis complete: %d slides", len(validated))
+        return validated
 
-    parts.append(types.Part(text=SLIDE_ANALYSIS_PROMPT))
+    # PDF: download once, then split into page batches
+    file_bytes = _download_file(slides_url)
+    page_pdfs = _split_pdf(file_bytes)
+    total_pages = len(page_pdfs)
+    logger.info("PDF has %d pages, batch size %d", total_pages, _BATCH_SIZE)
+
+    if total_pages <= _BATCH_SIZE:
+        # Small PDF — single call with original file
+        return await _analyze_single(file_bytes, mime_type)
+
+    # Large PDF — batch process
+    batches = [
+        page_pdfs[i : i + _BATCH_SIZE]
+        for i in range(0, total_pages, _BATCH_SIZE)
+    ]
+    results = await asyncio.gather(
+        *[
+            _analyze_pdf_batch(batch, batch_idx * _BATCH_SIZE)
+            for batch_idx, batch in enumerate(batches)
+        ]
+    )
+    all_slides = [s for batch in results for s in batch]
+    validated = validate_slide_analysis(all_slides)
+    logger.info("Slide analysis complete: %d slides (batched)", len(validated))
+    return validated
+
+
+def _download_file(file_path: str) -> bytes:
+    """Download a file from URL or read from local path."""
+    if file_path.startswith(("http://", "https://")):
+        import httpx
+
+        resp = httpx.get(file_path, follow_redirects=True)
+        resp.raise_for_status()
+        return resp.content
+    return Path(file_path).read_bytes()
+
+
+def _split_pdf(pdf_bytes: bytes) -> list[bytes]:
+    """Split a PDF into individual single-page PDFs."""
+    from pypdf import PdfReader, PdfWriter
+
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    pages: list[bytes] = []
+    for page in reader.pages:
+        writer = PdfWriter()
+        writer.add_page(page)
+        buf = io.BytesIO()
+        writer.write(buf)
+        pages.append(buf.getvalue())
+    return pages
+
+
+def _merge_page_pdfs(page_pdfs: list[bytes]) -> bytes:
+    """Merge multiple single-page PDFs into one PDF."""
+    from pypdf import PdfReader, PdfWriter
+
+    writer = PdfWriter()
+    for pdf_bytes in page_pdfs:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        for page in reader.pages:
+            writer.add_page(page)
+    buf = io.BytesIO()
+    writer.write(buf)
+    return buf.getvalue()
+
+
+async def _analyze_single(file_bytes: bytes, mime_type: str) -> list[dict]:
+    """Analyze a complete file in a single Gemini call."""
+    parts = [
+        types.Part.from_bytes(data=file_bytes, mime_type=mime_type),
+        types.Part(text=SLIDE_ANALYSIS_PROMPT),
+    ]
+    return await _send_and_parse(parts)
+
+
+async def _analyze_pdf_batch(page_pdfs: list[bytes], offset: int) -> list[dict]:
+    """Analyze a batch of PDF pages in one Gemini call."""
+    merged = _merge_page_pdfs(page_pdfs)
+    prompt = SLIDE_ANALYSIS_PROMPT + (
+        f"\n\nNOTE: These are slides {offset + 1}-{offset + len(page_pdfs)}."
+        f" Number them starting at {offset + 1}."
+    )
+    parts = [
+        types.Part.from_bytes(data=merged, mime_type="application/pdf"),
+        types.Part(text=prompt),
+    ]
+    return await _send_and_parse(parts)
+
+
+async def _analyze_parts_batch(
+    parts: list[types.Part], offset: int,
+) -> list[dict]:
+    """Analyze a batch of PPTX text parts in one Gemini call."""
+    prompt = SLIDE_ANALYSIS_PROMPT + (
+        f"\n\nNOTE: These are slides {offset + 1}-{offset + len(parts)}."
+        f" Number them starting at {offset + 1}."
+    )
+    batch_parts = parts + [types.Part(text=prompt)]
+    return await _send_and_parse(batch_parts)
+
+
+async def _send_and_parse(parts: list[types.Part]) -> list[dict]:
+    """Send parts to Gemini and parse the JSON slide array response."""
     content = types.Content(role="user", parts=parts)
 
     client = genai.Client()
@@ -163,7 +284,6 @@ async def _call_gemini(slides_url: str) -> list[dict]:
     try:
         slides = json.loads(result_text)
     except json.JSONDecodeError:
-        # Response may be truncated — recover complete slide objects
         slides = _recover_truncated_json(result_text)
         if not slides:
             raise SlideAnalysisError(
@@ -176,9 +296,7 @@ async def _call_gemini(slides_url: str) -> list[dict]:
     if not isinstance(slides, list):
         raise SlideAnalysisError("Slide analysis did not return a JSON array")
 
-    validated = validate_slide_analysis(slides)
-    logger.info("Slide analysis complete: %d slides", len(validated))
-    return validated
+    return slides
 
 
 def validate_slide_analysis(slides: list[dict]) -> list[dict]:
@@ -215,22 +333,6 @@ def get_slide_mime_type(file_path: str) -> str:
         ),
     }.get(ext, "application/pdf")
 
-
-def _file_part(file_path: str, mime_type: str) -> types.Part:
-    """Create a Gemini Part from a local file or URL.
-
-    Always downloads remote files first — Gemini's from_uri cannot
-    reliably fetch Supabase signed URLs.
-    """
-    if file_path.startswith(("http://", "https://")):
-        import httpx
-
-        resp = httpx.get(file_path, follow_redirects=True)
-        resp.raise_for_status()
-        return types.Part.from_bytes(data=resp.content, mime_type=mime_type)
-
-    data = Path(file_path).read_bytes()
-    return types.Part.from_bytes(data=data, mime_type=mime_type)
 
 
 def _pptx_to_image_parts(pptx_path: str) -> list[types.Part]:

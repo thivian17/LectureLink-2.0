@@ -26,6 +26,7 @@ dependencies = [
     "sentry-sdk[fastapi]>=2.0",
     "langfuse>=2.0",
     "posthog>=3.0",
+    "pypdf>=5.0",
 ]
 
 [build-system]
