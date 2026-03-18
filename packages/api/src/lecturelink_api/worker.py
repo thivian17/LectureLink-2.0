@@ -31,6 +31,45 @@ def get_session_service() -> "DatabaseSessionService":
 
 
 # ---------------------------------------------------------------------------
+# Stale job recovery
+# ---------------------------------------------------------------------------
+
+_STALE_THRESHOLD_MINUTES = 15
+
+
+def _recover_stale_jobs(supabase) -> None:
+    """Reset lectures and materials stuck in 'processing' from a crashed worker.
+
+    If a row has been in 'processing' for longer than the threshold without
+    an update, the previous worker was killed mid-flight. Reset to 'failed'
+    so the user can retry.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(minutes=_STALE_THRESHOLD_MINUTES)
+    ).isoformat()
+
+    for table in ("lectures", "course_materials"):
+        try:
+            result = (
+                supabase.table(table)
+                .update({
+                    "processing_status": "failed",
+                    "processing_error": "Processing interrupted — worker was restarted. Please retry.",
+                })
+                .eq("processing_status", "processing")
+                .lt("updated_at", cutoff)
+                .execute()
+            )
+            count = len(result.data) if result.data else 0
+            if count:
+                logger.info("Recovered %d stale %s jobs", count, table)
+        except Exception:
+            logger.warning("Failed to recover stale %s jobs", table, exc_info=True)
+
+
+# ---------------------------------------------------------------------------
 # Worker lifecycle hooks
 # ---------------------------------------------------------------------------
 
@@ -64,6 +103,13 @@ async def on_startup(ctx: dict) -> None:
         cleanup_expired_sessions(ctx["supabase"])
     except Exception:
         logger.warning("Failed to clean up expired ADK sessions", exc_info=True)
+
+    # Reset lectures/materials stuck in "processing" from a previous worker crash.
+    # If updated_at is >15 min ago and still "processing", the old worker died.
+    try:
+        _recover_stale_jobs(ctx["supabase"])
+    except Exception:
+        logger.warning("Failed to recover stale jobs", exc_info=True)
 
     logger.info("arq worker started")
 
