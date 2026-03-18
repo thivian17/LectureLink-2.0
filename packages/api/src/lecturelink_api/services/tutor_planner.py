@@ -18,6 +18,7 @@ from lecturelink_api.models.tutor_models import (
 
 from . import tutor_prompts
 from .genai_client import get_genai_client as _get_client
+from .readiness_v2 import compute_assessment_readiness
 from .mastery import compute_mastery
 from .search import search_lectures
 
@@ -117,26 +118,23 @@ async def _get_concepts_from_tables(
             "difficulty": m.get("difficulty_estimate", 0.5),
         }
 
-    # If targeting a specific assessment, prioritize linked concepts
+    # If targeting a specific assessment, use assessment_prep for concepts
     if target_assessment_id:
         try:
-            links = (
-                supabase.table("concept_assessment_links")
-                .select("concept_id, relevance_score")
-                .eq("assessment_id", target_assessment_id)
-                .order("relevance_score", desc=True)
-                .execute()
+            from .assessment_prep import get_assessment_concepts
+            assessment_concepts = await get_assessment_concepts(
+                supabase, target_assessment_id, course_id, user_id,
             )
-            if links.data:
+            if assessment_concepts:
                 result = []
-                for link in links.data:
-                    cid = link["concept_id"]
+                for ac in assessment_concepts:
+                    cid = ac["concept_id"]
                     entry = mastery_map.get(cid)
                     if entry:
                         priority = _compute_priority(
                             entry["mastery"],
                             entry["difficulty"],
-                            link.get("relevance_score", 0.5),
+                            ac.get("similarity", 0.5),
                         )
                         result.append(
                             {
@@ -148,9 +146,30 @@ async def _get_concepts_from_tables(
                 result.sort(key=lambda x: x["priority_score"], reverse=True)
                 return result[:limit]
         except Exception:
-            logger.debug("concept_assessment_links query failed", exc_info=True)
+            logger.debug("assessment_prep query failed", exc_info=True)
 
-    # No assessment target — prioritize by mastery gap
+    # No assessment target — delegate to spaced repetition prioritizer
+    try:
+        from .spaced_repetition import get_priority_concepts as sr_priority
+
+        sr_concepts = await sr_priority(supabase, user_id, course_id, limit)
+        if sr_concepts:
+            return [
+                {
+                    "concept_id": c["concept_id"],
+                    "title": c["concept_title"],
+                    "mastery": c["mastery_score"],
+                    "total_attempts": c["total_attempts"],
+                    "priority_score": c["priority_score"],
+                    "difficulty": 0.5,
+                    "teaching_approach": _teaching_approach(c["mastery_score"]),
+                }
+                for c in sr_concepts
+            ]
+    except Exception:
+        logger.debug("spaced_repetition fallback failed", exc_info=True)
+
+    # Fallback: prioritize by mastery gap from local mastery_map
     result = []
     for entry in mastery_map.values():
         priority = _compute_priority(entry["mastery"], entry["difficulty"])
@@ -1019,145 +1038,47 @@ async def get_assessment_readiness(
 ) -> AssessmentReadinessResponse:
     """Compute readiness for a specific assessment.
 
-    Combines concept-assessment links, mastery data, and session coverage
-    to produce a readiness report.
+    Delegates to readiness_v2 for the heavy lifting and adapts the result
+    into the AssessmentReadinessResponse format used by the tutor UI.
     """
-    # 1. Fetch assessment metadata
+    v2 = await compute_assessment_readiness(supabase, user_id, assessment_id)
+
+    # Convert weak_concepts → ConceptReadiness list
+    concepts: list[ConceptReadiness] = []
+
+    # Try to consolidate by assessment topics if available
     assessment_ctx = await get_assessment_context(
         supabase, course_id, assessment_id,
     )
-
-    # 2. Get linked concepts
-    try:
-        links = (
-            supabase.table("concept_assessment_links")
-            .select("concept_id")
-            .eq("assessment_id", assessment_id)
-            .execute()
-        )
-        linked_concept_ids = [
-            link["concept_id"] for link in (links.data or [])
-        ]
-    except Exception:
-        logger.debug(
-            "concept_assessment_links query failed", exc_info=True,
-        )
-        linked_concept_ids = []
-
-    # 3. Get mastery data (per fine-grained concept)
-    mastery_map: dict[str, dict] = {}
-    try:
-        mastery_result = supabase.rpc(
-            "get_concept_mastery",
-            {"p_course_id": course_id, "p_user_id": user_id},
-        ).execute()
-        for m in mastery_result.data or []:
-            accuracy = m.get("accuracy", 0.0)
-            recent = m.get("recent_accuracy", 0.0)
-            attempts = m.get("total_attempts", 0)
-            mastery = compute_mastery(accuracy, recent, attempts)
-            mastery_map[m["concept_id"]] = {
-                "concept_id": m["concept_id"],
-                "title": m["concept_title"],
-                "mastery": mastery,
-                "total_attempts": attempts,
-                "lecture_id": m.get("lecture_id"),
-            }
-    except Exception:
-        logger.debug("get_concept_mastery RPC failed", exc_info=True)
-
-    # 4. Get covered concepts from session events
-    covered_titles: set[str] = set()
-    try:
-        events = (
-            supabase.table("tutor_session_events")
-            .select("concept_title")
-            .eq("user_id", user_id)
-            .eq("event_type", "question_answer")
-            .execute()
-        )
-        for ev in events.data or []:
-            ct = ev.get("concept_title")
-            if ct:
-                covered_titles.add(ct)
-    except Exception:
-        logger.debug("tutor_session_events query failed", exc_info=True)
-
-    # 5. Collect matching fine-grained concepts
-    fine_concepts: list[dict] = []
-    if linked_concept_ids and mastery_map:
-        linked_set = set(linked_concept_ids)
-        for cid, entry in mastery_map.items():
-            if cid in linked_set:
-                fine_concepts.append(entry)
-    elif mastery_map:
-        # No linked concepts — use all mastery data for course
-        fine_concepts = list(mastery_map.values())
-
-    # 6. Consolidate fine-grained concepts into broader topics.
-    #    Use assessment topics from syllabus as category buckets when
-    #    available; otherwise group by lecture.
-    concepts: list[ConceptReadiness] = []
     assessment_topics: list[str] = assessment_ctx.get("topics") or []
 
-    if fine_concepts and assessment_topics:
-        # Bucket fine-grained concepts under assessment topics via word overlap
+    if v2.weak_concepts and assessment_topics:
+        # Build fine_concepts dicts from weak_concepts for consolidation
+        fine_concepts = [
+            {
+                "concept_id": wc.concept_id,
+                "title": wc.title,
+                "mastery": wc.combined_score,
+                "total_attempts": 0,
+            }
+            for wc in v2.weak_concepts
+        ]
+        covered_titles = {wc.title for wc in v2.weak_concepts if wc.coverage}
         concepts = _consolidate_by_topics(
             fine_concepts, assessment_topics, covered_titles,
         )
-    elif fine_concepts:
-        # No assessment topics — group by lecture
-        lecture_ids = list({
-            e["lecture_id"] for e in fine_concepts if e.get("lecture_id")
-        })
-        lecture_title_map: dict[str, str] = {}
-        if lecture_ids:
-            try:
-                lect_result = (
-                    supabase.table("lectures")
-                    .select("id, title")
-                    .in_("id", lecture_ids)
-                    .execute()
-                )
-                for lect in lect_result.data or []:
-                    lecture_title_map[lect["id"]] = lect["title"]
-            except Exception:
-                logger.debug("lectures title lookup failed", exc_info=True)
-
-        from collections import defaultdict
-        by_lecture: dict[str, list[dict]] = defaultdict(list)
-        ungrouped: list[dict] = []
-        for entry in fine_concepts:
-            lid = entry.get("lecture_id")
-            if lid:
-                by_lecture[lid].append(entry)
-            else:
-                ungrouped.append(entry)
-
-        for lid, entries in by_lecture.items():
-            avg_mastery = sum(e["mastery"] for e in entries) / len(entries)
-            total_attempts = sum(e.get("total_attempts", 0) for e in entries)
-            any_covered = any(e["title"] in covered_titles for e in entries)
-            title = lecture_title_map.get(lid, entries[0]["title"])
+    else:
+        for wc in v2.weak_concepts:
             concepts.append(ConceptReadiness(
-                concept_id=lid,
-                title=title,
-                mastery=round(avg_mastery, 4),
-                total_attempts=total_attempts,
-                covered=any_covered,
-                teaching_approach=_teaching_approach(avg_mastery),
-            ))
-        for entry in ungrouped:
-            concepts.append(ConceptReadiness(
-                concept_id=entry["concept_id"],
-                title=entry["title"],
-                mastery=entry["mastery"],
-                total_attempts=entry.get("total_attempts", 0),
-                covered=entry["title"] in covered_titles,
-                teaching_approach=_teaching_approach(entry["mastery"]),
+                concept_id=wc.concept_id,
+                title=wc.title,
+                mastery=wc.combined_score,
+                total_attempts=0,
+                covered=wc.coverage,
+                teaching_approach=_teaching_approach(wc.combined_score),
             ))
 
-    # If still empty, use assessment topics as fallback
+    # If no concepts from weak_concepts, use assessment topics as fallback
     if not concepts:
         for topic in assessment_topics:
             concepts.append(ConceptReadiness(
@@ -1165,23 +1086,20 @@ async def get_assessment_readiness(
                 title=topic,
                 mastery=0.0,
                 total_attempts=0,
-                covered=topic in covered_titles,
+                covered=False,
                 teaching_approach="foundational",
             ))
 
-    total = len(concepts)
+    total = v2.concept_count or len(concepts)
     ready_count = sum(1 for c in concepts if c.mastery >= 0.7)
-    overall = (
-        sum(c.mastery for c in concepts) / total if total > 0 else 0.0
-    )
 
     return AssessmentReadinessResponse(
         assessment_id=assessment_id,
-        assessment_title=assessment_ctx.get("assessment_title", "Assessment"),
-        due_date=assessment_ctx.get("due_date_str"),
-        days_remaining=assessment_ctx.get("days_until"),
+        assessment_title=v2.title,
+        due_date=v2.due_date,
+        days_remaining=v2.days_until_due,
         concepts=concepts,
-        overall_readiness=round(overall, 3),
+        overall_readiness=round(v2.readiness, 3),
         ready_count=ready_count,
         total_count=total,
     )

@@ -7,7 +7,6 @@ Stages:
 4. Concept Extraction — extract key concepts (Gemini Pro)
 5. Chunking + Embedding — chunk content, generate embeddings
 6. Concept-Chunk Linking — link concepts to source chunks
-7. Concept Mapping — bridge lecture concepts to syllabus assessments
 """
 
 from __future__ import annotations
@@ -26,7 +25,6 @@ from ..agents.concept_extractor import (
     format_existing_concepts_for_prompt,
 )
 from ..services.concept_registry import register_concepts
-from ..agents.concept_mapper import map_concepts_to_assessments
 from ..agents.content_aligner import align_content
 from ..agents.input_router import route_input
 from ..agents.slide_analyzer import SlideAnalysisError, analyze_slides
@@ -287,49 +285,8 @@ async def process_lecture(
             len(registry_result["inserted"]),
         )
 
-        # ── Stage 7: Concept Mapping (new concepts only) ──
-        update_processing_status(
-            supabase, lecture_id, "processing",
-            stage="mapping_concepts",
-            progress=STAGE_PROGRESS["mapping_concepts"],
-        )
-
-        concept_links = []
-        if registry_result["inserted"]:
-            new_concept_ids = [c["concept_id"] for c in registry_result["inserted"]]
-            new_stored = (
-                supabase.table("concepts")
-                .select("*")
-                .in_("id", new_concept_ids)
-                .execute()
-            ).data or []
-
-            lec_meta = {}
-            try:
-                lecture_data = (
-                    supabase.table("lectures")
-                    .select("lecture_date, lecture_number")
-                    .eq("id", lecture_id)
-                    .execute()
-                )
-                lec_meta = lecture_data.data[0] if lecture_data.data else {}
-            except Exception:
-                pass
-
-            concept_links = await map_concepts_to_assessments(
-                supabase=supabase,
-                lecture_id=lecture_id,
-                course_id=course_id,
-                user_id=user_id,
-                concepts=new_stored,
-                lecture_date=lec_meta.get("lecture_date"),
-                lecture_number=lec_meta.get("lecture_number"),
-            )
-
-        logger.info(
-            "Lecture %s: created %d concept-assessment links",
-            lecture_id, len(concept_links),
-        )
+        # (Stage 7 — concept mapping — removed: assessment prep now uses
+        # schedule-based lecture filtering + embedding similarity at query time)
 
         # ── Quality gate: flag lectures with suspiciously low concept yield ──
         LOW_CONCEPT_THRESHOLD = 3
@@ -414,7 +371,7 @@ async def process_lecture(
             "concepts_merged": len(registry_result["merged"]),
             "concepts_inserted": len(registry_result["inserted"]),
             "concepts_total": registry_result["total_concepts_in_course"],
-            "concept_links_created": len(concept_links),
+            "concept_links_created": 0,
             "processing_path": route_result.processing_path,
             "duration_seconds": elapsed,
             "low_concept_yield": low_concept_yield,

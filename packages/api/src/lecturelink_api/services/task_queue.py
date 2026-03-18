@@ -362,10 +362,6 @@ class TaskQueueService:
                 message,
             )
 
-    async def enqueue_user_refresh(self, user_id: str) -> None:
-        """Enqueue a single-user study actions refresh."""
-        await self._enqueue("task_refresh_user", _queue_name=FAST_QUEUE, user_id=user_id)
-
     async def enqueue_daily_refresh(self) -> None:
         """Enqueue the daily study actions refresh (fans out per-user)."""
         # The daily-refresh endpoint now fans out — see internal router.

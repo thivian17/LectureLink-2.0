@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 import logging
 
 from .genai_client import get_genai_client as _get_client
@@ -163,3 +164,87 @@ async def generate_questions(
     except Exception as e:
         logger.error("Question generation failed: %s", e)
         raise
+
+
+# ---------------------------------------------------------------------------
+# Power quiz question generation (Learn Mode)
+# ---------------------------------------------------------------------------
+
+POWER_QUIZ_MODEL = "gemini-2.5-flash"
+
+
+async def generate_power_quiz_questions(
+    concept_list: str,
+    context: str,
+    num_questions: int,
+    title_to_id: dict[str, str] | None = None,
+) -> list[dict]:
+    """Generate MCQ questions for a power quiz.
+
+    Returns a list of question dicts ready for persistence and client delivery.
+    Each dict includes question_text, options, concept_id, concept_title,
+    and internal fields prefixed with _.
+    """
+    title_to_id = title_to_id or {}
+
+    prompt = (
+        f"Generate exactly {num_questions} multiple-choice quiz questions.\n"
+        f"Concepts to cover: {concept_list}\n"
+        "Interleave questions across concepts (don't group by concept).\n\n"
+        f"Lecture Content:\n{context}\n\n"
+        "Rules:\n"
+        "- Each question must have exactly 4 options (A-D)\n"
+        "- One correct answer per question\n"
+        "- CRITICAL: Every question MUST be directly answerable from the lecture "
+        "content provided above. Do NOT use outside knowledge.\n"
+        "- Vary difficulty: some recognition, some application\n"
+        "- Include the concept_title for each question\n\n"
+        "Respond ONLY with valid JSON array:\n"
+        "[\n"
+        '  {\n'
+        '    "question_text": "...",\n'
+        '    "options": ["A) ...", "B) ...", "C) ...", "D) ..."],\n'
+        '    "correct_answer": "A",\n'
+        '    "correct_index": 0,\n'
+        '    "explanation": "...",\n'
+        '    "concept_title": "..."\n'
+        '  }\n'
+        "]"
+    )
+
+    try:
+        response = await _get_client().aio.models.generate_content(
+            model=POWER_QUIZ_MODEL,
+            contents=prompt,
+            config={
+                "temperature": 0.5,
+                "response_mime_type": "application/json",
+            },
+        )
+        raw_questions = json.loads(response.text)
+        if isinstance(raw_questions, dict):
+            raw_questions = raw_questions.get("questions", [])
+    except Exception:
+        logger.error("Power quiz generation failed", exc_info=True)
+        raw_questions = []
+
+    results: list[dict] = []
+    for q in raw_questions[:num_questions]:
+        question_id = str(uuid.uuid4())
+        concept_title = q.get("concept_title", "")
+        concept_id_for_q = title_to_id.get(concept_title, "")
+
+        results.append({
+            "question_id": question_id,
+            "question_text": q.get("question_text", ""),
+            "options": q.get("options", []),
+            "concept_id": concept_id_for_q,
+            "concept_title": concept_title,
+            "_correct_answer": q.get("correct_answer", "A"),
+            "_correct_index": q.get("correct_index", 0),
+            "_explanation": q.get("explanation", ""),
+            "_stored_question_id": None,
+            "_source": "generated",
+        })
+
+    return results

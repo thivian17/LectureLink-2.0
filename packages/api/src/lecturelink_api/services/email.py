@@ -108,9 +108,10 @@ async def send_daily_digest(
             pass
 
         # 3. Top study actions (deterministic, fast)
-        from lecturelink_api.services.study_actions import get_study_actions
+        from lecturelink_api.services.dashboard_actions import get_best_next_actions
 
-        actions = await get_study_actions(supabase, user_id, limit=3)
+        actions_resp = await get_best_next_actions(supabase, user_id, limit=3)
+        actions = actions_resp.actions
 
         # Build HTML email
         html = _build_digest_html(

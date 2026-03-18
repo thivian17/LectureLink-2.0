@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class StartSessionRequest(BaseModel):
     time_budget_minutes: int = Field(default=15, ge=10, le=25)
     target_assessment_id: str | None = None
+    target_lecture_id: str | None = None
     target_concept_ids: list[str] | None = None
 
 

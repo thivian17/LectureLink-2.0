@@ -129,3 +129,29 @@ async def delete_course(
     )
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+
+
+@router.get("/{course_id}/performance")
+async def get_course_performance(
+    course_id: str,
+    user: dict = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    """Get performance analytics for a student in a course."""
+    sb = _sb(user, settings)
+
+    course = (
+        sb.table("courses")
+        .select("id")
+        .eq("id", course_id)
+        .eq("user_id", user["id"])
+        .execute()
+    )
+    if not course.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
+        )
+
+    from lecturelink_api.services.performance import get_performance
+
+    return await get_performance(sb, course_id, user["id"])

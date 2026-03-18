@@ -96,26 +96,8 @@ async def process_lecture_task(
 async def daily_refresh_task(
     settings: Settings = Depends(get_settings),
 ):
-    """Refresh study actions for all active users — fans out one arq job per user."""
+    """Run daily maintenance: rate-limit cleanup, zombie sweep, reminders."""
     sb = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY or settings.SUPABASE_ANON_KEY)
-
-    # Fetch all users with at least one course
-    result = sb.table("courses").select("user_id").execute()
-    user_ids = list({row["user_id"] for row in (result.data or [])})
-
-    logger.info("Daily refresh: found %d active users", len(user_ids))
-
-    # Fan out: enqueue one arq job per user
-    from lecturelink_api.services.task_queue import get_task_queue
-
-    task_queue = get_task_queue()
-    enqueued = 0
-    for user_id in user_ids:
-        try:
-            await task_queue.enqueue_user_refresh(user_id)
-            enqueued += 1
-        except Exception:
-            logger.warning("Failed to enqueue refresh for user %s", user_id, exc_info=True)
 
     # Clean up old rate limit events
     rate_limit_cleaned = 0
@@ -198,8 +180,6 @@ async def daily_refresh_task(
 
     return {
         "status": "ok",
-        "users_enqueued": enqueued,
-        "users_total": len(user_ids),
         "sessions_cleaned": sessions_cleaned,
         "rate_limit_cleaned": rate_limit_cleaned,
         "zombies_requeued": zombies_requeued,

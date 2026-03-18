@@ -268,7 +268,7 @@ async def gather_briefing_context(supabase, user_id: str) -> dict:
 
         # --- Lecture gap ---
         try:
-            from .study_actions import compute_lecture_gap
+            from .schedule_utils import compute_lecture_gap
 
             sem_start_str = course.get("semester_start")
             meeting_days = course.get("meeting_days") or []

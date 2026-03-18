@@ -13,8 +13,7 @@ STAGE_PROGRESS: dict[str, float] = {
     "analyzing_slides": 0.30,
     "aligning": 0.45,
     "extracting_concepts": 0.60,
-    "generating_embeddings": 0.75,
-    "mapping_concepts": 0.90,
+    "generating_embeddings": 0.85,
     "completed": 1.0,
 }
 

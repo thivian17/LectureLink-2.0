@@ -13,10 +13,9 @@ import asyncio
 import json
 import logging
 
-from .chunk_fetcher import fetch_concept_chunks
+from .chunk_fetcher import explain_concept, fetch_concept_chunks
 from .genai_client import get_genai_client as _get_client
 from .mastery import mastery_tier
-from .search import format_chunks_for_context
 
 logger = logging.getLogger(__name__)
 
@@ -139,54 +138,31 @@ async def generate_concept_brief(
     except Exception:
         course_name = ""
 
-    # 2. Run chunk fetch + assessment lookup concurrently
-    async def _fetch_chunks() -> list[dict]:
-        try:
-            return await fetch_concept_chunks(
-                supabase,
-                concept_id=concept_id,
-                course_id=course_id,
-                limit=5,
-                concept_title=f"{concept_title} {concept_description}",
+    # 2. Fetch assessment context
+    assessment_context = ""
+    try:
+        links_result = await asyncio.to_thread(
+            lambda: (
+                supabase.table("concept_assessment_links")
+                .select("assessment_id, relevance_score")
+                .eq("concept_id", concept_id)
+                .execute()
             )
-        except Exception:
-            logger.warning("Failed to fetch chunks for concept %s", concept_id, exc_info=True)
-        return []
-
-    async def _fetch_assessment_context() -> str:
-        try:
-            links_result = await asyncio.to_thread(
+        )
+        if links_result.data:
+            assessment_ids = [lnk["assessment_id"] for lnk in links_result.data]
+            assessments_result = await asyncio.to_thread(
                 lambda: (
-                    supabase.table("concept_assessment_links")
-                    .select("assessment_id, relevance_score")
-                    .eq("concept_id", concept_id)
+                    supabase.table("assessments")
+                    .select("id, title")
+                    .in_("id", assessment_ids)
                     .execute()
                 )
             )
-            if links_result.data:
-                assessment_ids = [lnk["assessment_id"] for lnk in links_result.data]
-                assessments_result = await asyncio.to_thread(
-                    lambda: (
-                        supabase.table("assessments")
-                        .select("id, title")
-                        .in_("id", assessment_ids)
-                        .execute()
-                    )
-                )
-                if assessments_result.data:
-                    return ", ".join(a["title"] for a in assessments_result.data)
-        except Exception:
-            logger.debug("Failed to fetch assessment links", exc_info=True)
-        return ""
-
-    chunks, assessment_context = await asyncio.gather(
-        _fetch_chunks(), _fetch_assessment_context()
-    )
-
-    if chunks:
-        source_chunks_text = format_chunks_for_context(chunks)
-    else:
-        source_chunks_text = "(No lecture content available)"
+            if assessments_result.data:
+                assessment_context = ", ".join(a["title"] for a in assessments_result.data)
+    except Exception:
+        logger.debug("Failed to fetch assessment links", exc_info=True)
 
     if not assessment_context:
         assessment_context = "No specific assessments linked"
@@ -194,28 +170,28 @@ async def generate_concept_brief(
     # 3. Determine mastery tier
     tier = _mastery_tier(mastery_score)
 
-    # 6. Call Gemini
+    # 4. Build prompt (with {source_chunks_text} placeholder for explain_concept)
     prompt = CONCEPT_BRIEF_PROMPT.format(
         concept_title=concept_title,
         concept_description=concept_description or "No description available",
         course_name=course_name or "Unknown course",
         mastery_tier=tier,
-        source_chunks_text=source_chunks_text,
+        source_chunks_text="{source_chunks_text}",
         assessment_context=assessment_context,
     )
 
-    try:
-        response = await _get_client().aio.models.generate_content(
-            model=BRIEF_MODEL,
-            contents=prompt,
-            config={
-                "temperature": 0.4,
-                "response_mime_type": "application/json",
-            },
-        )
-        result = _parse_json_response(response.text)
-    except json.JSONDecodeError:
-        logger.warning("Concept brief response was not valid JSON")
+    # 5. Fetch chunks + call Gemini via explain_concept
+    result = await explain_concept(
+        supabase,
+        concept_id=concept_id,
+        course_id=course_id,
+        query=f"{concept_title} {concept_description}",
+        prompt=prompt,
+        temperature=0.4,
+        response_mime_type="application/json",
+    )
+
+    if not isinstance(result, dict) or not result:
         result = {
             "what_is_this": "Unable to generate brief. Please try again.",
             "why_it_matters": "",
@@ -227,11 +203,19 @@ async def generate_concept_brief(
                 "explanation": "Review the concept brief above.",
             },
         }
-    except Exception:
-        logger.error("Concept brief generation failed", exc_info=True)
-        raise
 
-    # 7. Build source citations
+    # 6. Fetch chunks again for source citations (lightweight — may be cached)
+    try:
+        chunks = await fetch_concept_chunks(
+            supabase,
+            concept_id=concept_id,
+            course_id=course_id,
+            limit=5,
+            concept_title=f"{concept_title} {concept_description}",
+        )
+    except Exception:
+        chunks = []
+
     sources = []
     for chunk in chunks[:5]:
         sources.append({

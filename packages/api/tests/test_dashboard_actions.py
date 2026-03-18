@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -130,8 +130,13 @@ class TestGetAcademicTimeline:
         assert len(result.items) == 0
 
     @pytest.mark.asyncio
-    async def test_exam_type_has_readiness(self):
+    @patch("lecturelink_api.services.dashboard_actions.get_assessment_concepts", new_callable=AsyncMock)
+    async def test_exam_type_has_readiness(self, mock_get_concepts):
         """Exam-type assessments should have a readiness score."""
+        mock_get_concepts.return_value = [
+            {"concept_id": "con1"},
+            {"concept_id": "con2"},
+        ]
         courses = [{"id": "c1", "name": "Math", "code": "MATH101"}]
         assessments = [
             {
@@ -140,15 +145,10 @@ class TestGetAcademicTimeline:
                 "weight_percent": 40,
             },
         ]
-        concept_links = [
-            {"assessment_id": "a1", "concept_id": "con1"},
-            {"assessment_id": "a1", "concept_id": "con2"},
-        ]
         learning_events = [{"concept_id": "con1"}]
         sb = _make_supabase(
             courses=courses,
             assessments=assessments,
-            concept_links=concept_links,
             learning_events=learning_events,
             lectures=[],
             concepts=[],
@@ -254,8 +254,14 @@ class TestGetBestNextActions:
     """Tests for get_best_next_actions."""
 
     @pytest.mark.asyncio
-    async def test_low_readiness_near_deadline_critical(self):
+    @patch("lecturelink_api.services.dashboard_actions.get_assessment_concepts", new_callable=AsyncMock)
+    async def test_low_readiness_near_deadline_critical(self, mock_get_concepts):
         """Assessment in 3 days with low readiness → study_session with critical urgency."""
+        mock_get_concepts.return_value = [
+            {"concept_id": "con1"},
+            {"concept_id": "con2"},
+            {"concept_id": "con3"},
+        ]
         courses = [{"id": "c1", "name": "Math", "code": "MATH101"}]
         assessments = [
             {
@@ -264,16 +270,10 @@ class TestGetBestNextActions:
                 "weight_percent": 20,
             },
         ]
-        concept_links = [
-            {"assessment_id": "a1", "concept_id": "con1"},
-            {"assessment_id": "a1", "concept_id": "con2"},
-            {"assessment_id": "a1", "concept_id": "con3"},
-        ]
         # No learning events → readiness = 0
         sb = _make_supabase(
             courses=courses,
             assessments=assessments,
-            concept_links=concept_links,
             learning_events=[],
             lectures=[],
             concepts=[],
@@ -315,8 +315,13 @@ class TestGetBestNextActions:
         assert "Lecture 8" in lecture_actions[0].title
 
     @pytest.mark.asyncio
-    async def test_high_readiness_skipped(self):
+    @patch("lecturelink_api.services.dashboard_actions.get_assessment_concepts", new_callable=AsyncMock)
+    async def test_high_readiness_skipped(self, mock_get_concepts):
         """Assessments with readiness >= 0.8 should not generate study_session actions."""
+        mock_get_concepts.return_value = [
+            {"concept_id": "con1"},
+            {"concept_id": "con2"},
+        ]
         courses = [{"id": "c1", "name": "Math", "code": "MATH101"}]
         assessments = [
             {
@@ -324,10 +329,6 @@ class TestGetBestNextActions:
                 "type": "quiz", "due_date": (TODAY + timedelta(days=5)).isoformat(),
                 "weight_percent": 10,
             },
-        ]
-        concept_links = [
-            {"assessment_id": "a1", "concept_id": "con1"},
-            {"assessment_id": "a1", "concept_id": "con2"},
         ]
         # Both concepts interacted → readiness = 1.0
         learning_events = [
@@ -337,7 +338,6 @@ class TestGetBestNextActions:
         sb = _make_supabase(
             courses=courses,
             assessments=assessments,
-            concept_links=concept_links,
             learning_events=learning_events,
             lectures=[],
             concepts=[],
@@ -348,8 +348,12 @@ class TestGetBestNextActions:
         assert len(study_actions) == 0
 
     @pytest.mark.asyncio
-    async def test_actions_sorted_by_urgency(self):
+    @patch("lecturelink_api.services.dashboard_actions.get_assessment_concepts", new_callable=AsyncMock)
+    async def test_actions_sorted_by_urgency(self, mock_get_concepts):
         """Actions should be sorted by priority (most urgent first)."""
+        async def _side_effect(supabase, assessment_id, course_id, user_id):
+            return [{"concept_id": f"con_{assessment_id}"}]
+        mock_get_concepts.side_effect = _side_effect
         courses = [{"id": "c1", "name": "Math", "code": "MATH101"}]
         assessments = [
             {
@@ -363,14 +367,9 @@ class TestGetBestNextActions:
                 "weight_percent": 30,
             },
         ]
-        concept_links = [
-            {"assessment_id": "a1", "concept_id": "con1"},
-            {"assessment_id": "a2", "concept_id": "con2"},
-        ]
         sb = _make_supabase(
             courses=courses,
             assessments=assessments,
-            concept_links=concept_links,
             learning_events=[],
             lectures=[],
             concepts=[],
@@ -383,8 +382,12 @@ class TestGetBestNextActions:
         assert "Near Exam" in study_actions[0].title
 
     @pytest.mark.asyncio
-    async def test_respects_limit(self):
+    @patch("lecturelink_api.services.dashboard_actions.get_assessment_concepts", new_callable=AsyncMock)
+    async def test_respects_limit(self, mock_get_concepts):
         """Should return at most `limit` actions."""
+        async def _side_effect(supabase, assessment_id, course_id, user_id):
+            return [{"concept_id": f"con_{assessment_id}"}]
+        mock_get_concepts.side_effect = _side_effect
         courses = [{"id": "c1", "name": "Math", "code": "MATH101"}]
         assessments = [
             {
@@ -395,14 +398,9 @@ class TestGetBestNextActions:
             }
             for i in range(6)
         ]
-        concept_links = [
-            {"assessment_id": f"a{i}", "concept_id": f"con{i}"}
-            for i in range(6)
-        ]
         sb = _make_supabase(
             courses=courses,
             assessments=assessments,
-            concept_links=concept_links,
             learning_events=[],
             lectures=[],
             concepts=[],

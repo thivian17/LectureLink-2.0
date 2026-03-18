@@ -28,6 +28,10 @@ from lecturelink_api.services.learn_session import (
     submit_gut_check,
     submit_power_quiz_answer,
 )
+from lecturelink_api.services.lecture_mastery import get_lecture_mastery
+from lecturelink_api.services.spaced_repetition import (
+    get_priority_concepts as get_priority_concepts_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +58,7 @@ async def start_session(
         course_id=course_id,
         time_budget_minutes=body.time_budget_minutes,
         target_assessment_id=body.target_assessment_id,
+        target_lecture_id=body.target_lecture_id,
         target_concept_ids=body.target_concept_ids,
     )
     return StartSessionResponse(**result)
@@ -234,3 +239,26 @@ async def get_session_state(
             status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
         )
     return session
+
+
+@router.get("/lecture-mastery/{course_id}")
+async def lecture_mastery(
+    course_id: str,
+    user: dict = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    """Per-lecture mastery stats for a course."""
+    sb = _sb(user, settings)
+    return await get_lecture_mastery(sb, user["id"], course_id)
+
+
+@router.get("/priority-concepts/{course_id}")
+async def priority_concepts(
+    course_id: str,
+    limit: int = 10,
+    user: dict = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    """Top N priority concepts for spaced repetition study."""
+    sb = _sb(user, settings)
+    return await get_priority_concepts_service(sb, user["id"], course_id, limit=limit)

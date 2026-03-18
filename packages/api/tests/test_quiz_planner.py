@@ -47,41 +47,31 @@ class TestPlanQuiz:
         """When target_assessment_id provided, selects linked concepts."""
         from lecturelink_api.services.quiz_planner import plan_quiz
 
-        # Mock concept_assessment_links query
-        links_chain = MagicMock()
-        links_chain.select.return_value = links_chain
-        links_chain.eq.return_value = links_chain
-        links_chain.order.return_value = links_chain
-        links_chain.limit.return_value = links_chain
-        links_chain.execute.return_value = MagicMock(data=[
-            {"concept_id": "c1", "relevance_score": 0.9},
-            {"concept_id": "c2", "relevance_score": 0.8},
-        ])
-
         # Mock concepts query
         concepts_chain = MagicMock()
         concepts_chain.select.return_value = concepts_chain
         concepts_chain.in_.return_value = concepts_chain
+        concepts_chain.eq.return_value = concepts_chain
         concepts_chain.execute.return_value = MagicMock(data=[
             {
                 "id": "c1", "title": "Entropy",
                 "description": "Measure of disorder",
                 "category": "concept",
                 "difficulty_estimate": 0.5, "lecture_id": "l1",
+                "subconcepts": None,
             },
             {
                 "id": "c2", "title": "Enthalpy",
                 "description": "Heat content",
                 "category": "concept",
                 "difficulty_estimate": 0.4, "lecture_id": "l1",
+                "subconcepts": None,
             },
         ])
 
 
         def table_side_effect(name):
-            if name == "concept_assessment_links":
-                return links_chain
-            elif name == "concepts":
+            if name == "concepts":
                 return concepts_chain
             # lectures table for title enrichment
             lectures_chain = MagicMock()
@@ -104,10 +94,18 @@ class TestPlanQuiz:
             },
         ])
 
-        result = await plan_quiz(
-            supabase_mock, "course-1", "user-1",
-            target_assessment_id="assess-1", num_questions=2,
-        )
+        with patch(
+            "lecturelink_api.services.quiz_planner.get_assessment_concepts",
+            new_callable=AsyncMock,
+            return_value=[
+                {"concept_id": "c1", "concept_title": "Entropy", "similarity": 0.9},
+                {"concept_id": "c2", "concept_title": "Enthalpy", "similarity": 0.8},
+            ],
+        ):
+            result = await plan_quiz(
+                supabase_mock, "course-1", "user-1",
+                target_assessment_id="assess-1", num_questions=2,
+            )
         assert len(result["concepts"]) >= 1
         assert result["difficulty"] == "medium"
 
@@ -116,16 +114,19 @@ class TestPlanQuiz:
         """Should raise ValueError when no concepts found."""
         from lecturelink_api.services.quiz_planner import plan_quiz
 
-        links_chain = MagicMock()
-        links_chain.select.return_value = links_chain
-        links_chain.eq.return_value = links_chain
-        links_chain.order.return_value = links_chain
-        links_chain.limit.return_value = links_chain
-        links_chain.execute.return_value = MagicMock(data=[])
+        empty_chain = MagicMock()
+        empty_chain.select.return_value = empty_chain
+        empty_chain.eq.return_value = empty_chain
+        empty_chain.in_.return_value = empty_chain
+        empty_chain.execute.return_value = MagicMock(data=[])
         supabase_mock.table.side_effect = None
-        supabase_mock.table.return_value = links_chain
+        supabase_mock.table.return_value = empty_chain
 
-        with pytest.raises(ValueError, match="No concepts found"):
+        with patch(
+            "lecturelink_api.services.quiz_planner.get_assessment_concepts",
+            new_callable=AsyncMock,
+            return_value=[],
+        ), pytest.raises(ValueError, match="No concepts found"):
             await plan_quiz(
                 supabase_mock, "course-1", "user-1",
                 target_assessment_id="assess-1",

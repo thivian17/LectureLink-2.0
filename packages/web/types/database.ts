@@ -357,30 +357,6 @@ export interface PerformanceData {
   strong_concepts: string[];
 }
 
-// ---------------------------------------------------------------------------
-// Study Coach (Phase 3)
-// ---------------------------------------------------------------------------
-
-export interface CoachRecommendation {
-  concept: string;
-  action: string;
-  priority: "high" | "medium" | "low";
-}
-
-export interface CoachResponse {
-  message: string;
-  recommendations: CoachRecommendation[];
-  suggested_quiz: { focus: string | null; difficulty: string } | null;
-}
-
-export interface CoachMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  recommendations: CoachRecommendation[];
-  suggested_quiz: { focus: string | null; difficulty: string } | null;
-  created_at: string;
-}
 
 // ---------------------------------------------------------------------------
 // Invites & Referrals
@@ -393,28 +369,6 @@ export interface Invite {
   max_uses: number;
   use_count: number;
   expires_at: string;
-}
-
-// ---------------------------------------------------------------------------
-// Study Actions (Study Hub)
-// ---------------------------------------------------------------------------
-
-export interface StudyAction {
-  action_type: string;
-  priority: number;
-  course_id: string;
-  course_name: string;
-  course_code: string | null;
-  title: string;
-  description: string;
-  cta_label: string;
-  cta_url: string;
-  metadata: Record<string, unknown>;
-}
-
-export interface StudyActionsResponse {
-  actions: StudyAction[];
-  generated_at: string;
 }
 
 // ---------------------------------------------------------------------------

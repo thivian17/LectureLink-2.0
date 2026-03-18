@@ -265,18 +265,6 @@ async def task_process_material(
     )
 
 
-async def task_refresh_user(
-    ctx: dict,
-    *,
-    user_id: str,
-) -> None:
-    """Refresh study actions for a single user."""
-    from lecturelink_api.services.study_actions import get_study_actions
-
-    logger.info("Refreshing study actions for user %s", user_id)
-    await get_study_actions(ctx["supabase"], user_id)
-
-
 async def task_send_notification(
     ctx: dict,
     *,
@@ -330,7 +318,6 @@ class WorkerSettings:
         task_generate_quiz,
         task_process_syllabus,
         task_process_material,
-        task_refresh_user,
         task_send_notification,
     ]
     on_startup = on_startup
@@ -341,7 +328,7 @@ class WorkerSettings:
 
 
 class FastWorkerSettings:
-    """arq worker — fast queue only (syllabus, notifications, user refresh).
+    """arq worker — fast queue only (syllabus, notifications).
 
     These jobs complete in under a minute and should never be blocked
     by long-running lecture or quiz processing.
@@ -349,7 +336,6 @@ class FastWorkerSettings:
 
     functions = [
         task_process_syllabus,
-        task_refresh_user,
         task_send_notification,
     ]
     on_startup = on_startup

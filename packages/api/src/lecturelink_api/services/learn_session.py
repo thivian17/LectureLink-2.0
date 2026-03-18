@@ -9,7 +9,6 @@ Integrates with gamification services via try/except for parallel development.
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 import random
 import uuid
@@ -17,13 +16,13 @@ from datetime import UTC, datetime
 
 from .concept_brief import generate_concept_brief
 from .flash_review import get_flash_review_cards, grade_flash_review
-from .genai_client import get_genai_client as _get_client
+from .lecture_mastery import get_lecture_concepts_for_study
 from .mastery import compute_mastery, record_learning_event
 from .search import format_chunks_for_context, search_lectures
+from .spaced_repetition import get_priority_concepts
 
 logger = logging.getLogger(__name__)
 
-QUIZ_MODEL = "gemini-2.5-flash"
 
 # Time budget → number of concepts
 TIME_BUDGET_CONCEPTS = {
@@ -128,6 +127,7 @@ async def start_learn_session(
     course_id: str,
     time_budget_minutes: int = 15,
     target_assessment_id: str | None = None,
+    target_lecture_id: str | None = None,
     target_concept_ids: list[str] | None = None,
 ) -> dict:
     """Start a new Learn Mode session.
@@ -135,7 +135,7 @@ async def start_learn_session(
     Returns daily briefing + flash review cards.
     Resumes existing active session if one exists (unless targeting overrides).
     """
-    is_custom = bool(target_assessment_id or target_concept_ids)
+    is_custom = bool(target_assessment_id or target_lecture_id or target_concept_ids)
 
     # 1. Check for existing active session (skip if user is customizing)
     if not is_custom:
@@ -293,78 +293,58 @@ async def start_learn_session(
         # User explicitly chose concepts — use them directly
         selected = [_enrich_concept(cid) for cid in target_concept_ids]
 
-    elif target_assessment_id:
-        # User chose a specific assessment — get its linked concepts
-        target_assessment = next(
-            (a for a in assessments if a.get("assessment_id") == target_assessment_id),
-            None,
+    elif target_lecture_id:
+        # User chose a specific lecture — get its concepts, weakest first
+        selected = await get_lecture_concepts_for_study(
+            supabase, user_id, target_lecture_id, limit=num_concepts,
         )
-        linked_concepts = []
-        try:
-            links_result = (
-                supabase.table("concept_assessment_links")
-                .select("concept_id, relevance_score")
-                .eq("assessment_id", target_assessment_id)
-                .order("relevance_score", desc=True)
-                .limit(10)
-                .execute()
-            )
-            linked_concepts = links_result.data or []
-        except Exception:
-            logger.warning("Failed to fetch concept-assessment links", exc_info=True)
 
+    elif target_assessment_id:
+        # User chose a specific assessment — get its concepts via assessment prep
+        from .assessment_prep import get_assessment_concepts  # noqa: E402
+        assessment_concepts = await get_assessment_concepts(
+            supabase, target_assessment_id, course_id, user_id,
+        )
         selected = []
-        for link in linked_concepts:
+        for ac in assessment_concepts:
             if len(selected) >= num_concepts:
                 break
-            cid = link["concept_id"]
+            cid = ac["concept_id"]
             if cid in recently_studied:
                 continue
             entry = _enrich_concept(cid)
-            entry["priority_score"] = link.get("relevance_score", 0.5)
+            entry["priority_score"] = ac.get("priority_score", 0.5)
             selected.append(entry)
         if not selected:
-            for link in linked_concepts[:num_concepts]:
-                entry = _enrich_concept(link["concept_id"])
-                entry["priority_score"] = link.get("relevance_score", 0.5)
+            for ac in assessment_concepts[:num_concepts]:
+                entry = _enrich_concept(ac["concept_id"])
+                entry["priority_score"] = ac.get("priority_score", 0.5)
                 selected.append(entry)
-    else:
-        # Auto mode — original logic: top-priority assessment → linked concepts
-        linked_concepts = []
-        if assessments:
-            target_assessment = assessments[0]
-            try:
-                links_result = (
-                    supabase.table("concept_assessment_links")
-                    .select("concept_id, relevance_score")
-                    .eq("assessment_id", target_assessment["assessment_id"])
-                    .order("relevance_score", desc=True)
-                    .limit(10)
-                    .execute()
-                )
-                linked_concepts = links_result.data or []
-            except Exception:
-                logger.warning("Failed to fetch concept-assessment links", exc_info=True)
 
-        if linked_concepts:
+    else:
+        # Auto mode — BKT spaced repetition priorities
+        priority_concepts = await get_priority_concepts(
+            supabase, user_id, course_id, limit=num_concepts,
+        )
+        if priority_concepts:
             selected = []
-            for link in linked_concepts:
-                if len(selected) >= num_concepts:
-                    break
-                cid = link["concept_id"]
-                if cid in recently_studied:
+            for pc in priority_concepts:
+                cid = pc["concept_id"]
+                if cid in recently_studied and len(priority_concepts) > num_concepts:
                     continue
                 entry = _enrich_concept(cid)
-                entry["priority_score"] = link.get("relevance_score", 0.5)
+                entry["priority_score"] = pc.get("priority_score", 0.5)
                 selected.append(entry)
+                if len(selected) >= num_concepts:
+                    break
+            # If rotation filtered everything, relax
             if not selected:
-                logger.info("All linked concepts recently studied — relaxing rotation filter")
-                for link in linked_concepts[:num_concepts]:
-                    entry = _enrich_concept(link["concept_id"])
-                    entry["priority_score"] = link.get("relevance_score", 0.5)
+                for pc in priority_concepts[:num_concepts]:
+                    entry = _enrich_concept(pc["concept_id"])
+                    entry["priority_score"] = pc.get("priority_score", 0.5)
                     selected.append(entry)
         else:
-            # Fallback: most recent concepts
+            # Fallback: most recent concepts (no BKT data yet)
             fallback_rows = [
                 c for c in all_concepts
                 if c["id"] not in recently_studied
@@ -1012,64 +992,14 @@ async def get_power_quiz(
         if not concept_list:
             concept_list = "the topics covered in the lecture content below"
 
-        prompt = (
-            f"Generate exactly {remaining_needed} multiple-choice quiz questions.\n"
-            f"Concepts to cover: {concept_list}\n"
-            "Interleave questions across concepts (don't group by concept).\n\n"
-            f"Lecture Content:\n{context}\n\n"
-            "Rules:\n"
-            "- Each question must have exactly 4 options (A-D)\n"
-            "- One correct answer per question\n"
-            "- CRITICAL: Every question MUST be directly answerable from the lecture "
-            "content provided above. Do NOT use outside knowledge.\n"
-            "- Vary difficulty: some recognition, some application\n"
-            "- Include the concept_title for each question\n\n"
-            "Respond ONLY with valid JSON array:\n"
-            "[\n"
-            '  {\n'
-            '    "question_text": "...",\n'
-            '    "options": ["A) ...", "B) ...", "C) ...", "D) ..."],\n'
-            '    "correct_answer": "A",\n'
-            '    "correct_index": 0,\n'
-            '    "explanation": "...",\n'
-            '    "concept_title": "..."\n'
-            '  }\n'
-            "]"
+        from .quiz_generator import generate_power_quiz_questions
+
+        generated_questions = await generate_power_quiz_questions(
+            concept_list=concept_list,
+            context=context,
+            num_questions=remaining_needed,
+            title_to_id=title_to_id,
         )
-
-        try:
-            response = await _get_client().aio.models.generate_content(
-                model=QUIZ_MODEL,
-                contents=prompt,
-                config={
-                    "temperature": 0.5,
-                    "response_mime_type": "application/json",
-                },
-            )
-            raw_questions = json.loads(response.text)
-            if isinstance(raw_questions, dict):
-                raw_questions = raw_questions.get("questions", [])
-        except Exception:
-            logger.error("Power quiz generation failed", exc_info=True)
-            raw_questions = []
-
-        for q in raw_questions[:remaining_needed]:
-            question_id = str(uuid.uuid4())
-            concept_title = q.get("concept_title", "")
-            concept_id_for_q = title_to_id.get(concept_title, "")
-
-            generated_questions.append({
-                "question_id": question_id,
-                "question_text": q.get("question_text", ""),
-                "options": q.get("options", []),
-                "concept_id": concept_id_for_q,
-                "concept_title": concept_title,
-                "_correct_answer": q.get("correct_answer", "A"),
-                "_correct_index": q.get("correct_index", 0),
-                "_explanation": q.get("explanation", ""),
-                "_stored_question_id": None,
-                "_source": "generated",
-            })
 
     # --- Persist newly generated questions to quiz_questions ---
     for q in generated_questions:

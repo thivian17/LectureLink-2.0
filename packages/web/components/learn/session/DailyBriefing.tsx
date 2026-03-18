@@ -13,7 +13,6 @@ import {
 import { cn } from "@/lib/utils";
 import type {
   DailyBriefing as DailyBriefingType,
-  AvailableAssessment,
   AvailableConcept,
 } from "@/types/database";
 
@@ -24,10 +23,12 @@ interface DailyBriefingProps {
   onStart: () => void;
   onCustomize?: (options: {
     targetAssessmentId?: string;
+    targetLectureId?: string;
     targetConceptIds?: string[];
   }) => void;
   starting?: boolean;
   streak?: number;
+  lectures?: { lecture_id: string; title: string; avg_mastery: number; concept_count: number }[];
 }
 
 const TIME_OPTIONS = [10, 15, 20, 25];
@@ -59,11 +60,12 @@ export function DailyBriefing({
   onCustomize,
   starting,
   streak = 0,
+  lectures,
 }: DailyBriefingProps) {
   const [customizeOpen, setCustomizeOpen] = useState(false);
-  const [selectedAssessmentId, setSelectedAssessmentId] = useState<string | null>(null);
+  const [selectedLectureId, setSelectedLectureId] = useState<string | null>(null);
   const [selectedConceptIds, setSelectedConceptIds] = useState<Set<string>>(new Set());
-  const [customizeMode, setCustomizeMode] = useState<"assessment" | "concepts" | null>(null);
+  const [customizeMode, setCustomizeMode] = useState<"lecture" | "concepts" | null>(null);
 
   const motivationalMsg = useMemo(
     () =>
@@ -90,8 +92,8 @@ export function DailyBriefing({
 
   function handleApplyCustom() {
     if (!onCustomize) return;
-    if (customizeMode === "assessment" && selectedAssessmentId) {
-      onCustomize({ targetAssessmentId: selectedAssessmentId });
+    if (customizeMode === "lecture" && selectedLectureId) {
+      onCustomize({ targetLectureId: selectedLectureId });
     } else if (customizeMode === "concepts" && selectedConceptIds.size > 0) {
       onCustomize({ targetConceptIds: Array.from(selectedConceptIds) });
     }
@@ -100,20 +102,10 @@ export function DailyBriefing({
 
   function handleResetToRecommended() {
     setCustomizeMode(null);
-    setSelectedAssessmentId(null);
+    setSelectedLectureId(null);
     setSelectedConceptIds(new Set());
     if (onCustomize) onCustomize({});
     setCustomizeOpen(false);
-  }
-
-  function formatDaysUntil(dueDateStr: string | null): string {
-    if (!dueDateStr) return "";
-    const due = new Date(dueDateStr + "T00:00:00");
-    const now = new Date();
-    const days = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    if (days <= 0) return "today";
-    if (days === 1) return "tomorrow";
-    return `in ${days} days`;
   }
 
   return (
@@ -185,14 +177,14 @@ export function DailyBriefing({
               <div className="flex gap-2">
                 <Button
                   size="sm"
-                  variant={customizeMode === "assessment" ? "default" : "outline"}
+                  variant={customizeMode === "lecture" ? "default" : "outline"}
                   className="flex-1"
                   onClick={() => {
-                    setCustomizeMode("assessment");
+                    setCustomizeMode("lecture");
                     setSelectedConceptIds(new Set());
                   }}
                 >
-                  By assessment
+                  By lecture
                 </Button>
                 <Button
                   size="sm"
@@ -200,45 +192,41 @@ export function DailyBriefing({
                   className="flex-1"
                   onClick={() => {
                     setCustomizeMode("concepts");
-                    setSelectedAssessmentId(null);
+                    setSelectedLectureId(null);
                   }}
                 >
                   By concept
                 </Button>
               </div>
 
-              {/* Assessment picker */}
-              {customizeMode === "assessment" && (briefing.available_assessments?.length ?? 0) > 0 && (
+              {/* Lecture picker */}
+              {customizeMode === "lecture" && (lectures?.length ?? 0) > 0 && (
                 <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                  {briefing.available_assessments!.map((a) => (
+                  {lectures!.map((lec) => (
                     <button
-                      key={a.assessment_id}
+                      key={lec.lecture_id}
                       type="button"
                       className={cn(
                         "w-full text-left rounded-lg border p-2.5 text-sm transition-colors",
-                        selectedAssessmentId === a.assessment_id
+                        selectedLectureId === lec.lecture_id
                           ? "border-primary bg-primary/5"
                           : "hover:bg-muted/50",
                       )}
-                      onClick={() => setSelectedAssessmentId(a.assessment_id)}
+                      onClick={() => setSelectedLectureId(lec.lecture_id)}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-medium">{a.title}</span>
-                        {selectedAssessmentId === a.assessment_id && (
+                        <span className="font-medium">{lec.title}</span>
+                        {selectedLectureId === lec.lecture_id && (
                           <Check className="h-4 w-4 text-primary" />
                         )}
                       </div>
                       <div className="flex gap-2 mt-0.5">
-                        {a.due_date && (
-                          <span className="text-xs text-muted-foreground">
-                            {formatDaysUntil(a.due_date)}
-                          </span>
-                        )}
-                        {a.weight_percent != null && (
-                          <span className="text-xs text-muted-foreground">
-                            {a.weight_percent}% of grade
-                          </span>
-                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {lec.concept_count} concepts
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {Math.round(lec.avg_mastery * 100)}% mastery
+                        </span>
                       </div>
                     </button>
                   ))}
@@ -295,7 +283,7 @@ export function DailyBriefing({
                     className="flex-1"
                     onClick={handleApplyCustom}
                     disabled={
-                      (customizeMode === "assessment" && !selectedAssessmentId) ||
+                      (customizeMode === "lecture" && !selectedLectureId) ||
                       (customizeMode === "concepts" && selectedConceptIds.size === 0)
                     }
                   >

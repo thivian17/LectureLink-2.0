@@ -26,9 +26,13 @@ function getActionHref(action: SuggestedAction): string {
   if (!courseId) return "/dashboard";
   const config = ACTION_CTA[action.action_type];
   if (!config) return `/dashboard/courses/${courseId}`;
-  return config.path
-    ? `/dashboard/courses/${courseId}/${config.path}`
-    : `/dashboard/courses/${courseId}`;
+  if (!config.path) return `/dashboard/courses/${courseId}`;
+  const base = `/dashboard/courses/${courseId}/${config.path}`;
+  // Pass assessment targeting as search params so the learn session auto-focuses
+  if (action.target_assessment_id && config.path === "learn") {
+    return `${base}?assessmentId=${action.target_assessment_id}`;
+  }
+  return base;
 }
 
 interface ActionCardProps {

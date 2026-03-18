@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from .assessment_prep import get_assessment_concepts
 from .chunk_fetcher import fetch_concept_chunks
 
 logger = logging.getLogger(__name__)
@@ -43,17 +44,12 @@ async def plan_quiz(
     """
     # 1. Get concepts for this course, prioritized
     if target_assessment_id:
-        links = (
-            supabase.table("concept_assessment_links")
-            .select("concept_id, relevance_score")
-            .eq("assessment_id", target_assessment_id)
-            .order("relevance_score", desc=True)
-            .limit(num_questions * 2)
-            .execute()
+        assessment_concepts = await get_assessment_concepts(
+            supabase, target_assessment_id, course_id, user_id,
         )
 
-        if links.data:
-            concept_ids = [link["concept_id"] for link in links.data]
+        if assessment_concepts:
+            concept_ids = [ac["concept_id"] for ac in assessment_concepts[:num_questions * 2]]
             concepts_result = (
                 supabase.table("concepts")
                 .select(

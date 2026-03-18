@@ -86,7 +86,6 @@ def override_task_queue():
     mock_tq.enqueue_lecture_processing = AsyncMock()
     mock_tq.enqueue_quiz_generation = AsyncMock()
     mock_tq.enqueue_syllabus_processing = AsyncMock()
-    mock_tq.enqueue_user_refresh = AsyncMock()
     app.dependency_overrides[get_task_queue] = lambda: mock_tq
     yield mock_tq
     app.dependency_overrides.pop(get_task_queue, None)

@@ -136,18 +136,14 @@ class TestStartLearnSession:
         sb.table.assert_any_call("learn_sessions")
 
     @pytest.mark.asyncio
-    async def test_assessment_driven_concept_selection(self):
-        """Concepts linked to the top-priority assessment are selected."""
+    async def test_spaced_rep_auto_mode_concept_selection(self):
+        """Auto-mode uses spaced repetition to select priority concepts."""
         from lecturelink_api.services.learn_session import start_learn_session
 
         sb = _setup_supabase_for_start(
             priority_assessments=[
                 {"assessment_id": "a1", "title": "Midterm 1", "course_id": "course1",
                  "due_date": "2027-06-15", "weight_percent": 25.0, "priority_score": 0.95},
-            ],
-            concept_links=[
-                {"concept_id": "c1", "relevance_score": 0.9},
-                {"concept_id": "c2", "relevance_score": 0.5},
             ],
             mastery=[
                 {"concept_id": "c1", "concept_title": "High Priority", "total_attempts": 3,
@@ -161,29 +157,28 @@ class TestStartLearnSession:
             "lecturelink_api.services.learn_session.get_flash_review_cards",
             new_callable=AsyncMock,
             return_value=[],
+        ), patch(
+            "lecturelink_api.services.learn_session.get_priority_concepts",
+            new_callable=AsyncMock,
+            return_value=[
+                {"concept_id": "c1", "concept_title": "High Priority",
+                 "mastery_score": 0.24, "total_attempts": 3, "priority_score": 0.85,
+                 "days_since_review": 5},
+            ],
         ):
             result = await start_learn_session(sb, "user1", "course1", 15)
 
-        # 15 min = 1 concept, should pick highest relevance link (c1)
+        # 15 min = 1 concept, should pick the priority concept from spaced rep
         concepts = result["daily_briefing"]["concepts_planned"]
         assert len(concepts) == 1
         assert concepts[0]["title"] == "High Priority"
-        # Assessment context should mention the target assessment
-        assert "Midterm 1" in (result["daily_briefing"]["assessment_context"] or "")
 
     @pytest.mark.asyncio
     async def test_time_budget_10_min_1_concept(self):
         from lecturelink_api.services.learn_session import start_learn_session
 
         sb = _setup_supabase_for_start(
-            priority_assessments=[
-                {"assessment_id": "a1", "title": "Exam", "course_id": "course1",
-                 "due_date": "2027-06-15", "weight_percent": 20.0, "priority_score": 0.9},
-            ],
-            concept_links=[
-                {"concept_id": "c1", "relevance_score": 0.9},
-                {"concept_id": "c2", "relevance_score": 0.7},
-            ],
+            priority_assessments=[],
             mastery=[
                 {"concept_id": "c1", "concept_title": "A", "total_attempts": 2,
                  "accuracy": 0.5, "recent_accuracy": 0.5, "trend": "stable"},
@@ -196,6 +191,15 @@ class TestStartLearnSession:
             "lecturelink_api.services.learn_session.get_flash_review_cards",
             new_callable=AsyncMock,
             return_value=[],
+        ), patch(
+            "lecturelink_api.services.learn_session.get_priority_concepts",
+            new_callable=AsyncMock,
+            return_value=[
+                {"concept_id": "c1", "concept_title": "A", "mastery_score": 0.5,
+                 "total_attempts": 2, "priority_score": 0.6, "days_since_review": 3},
+                {"concept_id": "c2", "concept_title": "B", "mastery_score": 0.6,
+                 "total_attempts": 3, "priority_score": 0.5, "days_since_review": 2},
+            ],
         ):
             result = await start_learn_session(sb, "user1", "course1", 10)
 
@@ -206,15 +210,7 @@ class TestStartLearnSession:
         from lecturelink_api.services.learn_session import start_learn_session
 
         sb = _setup_supabase_for_start(
-            priority_assessments=[
-                {"assessment_id": "a1", "title": "Exam", "course_id": "course1",
-                 "due_date": "2027-06-15", "weight_percent": 20.0, "priority_score": 0.9},
-            ],
-            concept_links=[
-                {"concept_id": "c1", "relevance_score": 0.9},
-                {"concept_id": "c2", "relevance_score": 0.7},
-                {"concept_id": "c3", "relevance_score": 0.5},
-            ],
+            priority_assessments=[],
             mastery=[
                 {"concept_id": "c1", "concept_title": "A", "total_attempts": 2,
                  "accuracy": 0.5, "recent_accuracy": 0.5, "trend": "stable"},
@@ -229,6 +225,17 @@ class TestStartLearnSession:
             "lecturelink_api.services.learn_session.get_flash_review_cards",
             new_callable=AsyncMock,
             return_value=[],
+        ), patch(
+            "lecturelink_api.services.learn_session.get_priority_concepts",
+            new_callable=AsyncMock,
+            return_value=[
+                {"concept_id": "c1", "concept_title": "A", "mastery_score": 0.5,
+                 "total_attempts": 2, "priority_score": 0.6, "days_since_review": 3},
+                {"concept_id": "c2", "concept_title": "B", "mastery_score": 0.6,
+                 "total_attempts": 3, "priority_score": 0.5, "days_since_review": 2},
+                {"concept_id": "c3", "concept_title": "C", "mastery_score": 0.4,
+                 "total_attempts": 1, "priority_score": 0.7, "days_since_review": 5},
+            ],
         ):
             result = await start_learn_session(sb, "user1", "course1", 20)
 
@@ -239,14 +246,7 @@ class TestStartLearnSession:
         from lecturelink_api.services.learn_session import start_learn_session
 
         sb = _setup_supabase_for_start(
-            priority_assessments=[
-                {"assessment_id": "a1", "title": "Final", "course_id": "course1",
-                 "due_date": "2026-04-01", "weight_percent": 40.0, "priority_score": 0.95},
-            ],
-            concept_links=[
-                {"concept_id": f"c{i}", "relevance_score": 0.9 - i * 0.1}
-                for i in range(5)
-            ],
+            priority_assessments=[],
             mastery=[
                 {"concept_id": f"c{i}", "concept_title": f"C{i}", "total_attempts": 2,
                  "accuracy": 0.5, "recent_accuracy": 0.5, "trend": "stable"}
@@ -258,6 +258,15 @@ class TestStartLearnSession:
             "lecturelink_api.services.learn_session.get_flash_review_cards",
             new_callable=AsyncMock,
             return_value=[],
+        ), patch(
+            "lecturelink_api.services.learn_session.get_priority_concepts",
+            new_callable=AsyncMock,
+            return_value=[
+                {"concept_id": f"c{i}", "concept_title": f"C{i}", "mastery_score": 0.5,
+                 "total_attempts": 2, "priority_score": 0.6 - i * 0.05,
+                 "days_since_review": i + 1}
+                for i in range(5)
+            ],
         ):
             result = await start_learn_session(sb, "user1", "course1", 25)
 
@@ -395,15 +404,7 @@ class TestStartLearnSession:
         from lecturelink_api.services.learn_session import start_learn_session
 
         sb = _setup_supabase_for_start(
-            priority_assessments=[
-                {"assessment_id": "a1", "title": "Midterm 1", "course_id": "course1",
-                 "due_date": "2027-06-15", "weight_percent": 25.0, "priority_score": 0.9},
-            ],
-            concept_links=[
-                {"concept_id": "c1", "relevance_score": 0.9},
-                {"concept_id": "c2", "relevance_score": 0.7},
-                {"concept_id": "c3", "relevance_score": 0.5},
-            ],
+            priority_assessments=[],
             mastery=[
                 {"concept_id": "c1", "concept_title": "Already Studied", "total_attempts": 5,
                  "accuracy": 0.6, "recent_accuracy": 0.8, "trend": "stable"},
@@ -421,6 +422,17 @@ class TestStartLearnSession:
             "lecturelink_api.services.learn_session.get_flash_review_cards",
             new_callable=AsyncMock,
             return_value=[],
+        ), patch(
+            "lecturelink_api.services.learn_session.get_priority_concepts",
+            new_callable=AsyncMock,
+            return_value=[
+                {"concept_id": "c1", "concept_title": "Already Studied", "mastery_score": 0.68,
+                 "total_attempts": 5, "priority_score": 0.5, "days_since_review": 1},
+                {"concept_id": "c2", "concept_title": "Fresh Concept", "mastery_score": 0.44,
+                 "total_attempts": 2, "priority_score": 0.7, "days_since_review": 3},
+                {"concept_id": "c3", "concept_title": "Also Fresh", "mastery_score": 0.3,
+                 "total_attempts": 1, "priority_score": 0.8, "days_since_review": 5},
+            ],
         ):
             result = await start_learn_session(sb, "user1", "course1", 15)
 
@@ -435,13 +447,7 @@ class TestStartLearnSession:
         from lecturelink_api.services.learn_session import start_learn_session
 
         sb = _setup_supabase_for_start(
-            priority_assessments=[
-                {"assessment_id": "a1", "title": "Midterm 1", "course_id": "course1",
-                 "due_date": "2027-06-15", "weight_percent": 25.0, "priority_score": 0.9},
-            ],
-            concept_links=[
-                {"concept_id": "c1", "relevance_score": 0.9},
-            ],
+            priority_assessments=[],
             mastery=[
                 {"concept_id": "c1", "concept_title": "Only Concept", "total_attempts": 5,
                  "accuracy": 0.6, "recent_accuracy": 0.8, "trend": "stable"},
@@ -455,6 +461,13 @@ class TestStartLearnSession:
             "lecturelink_api.services.learn_session.get_flash_review_cards",
             new_callable=AsyncMock,
             return_value=[],
+        ), patch(
+            "lecturelink_api.services.learn_session.get_priority_concepts",
+            new_callable=AsyncMock,
+            return_value=[
+                {"concept_id": "c1", "concept_title": "Only Concept", "mastery_score": 0.68,
+                 "total_attempts": 5, "priority_score": 0.5, "days_since_review": 1},
+            ],
         ):
             result = await start_learn_session(sb, "user1", "course1", 15)
 
@@ -923,7 +936,7 @@ class TestPowerQuizPersistence:
             patch("lecturelink_api.services.learn_session.search_lectures", new_callable=AsyncMock, return_value=[
                 {"chunk_id": "ch1", "lecture_id": "lec1", "lecture_title": "Thermo", "content": "Entropy is...", "start_time": None, "end_time": None, "slide_number": None, "metadata": {}},
             ]),
-            patch("lecturelink_api.services.learn_session._get_client", return_value=mock_client),
+            patch("lecturelink_api.services.quiz_generator._get_client", return_value=mock_client),
         ):
             result = await get_power_quiz(sb, "user1", "s1")
 
@@ -1003,7 +1016,7 @@ class TestPowerQuizPersistence:
             patch("lecturelink_api.services.learn_session.search_lectures", new_callable=AsyncMock, return_value=[
                 {"chunk_id": "ch1", "lecture_id": "lec1", "lecture_title": "Thermo", "content": "Entropy is...", "start_time": None, "end_time": None, "slide_number": None, "metadata": {}},
             ]),
-            patch("lecturelink_api.services.learn_session._get_client", return_value=mock_client),
+            patch("lecturelink_api.services.quiz_generator._get_client", return_value=mock_client),
         ):
             await get_power_quiz(sb, "user1", "s1")
 

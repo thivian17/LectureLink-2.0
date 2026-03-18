@@ -11,9 +11,10 @@ during the lecture processing pipeline.
 
 from __future__ import annotations
 
+import json
 import logging
 
-from .search import search_lectures
+from .search import format_chunks_for_context, search_lectures
 
 logger = logging.getLogger(__name__)
 
@@ -194,3 +195,113 @@ async def fetch_chunks_for_concepts(
                 all_chunks.append(chunk)
 
     return all_chunks
+
+
+# ---------------------------------------------------------------------------
+# High-level helper: fetch chunks + format + Gemini call
+# ---------------------------------------------------------------------------
+
+
+async def explain_concept(
+    supabase,
+    concept_id: str | None,
+    course_id: str,
+    query: str,
+    prompt: str,
+    temperature: float = 0.4,
+    response_mime_type: str | None = None,
+) -> str | dict:
+    """Fetch grounding chunks, format them, call Gemini, and return the result.
+
+    This consolidates the repeated fetch → format → call pattern used by
+    concept_brief, tutor_content, and other services.
+
+    Args:
+        supabase: Supabase client.
+        concept_id: UUID of the concept (used for deterministic chunk fetching).
+        course_id: UUID of the course.
+        query: Fallback query string for chunk search (e.g. concept title).
+        prompt: The full prompt to send to Gemini. Should contain a
+            ``{source_chunks_text}`` placeholder that will be filled with
+            formatted chunk content.
+        temperature: Gemini temperature parameter.
+        response_mime_type: If set (e.g. ``"application/json"``), Gemini will
+            return structured output and the result will be parsed as JSON.
+
+    Returns:
+        str for text responses, dict/list for JSON responses.
+    """
+    from .genai_client import get_genai_client as _get_client
+
+    # 1. Fetch chunks
+    if concept_id:
+        chunks = await fetch_concept_chunks(
+            supabase,
+            concept_id=concept_id,
+            course_id=course_id,
+            limit=5,
+            concept_title=query,
+        )
+    else:
+        try:
+            chunks = await search_lectures(
+                supabase=supabase,
+                course_id=course_id,
+                query=query,
+                limit=6,
+            )
+        except Exception:
+            logger.debug("Search failed for query %r", query[:40], exc_info=True)
+            chunks = []
+
+    # 2. Format
+    source_chunks_text = (
+        format_chunks_for_context(chunks)
+        if chunks
+        else "(No lecture content available)"
+    )
+
+    # 3. Substitute into prompt
+    final_prompt = prompt.replace("{source_chunks_text}", source_chunks_text)
+
+    # 4. Call Gemini
+    config: dict = {"temperature": temperature}
+    if response_mime_type:
+        config["response_mime_type"] = response_mime_type
+
+    try:
+        response = await _get_client().aio.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=final_prompt,
+            config=config,
+        )
+        logger.info(
+            "explain_concept Gemini call: %d input tokens, %d output tokens",
+            response.usage_metadata.prompt_token_count,
+            response.usage_metadata.candidates_token_count,
+        )
+        text = response.text
+    except Exception:
+        logger.error("explain_concept Gemini call failed", exc_info=True)
+        if response_mime_type:
+            return {}
+        return "I'm having trouble generating a response. Let me try again."
+
+    # 5. Parse if JSON mode
+    if response_mime_type and "json" in response_mime_type:
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            # Strip markdown code fences and retry
+            cleaned = text.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[-1]
+            if cleaned.endswith("```"):
+                cleaned = cleaned.rsplit("```", 1)[0]
+            try:
+                return json.loads(cleaned.strip())
+            except json.JSONDecodeError:
+                logger.error("explain_concept: invalid JSON response")
+                return {}
+
+    return text

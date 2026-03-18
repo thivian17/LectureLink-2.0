@@ -40,9 +40,11 @@ import type {
 
 interface LearnSessionProps {
   courseId: string;
+  initialTargetAssessmentId?: string;
+  initialTargetConceptIds?: string[];
 }
 
-export function LearnSession({ courseId }: LearnSessionProps) {
+export function LearnSession({ courseId, initialTargetAssessmentId, initialTargetConceptIds }: LearnSessionProps) {
   const router = useRouter();
 
   const [step, setStep] = useState<LearnSessionStep>("briefing");
@@ -65,6 +67,7 @@ export function LearnSession({ courseId }: LearnSessionProps) {
 
   // Targeting state for customization
   const [targetAssessmentId, setTargetAssessmentId] = useState<string | undefined>();
+  const [targetLectureId, setTargetLectureId] = useState<string | undefined>();
   const [targetConceptIds, setTargetConceptIds] = useState<string[] | undefined>();
 
   const sessionId = sessionData?.session_id ?? null;
@@ -74,6 +77,7 @@ export function LearnSession({ courseId }: LearnSessionProps) {
   // Load initial briefing data
   const loadBriefing = useCallback(async (options?: {
     targetAssessmentId?: string;
+    targetLectureId?: string;
     targetConceptIds?: string[];
   }) => {
     if (!options && hasLoadedInitial.current) return;
@@ -95,18 +99,27 @@ export function LearnSession({ courseId }: LearnSessionProps) {
   }, [courseId, timeBudget, router]);
 
   useEffect(() => {
-    loadBriefing();
-  }, [loadBriefing]);
+    const initialOptions =
+      initialTargetAssessmentId || initialTargetConceptIds?.length
+        ? {
+            targetAssessmentId: initialTargetAssessmentId,
+            targetConceptIds: initialTargetConceptIds,
+          }
+        : undefined;
+    loadBriefing(initialOptions);
+  }, [loadBriefing, initialTargetAssessmentId, initialTargetConceptIds]);
 
   const handleCustomize = useCallback((options: {
     targetAssessmentId?: string;
+    targetLectureId?: string;
     targetConceptIds?: string[];
   }) => {
     setTargetAssessmentId(options.targetAssessmentId);
+    setTargetLectureId(options.targetLectureId);
     setTargetConceptIds(options.targetConceptIds);
     // Re-fetch session with new targeting
     loadBriefing(
-      options.targetAssessmentId || options.targetConceptIds?.length
+      options.targetAssessmentId || options.targetLectureId || options.targetConceptIds?.length
         ? options
         : undefined,
     );

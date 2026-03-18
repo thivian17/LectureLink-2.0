@@ -16,8 +16,6 @@ import type {
   SearchResponse,
   QAResponse,
   PerformanceData,
-  CoachResponse,
-  StudyActionsResponse,
   OnboardingPath,
   OnboardingStatus,
   SuggestedPath,
@@ -586,85 +584,6 @@ export async function getCoursePerformance(
   return resp.json();
 }
 
-// ---------------------------------------------------------------------------
-// Study Coach (Phase 3)
-// ---------------------------------------------------------------------------
-
-export async function chatWithCoach(
-  courseId: string,
-  message: string,
-  conversationHistory?: Array<{ role: string; content: string }>,
-): Promise<CoachResponse> {
-  const resp = await fetchWithAuth(
-    `${API_BASE}/api/courses/${courseId}/study-coach/chat`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message,
-        conversation_history: conversationHistory,
-      }),
-    },
-  );
-  return resp.json();
-}
-
-// ---------------------------------------------------------------------------
-// Study Coach — Streaming
-// ---------------------------------------------------------------------------
-
-/**
- * Stream study coach chat. Returns an async generator of text chunks.
- * Usage: for await (const chunk of streamCoachChat(courseId, message)) { ... }
- */
-export async function* streamCoachChat(
-  courseId: string,
-  message: string,
-  conversationHistory?: Array<{ role: string; content: string }>,
-): AsyncGenerator<string> {
-  const headers = await getAuthHeaders();
-  const response = await fetch(
-    `${API_BASE}/api/courses/${courseId}/study-coach/chat/stream`,
-    {
-      method: "POST",
-      headers: {
-        ...headers,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message,
-        conversation_history: conversationHistory,
-      }),
-    },
-  );
-
-  if (!response.ok) throw new ApiError("Stream failed", response.status);
-
-  const reader = response.body!.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n\n");
-    buffer = lines.pop() || "";
-
-    for (const line of lines) {
-      if (line.startsWith("data: ")) {
-        try {
-          const parsed = JSON.parse(line.slice(6));
-          if (parsed.type === "chunk") yield parsed.content;
-          if (parsed.type === "done") return;
-        } catch {
-          /* ignore malformed chunks */
-        }
-      }
-    }
-  }
-}
 
 /**
  * Stream tutor chat. Returns an async generator of text chunks.
@@ -712,29 +631,6 @@ export async function* streamTutorChat(
       }
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// Study Actions (Study Hub)
-// ---------------------------------------------------------------------------
-
-export async function getStudyActions(): Promise<StudyActionsResponse> {
-  const resp = await fetchWithAuth(`${API_BASE}/api/study-actions`);
-  return resp.json();
-}
-
-export async function getStudyActionsEnhanced(): Promise<StudyActionsResponse> {
-  const resp = await fetchWithAuth(`${API_BASE}/api/study-actions/enhanced`);
-  return resp.json();
-}
-
-export async function getCourseStudyActions(
-  courseId: string,
-): Promise<StudyActionsResponse> {
-  const resp = await fetchWithAuth(
-    `${API_BASE}/api/courses/${courseId}/study-actions`,
-  );
-  return resp.json();
 }
 
 // ---------------------------------------------------------------------------
@@ -1186,11 +1082,13 @@ export async function startLearnSession(
   timeBudget: number,
   options?: {
     targetAssessmentId?: string;
+    targetLectureId?: string;
     targetConceptIds?: string[];
   },
 ): Promise<LearnStartSessionResponse> {
   const body: Record<string, unknown> = { time_budget_minutes: timeBudget };
   if (options?.targetAssessmentId) body.target_assessment_id = options.targetAssessmentId;
+  if (options?.targetLectureId) body.target_lecture_id = options.targetLectureId;
   if (options?.targetConceptIds?.length) body.target_concept_ids = options.targetConceptIds;
 
   const resp = await fetchWithAuth(
@@ -1201,6 +1099,46 @@ export async function startLearnSession(
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(60_000),
     },
+  );
+  return resp.json();
+}
+
+export interface LectureMastery {
+  lecture_id: string;
+  title: string;
+  lecture_number: number | null;
+  lecture_date: string | null;
+  concept_count: number;
+  mastered: number;
+  developing: number;
+  unstarted: number;
+  avg_mastery: number;
+}
+
+export async function getLectureMastery(
+  courseId: string,
+): Promise<LectureMastery[]> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/learn/lecture-mastery/${courseId}`,
+  );
+  return resp.json();
+}
+
+export interface PriorityConcept {
+  concept_id: string;
+  concept_title: string;
+  mastery_score: number;
+  total_attempts: number;
+  priority_score: number;
+  days_since_review: number;
+}
+
+export async function getPriorityConcepts(
+  courseId: string,
+  limit: number = 10,
+): Promise<PriorityConcept[]> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/learn/priority-concepts/${courseId}?limit=${limit}`,
   );
   return resp.json();
 }

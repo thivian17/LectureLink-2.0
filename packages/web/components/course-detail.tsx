@@ -46,8 +46,6 @@ import { LectureList } from "@/components/lectures/lecture-list";
 import { QuizList } from "@/components/quiz/QuizList";
 import { SearchPageClient } from "@/components/search/search-page-client";
 import { FloatingQAButton } from "@/components/chat/floating-qa-button";
-import { StudyCoachTab } from "@/components/study-coach/StudyCoachTab";
-import { CourseActionBanner } from "@/components/study-hub/CourseActionBanner";
 import {
   deleteCourse,
   deleteAssessment,
@@ -235,9 +233,6 @@ export function CourseDetail({
         <Badge variant="outline">Target: {gradeLabel}</Badge>
       </div>
 
-      {/* Smart action banner */}
-      <CourseActionBanner courseId={course.id} />
-
       {/* Study Tutor CTA */}
       <Card className="border-primary/20 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 shadow-sm">
         <CardContent className="pt-6">
@@ -275,7 +270,6 @@ export function CourseDetail({
             <TabsTrigger value="calendar">Calendar</TabsTrigger>
             <TabsTrigger value="search">Search</TabsTrigger>
             <TabsTrigger value="quizzes">Practice Tests</TabsTrigger>
-            <TabsTrigger value="coach">Study Coach</TabsTrigger>
           </TabsList>
         </div>
 
@@ -468,9 +462,6 @@ export function CourseDetail({
           <QuizList courseId={course.id} courseName={course.name} />
         </TabsContent>
 
-        <TabsContent value="coach" className="mt-6">
-          <StudyCoachTab courseId={course.id} />
-        </TabsContent>
       </Tabs>
 
       <FloatingQAButton courseId={course.id} />

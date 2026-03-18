@@ -13,6 +13,7 @@ from lecturelink_api.models.readiness_v2 import (
     SuggestedAction,
     TimelineItem,
 )
+from lecturelink_api.services.assessment_prep import get_assessment_concepts
 
 logger = logging.getLogger(__name__)
 
@@ -108,27 +109,25 @@ async def get_academic_timeline(
         assessments = []
 
     # For exam-type assessments, compute lightweight readiness
-    # Batch-fetch concept_assessment_links and learning_events
+    # Fetch assessment concepts and learning_events
     exam_assessment_ids = [
         a["id"] for a in assessments if (a.get("type") or "").lower() in EXAM_TYPES
     ]
 
-    # Get linked concept counts per assessment
+    # Get linked concept counts per assessment via assessment_prep
     links_by_assessment: dict[str, list[str]] = {}
     if exam_assessment_ids:
-        try:
-            links_result = (
-                supabase.table("concept_assessment_links")
-                .select("assessment_id, concept_id")
-                .in_("assessment_id", exam_assessment_ids)
-                .execute()
+        for aid in exam_assessment_ids:
+            a_course_id = next(
+                (a["course_id"] for a in assessments if a["id"] == aid), ""
             )
-            for link in links_result.data or []:
-                links_by_assessment.setdefault(link["assessment_id"], []).append(
-                    link["concept_id"]
+            try:
+                concepts = await get_assessment_concepts(
+                    supabase, aid, a_course_id, user_id,
                 )
-        except Exception:
-            logger.warning("Failed to fetch concept links for timeline", exc_info=True)
+                links_by_assessment[aid] = [c["concept_id"] for c in concepts]
+            except Exception:
+                logger.warning("Failed to fetch assessment concepts for %s", aid, exc_info=True)
 
     # Get all interacted concept IDs for this user across courses
     interacted_concepts: set[str] = set()
@@ -322,22 +321,17 @@ async def get_best_next_actions(
         a for a in assessments if (a.get("type") or "").lower() in EXAM_TYPES
     ]
 
-    # Get concept links and learning events for readiness proxy
+    # Get concept links via assessment_prep for readiness proxy
     links_by_assessment: dict[str, list[str]] = {}
     if exam_assessments:
-        try:
-            links_result = (
-                supabase.table("concept_assessment_links")
-                .select("assessment_id, concept_id")
-                .in_("assessment_id", [a["id"] for a in exam_assessments])
-                .execute()
-            )
-            for link in links_result.data or []:
-                links_by_assessment.setdefault(link["assessment_id"], []).append(
-                    link["concept_id"]
+        for a in exam_assessments:
+            try:
+                concepts = await get_assessment_concepts(
+                    supabase, a["id"], a["course_id"], user_id,
                 )
-        except Exception:
-            pass
+                links_by_assessment[a["id"]] = [c["concept_id"] for c in concepts]
+            except Exception:
+                pass
 
     interacted_concepts: set[str] = set()
     if links_by_assessment:

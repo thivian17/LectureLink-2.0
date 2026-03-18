@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ReadinessBreakdown } from "./ReadinessBreakdown";
 import { getAssessmentReadinessV2 } from "@/lib/api";
@@ -20,6 +21,17 @@ const ACTION_ROUTES: Record<string, string> = {
   lecture_review: "",
   flash_review: "learn",
 };
+
+function getStudyHref(data: AssessmentReadinessV2): string {
+  const base = `/dashboard/courses/${data.course_id}/learn`;
+  // If we have weak concepts, pass them so the session targets them directly
+  if (data.weak_concepts && data.weak_concepts.length > 0) {
+    const ids = data.weak_concepts.map((wc) => wc.concept_id).join(",");
+    return `${base}?concepts=${ids}`;
+  }
+  // Otherwise pass the assessment ID for schedule-based concept selection
+  return `${base}?assessmentId=${data.assessment_id}`;
+}
 
 function readinessColor(pct: number): string {
   if (pct >= 80) return "text-green-600";
@@ -83,14 +95,21 @@ export function AssessmentReadinessCard({
               )}
             </div>
           </div>
-          <span
-            className={cn(
-              "text-3xl font-bold tabular-nums shrink-0",
-              readinessColor(pct),
+          <div className="flex flex-col items-end gap-1.5 shrink-0">
+            <span
+              className={cn(
+                "text-3xl font-bold tabular-nums",
+                readinessColor(pct),
+              )}
+            >
+              {pct}%
+            </span>
+            {data.course_id && (
+              <Button asChild size="sm" variant="secondary" className="text-xs h-7">
+                <Link href={getStudyHref(data)}>Study</Link>
+              </Button>
             )}
-          >
-            {pct}%
-          </span>
+          </div>
         </div>
 
         {/* Expand toggle */}

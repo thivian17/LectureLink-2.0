@@ -11,6 +11,7 @@ import { AcademicCommandCenter } from "@/components/dashboard/AcademicCommandCen
 import { BestNextActions } from "@/components/dashboard/BestNextActions";
 import { CourseIntelligenceGrid } from "@/components/dashboard/CourseIntelligenceGrid";
 import { AssessmentReadinessSection } from "@/components/dashboard/AssessmentReadinessSection";
+import { PriorityConceptsWidget } from "@/components/dashboard/PriorityConceptsWidget";
 import { StudyToolsLibrary } from "@/components/dashboard/StudyToolsLibrary";
 import { ProcessingBanner } from "@/components/dashboard/ProcessingBanner";
 import {
@@ -19,8 +20,10 @@ import {
   getDashboardActions,
   getDashboardCourses,
   getDashboardStats,
+  getPriorityConcepts,
   AuthError,
 } from "@/lib/api";
+import type { PriorityConcept } from "@/lib/api";
 import type {
   Course,
   DashboardTimeline,
@@ -36,6 +39,10 @@ export default function DashboardPage() {
   const [actions, setActions] = useState<DashboardActions | null>(null);
   const [courseData, setCourseData] = useState<DashboardCourses | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [priorityConcepts, setPriorityConcepts] = useState<{
+    courseId: string;
+    concepts: PriorityConcept[];
+  } | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -61,6 +68,18 @@ export default function DashboardPage() {
       if (actionsRes.status === "fulfilled") setActions(actionsRes.value);
       if (coursesRes.status === "fulfilled") setCourseData(coursesRes.value);
       if (statsRes.status === "fulfilled") setStats(statsRes.value);
+
+      // Fetch priority concepts from the first course (most common use case)
+      if (coursesData.length > 0) {
+        try {
+          const pc = await getPriorityConcepts(coursesData[0].id, 5);
+          if (pc.length > 0) {
+            setPriorityConcepts({ courseId: coursesData[0].id, concepts: pc });
+          }
+        } catch {
+          // Non-critical — widget just won't show
+        }
+      }
     } catch (err) {
       if (err instanceof AuthError) {
         router.push("/login");
@@ -124,6 +143,17 @@ export default function DashboardPage() {
             loading={loading}
           />
           <BestNextActions actions={actions} loading={loading} />
+          {priorityConcepts && (
+            <PriorityConceptsWidget
+              concepts={priorityConcepts.concepts}
+              onStudy={(conceptIds) => {
+                const ids = conceptIds.join(",");
+                router.push(
+                  `/dashboard/courses/${priorityConcepts.courseId}/learn?concepts=${ids}`,
+                );
+              }}
+            />
+          )}
           <CourseIntelligenceGrid courses={courseData} loading={loading} />
           <AssessmentReadinessSection courses={courseData} loading={loading} />
           <StudyToolsLibrary />

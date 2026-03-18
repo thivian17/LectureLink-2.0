@@ -219,8 +219,26 @@ def _generate_actions(
 # DB data fetching helpers
 # ---------------------------------------------------------------------------
 
-async def _fetch_linked_concepts(supabase, assessment_id: str) -> list[dict]:
-    """Fetch concept_assessment_links for an assessment."""
+async def _fetch_linked_concepts(supabase, assessment_id: str, course_id: str = "", user_id: str = "") -> list[dict]:
+    """Fetch relevant concepts for an assessment.
+
+    Uses the assessment_prep service for intelligent concept identification
+    when course_id and user_id are provided. Falls back to
+    concept_assessment_links for backwards compatibility.
+    """
+    if course_id and user_id:
+        try:
+            from .assessment_prep import get_assessment_concepts
+            concepts = await get_assessment_concepts(
+                supabase, assessment_id, course_id, user_id,
+            )
+            return [{"concept_id": c["concept_id"]} for c in concepts]
+        except Exception:
+            logger.warning(
+                "assessment_prep failed for %s, falling back to links",
+                assessment_id, exc_info=True,
+            )
+
     try:
         result = (
             supabase.table("concept_assessment_links")
@@ -384,7 +402,7 @@ async def compute_assessment_readiness(
         pass
 
     # 2. Fetch linked concept IDs
-    links = await _fetch_linked_concepts(supabase, assessment_id)
+    links = await _fetch_linked_concepts(supabase, assessment_id, course_id, user_id)
     linked_ids = {link["concept_id"] for link in links}
     concept_id_list = list(linked_ids)
 

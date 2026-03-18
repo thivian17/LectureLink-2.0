@@ -15,7 +15,6 @@ from lecturelink_api.routers import (
     admin,
     analytics,
     assessments,
-    coach,
     courses,
     dashboard,
     dashboard_v2,
@@ -30,7 +29,6 @@ from lecturelink_api.routers import (
     onboarding,
     quizzes,
     search,
-    study_actions,
     syllabi,
     tutor,
 )
@@ -172,10 +170,8 @@ app.include_router(lectures.router)
 app.include_router(materials.router)
 app.include_router(search.router)
 app.include_router(quizzes.router)
-app.include_router(coach.router)
 app.include_router(dashboard.router)
 app.include_router(dashboard_v2.router)
-app.include_router(study_actions.router)
 app.include_router(onboarding.router)
 app.include_router(tutor.router, prefix="/api/tutor")
 app.include_router(gamification.router)
