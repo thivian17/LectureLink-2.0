@@ -23,9 +23,10 @@ export function AcademicCommandCenter({
 
   return (
     <section className="space-y-3">
-      <h2 className="text-base font-semibold">Academic Command Center</h2>
-
-      <StatsRow stats={stats} loading={loading} />
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-base font-semibold shrink-0">Academic Command Center</h2>
+        <StatsRow stats={stats} loading={loading} />
+      </div>
 
       <TimelineStrip
         items={timeline?.items ?? []}

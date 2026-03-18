@@ -86,7 +86,7 @@ export function TimelineStrip({
   }
 
   return (
-    <div className="flex gap-1.5 overflow-x-auto snap-x snap-mandatory pb-1 scrollbar-none">
+    <div className="flex gap-1.5 overflow-x-auto snap-x snap-mandatory pb-1 scrollbar-none px-1">
       {dates.map((date) => {
         const isToday = date === today;
         const isSelected = date === selectedDate;
