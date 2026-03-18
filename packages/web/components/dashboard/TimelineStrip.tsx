@@ -38,6 +38,14 @@ const DOT_CLASSES: Record<DotColor, string> = {
   gray: "bg-muted-foreground/50",
 };
 
+function summarizeItems(items: TimelineItem[]): string | null {
+  if (items.length === 0) return null;
+  if (items.length === 1) return items[0].title;
+  const types = new Set(items.map((i) => i.item_type));
+  if (types.size === 1) return `${items.length} ${items[0].item_type}s`;
+  return `${items.length} items`;
+}
+
 export function TimelineStrip({
   items,
   today,
@@ -60,9 +68,9 @@ export function TimelineStrip({
 
   if (loading) {
     return (
-      <div className="flex gap-1.5 overflow-hidden">
+      <div className="flex gap-2 overflow-hidden py-1">
         {Array.from({ length: 14 }).map((_, i) => (
-          <Skeleton key={i} className="h-20 w-16 shrink-0 rounded-lg" />
+          <Skeleton key={i} className="h-24 w-20 shrink-0 rounded-xl" />
         ))}
       </div>
     );
@@ -86,13 +94,14 @@ export function TimelineStrip({
   }
 
   return (
-    <div className="flex gap-1.5 overflow-x-auto snap-x snap-mandatory pb-1 scrollbar-none px-1">
+    <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory py-1 scrollbar-none">
       {dates.map((date) => {
         const isToday = date === today;
         const isSelected = date === selectedDate;
         const dayItems = itemsByDate.get(date) ?? [];
         const dots = dayItems.map((item) => getDotColor(item));
         const parsed = parseISO(date);
+        const summary = summarizeItems(dayItems);
 
         return (
           <button
@@ -100,28 +109,35 @@ export function TimelineStrip({
             ref={isToday ? todayRef : undefined}
             onClick={() => onSelectDate(date)}
             className={cn(
-              "flex w-16 shrink-0 snap-start flex-col items-center gap-1 rounded-lg px-1 py-2 transition-colors",
-              isToday && "ring-2 ring-primary bg-primary/5",
-              isSelected && !isToday && "bg-accent",
-              !isSelected && !isToday && "hover:bg-accent/50",
+              "flex w-20 shrink-0 snap-start flex-col items-center gap-1.5 rounded-xl px-2 py-3 transition-colors border",
+              isToday && "ring-2 ring-primary bg-primary/5 border-primary/20",
+              isSelected && !isToday && "bg-accent border-accent-foreground/20",
+              !isSelected && !isToday && "border-transparent hover:bg-accent/50",
             )}
           >
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs font-medium text-muted-foreground">
               {format(parsed, "EEE")}
             </span>
-            <span className="text-sm font-medium">{format(parsed, "d")}</span>
+            <span className="text-lg font-semibold leading-none">
+              {format(parsed, "d")}
+            </span>
             <div className="flex gap-0.5">
               {dots.length > 0 ? (
                 dots.slice(0, 4).map((color, i) => (
                   <span
                     key={i}
-                    className={cn("h-1.5 w-1.5 rounded-full", DOT_CLASSES[color])}
+                    className={cn("h-2 w-2 rounded-full", DOT_CLASSES[color])}
                   />
                 ))
               ) : (
-                <span className="h-1.5 w-1.5" />
+                <span className="h-2 w-2" />
               )}
             </div>
+            {summary && (
+              <span className="text-[10px] leading-tight text-muted-foreground truncate w-full text-center">
+                {summary}
+              </span>
+            )}
           </button>
         );
       })}
