@@ -315,19 +315,7 @@ export default function TutorSessionPage() {
     }
   }, [elapsedSeconds]);
 
-  // Auto-scroll: scroll the last block into view (not the absolute bottom)
-  const lastBlockId = blocks.at(-1)?.id;
-  useEffect(() => {
-    if (!lastBlockId) return;
-    // Small delay so the DOM has rendered the new block
-    const timer = setTimeout(() => {
-      const el = document.getElementById(lastBlockId);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [lastBlockId]);
+  // No auto-scroll — let the user control their scroll position
 
   async function handlePause() {
     try {
@@ -487,23 +475,6 @@ export default function TutorSessionPage() {
     if (!session?.lesson_plan) return;
     const plan = session.lesson_plan;
     const nextIdx = currentConceptIndex + 1;
-
-    // Capture ref values NOW — the setBlocks updater runs later during
-    // render, by which point the refs would already be reset to 0.
-    const asked = conceptQAsked.current;
-    const correct = conceptQCorrect.current;
-
-    setBlocks((prev) => [
-      ...prev,
-      {
-        id: nextBlockId(),
-        type: "summary",
-        content: `You've completed: ${concept.title}`,
-        questionsAsked: asked,
-        questionsCorrect: correct,
-        mastery: concept.mastery,
-      },
-    ]);
 
     // Reset per-concept tracking for the next concept
     missedQRef.current = [];

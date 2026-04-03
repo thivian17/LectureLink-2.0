@@ -107,6 +107,7 @@ export function QuizList({ courseId, courseName }: QuizListProps) {
     include_coding?: boolean;
     coding_ratio?: number;
     coding_language?: string;
+    coding_only?: boolean;
   }) {
     try {
       const result = await generateQuiz(courseId, options);
@@ -146,6 +147,10 @@ export function QuizList({ courseId, courseName }: QuizListProps) {
           <QuizGenerationStatus
             quizId={generatingQuizId}
             courseId={courseId}
+            onRetry={() => {
+              setGeneratingQuizId(null);
+              setDialogOpen(true);
+            }}
           />
         </div>
         {dialog}

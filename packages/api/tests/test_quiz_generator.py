@@ -189,13 +189,14 @@ class TestGenerateQuestions:
         assert "REVISION" in prompt_text or "Too vague" in prompt_text
 
     @pytest.mark.asyncio
-    async def test_raises_on_invalid_json(self, mock_genai):
-        """Should raise on invalid JSON response."""
+    async def test_returns_empty_on_invalid_json(self, mock_genai):
+        """Should retry and return empty list on invalid JSON response."""
         from lecturelink_api.services.quiz_generator import generate_questions
 
         mock_genai.aio.models.generate_content.return_value = MagicMock(
             text="not valid json"
         )
 
-        with pytest.raises(json.JSONDecodeError):
-            await generate_questions(_make_plan())
+        result = await generate_questions(_make_plan())
+        assert result == []
+        assert mock_genai.aio.models.generate_content.call_count == 2

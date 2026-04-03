@@ -41,14 +41,22 @@ async def search(
             status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
         )
 
-    chunks = await search_lectures(
-        supabase=sb,
-        course_id=body.course_id,
-        query=body.query,
-        lecture_ids=body.lecture_ids,
-        limit=body.limit,
-        user_id=user["id"],
-    )
+    try:
+        chunks = await search_lectures(
+            supabase=sb,
+            course_id=body.course_id,
+            query=body.query,
+            lecture_ids=body.lecture_ids,
+            limit=body.limit,
+            user_id=user["id"],
+        )
+    except Exception as exc:
+        import logging as _log
+        _log.getLogger(__name__).error("Search failed for course %s: %s", body.course_id, exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Search is temporarily unavailable. Please try again.",
+        )
 
     # Add highlights
     results = []
@@ -105,13 +113,21 @@ async def question_answer(
             status_code=status.HTTP_404_NOT_FOUND, detail="Course not found"
         )
 
-    result = await ask_lecture_question(
-        supabase=sb,
-        course_id=body.course_id,
-        question=body.question,
-        lecture_ids=body.lecture_ids,
-        course_name=course.data[0].get("name", ""),
-        user_id=user["id"],
-    )
+    try:
+        result = await ask_lecture_question(
+            supabase=sb,
+            course_id=body.course_id,
+            question=body.question,
+            lecture_ids=body.lecture_ids,
+            course_name=course.data[0].get("name", ""),
+            user_id=user["id"],
+        )
+    except Exception as exc:
+        import logging as _log
+        _log.getLogger(__name__).error("Q&A failed for course %s: %s", body.course_id, exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Q&A is temporarily unavailable. Please try again.",
+        )
 
     return QAResponse(**result)

@@ -11,6 +11,7 @@ import {
   Circle,
   AlertCircle,
   ArrowLeft,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -49,11 +50,13 @@ function getStageIndex(stage: string | null): number {
 interface QuizGenerationStatusProps {
   quizId: string;
   courseId: string;
+  onRetry?: () => void;
 }
 
 export function QuizGenerationStatus({
   quizId,
   courseId,
+  onRetry,
 }: QuizGenerationStatusProps) {
   const router = useRouter();
   const [status, setStatus] = useState<QuizGenStatus>({
@@ -88,6 +91,10 @@ export function QuizGenerationStatus({
             toast.success("Practice test is ready!");
             router.push(
               `/dashboard/courses/${courseId}/quiz/${quizId}`,
+            );
+          } else {
+            toast.error(
+              result.error_message ?? "Practice test generation failed.",
             );
           }
         }
@@ -225,15 +232,23 @@ export function QuizGenerationStatus({
         )}
 
         {(isReady || isFailed) && (
-          <Button
-            variant="outline"
-            onClick={() =>
-              router.push(`/dashboard/courses/${courseId}/quizzes`)
-            }
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Practice Tests
-          </Button>
+          <div className="flex gap-2">
+            {isFailed && onRetry && (
+              <Button onClick={onRetry}>
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              onClick={() =>
+                router.push(`/dashboard/courses/${courseId}/quizzes`)
+              }
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Practice Tests
+            </Button>
+          </div>
         )}
       </CardContent>
     </Card>

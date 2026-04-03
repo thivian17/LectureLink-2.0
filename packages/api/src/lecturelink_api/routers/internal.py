@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from supabase import create_client
 
 from lecturelink_api.config import Settings, get_settings
+from lecturelink_api.services.task_queue import get_task_queue
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +150,7 @@ async def daily_refresh_task(
 
     # Assessment deadline reminders (48h window)
     reminders_enqueued = 0
+    task_queue = get_task_queue()
     try:
         tomorrow_48h = (date.today() + timedelta(days=2)).isoformat()
         tomorrow_50h = (date.today() + timedelta(days=3)).isoformat()

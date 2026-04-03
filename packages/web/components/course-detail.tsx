@@ -55,6 +55,7 @@ import {
 import type { UpdateAssessmentInput } from "@/lib/api";
 import { AssessmentEditDialog } from "@/components/syllabus-review/assessment-edit-dialog";
 import type { Assessment, Course, Syllabus } from "@/types/database";
+import type { SyllabusExtraction } from "@/types/extraction";
 
 const GRADE_MAP: Record<string, string> = {
   "0.97": "A+ (97%)",
@@ -340,32 +341,7 @@ export function CourseDetail({
               onUploadComplete={handleUploadComplete}
             />
           ) : (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <CardTitle>Syllabus</CardTitle>
-                  {syllabus.needs_review && !syllabus.reviewed_at && (
-                    <Badge
-                      variant="outline"
-                      className="text-amber-600 border-amber-300"
-                    >
-                      Needs Review
-                    </Badge>
-                  )}
-                </div>
-                <CardDescription>
-                  {syllabus.file_name ?? "Uploaded syllabus"}
-                </CardDescription>
-              </CardHeader>
-              {syllabus.extraction_confidence !== null && (
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    Extraction confidence:{" "}
-                    {Math.round(syllabus.extraction_confidence * 100)}%
-                  </p>
-                </CardContent>
-              )}
-            </Card>
+            <SyllabusOverviewCard syllabus={syllabus} courseId={course.id} />
           )}
         </TabsContent>
 
@@ -422,23 +398,7 @@ export function CourseDetail({
               </CardContent>
             </Card>
           ) : (
-            <Card>
-              <CardHeader>
-                <div>
-                  <CardTitle>Syllabus</CardTitle>
-                  <CardDescription>
-                    {syllabus.reviewed_at
-                      ? "Reviewed and confirmed"
-                      : "Processed"}
-                  </CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  {syllabus.file_name}
-                </p>
-              </CardContent>
-            </Card>
+            <SyllabusDetailView syllabus={syllabus} courseId={course.id} />
           )}
         </TabsContent>
 
@@ -726,5 +686,276 @@ function CourseAssessmentsTab({ courseId }: { courseId: string }) {
         />
       )}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SyllabusOverviewCard — concise syllabus summary for the Overview tab
+// ---------------------------------------------------------------------------
+
+function SyllabusOverviewCard({
+  syllabus,
+  courseId,
+}: {
+  syllabus: Syllabus;
+  courseId: string;
+}) {
+  const extraction = syllabus.raw_extraction as SyllabusExtraction | null;
+  const gradeBreakdown = syllabus.grade_breakdown as {
+    component: string;
+    weight: number;
+  }[];
+
+  const instructor = extraction?.instructor_name?.value;
+  const email = extraction?.instructor_email?.value;
+  const officeHours = extraction?.office_hours?.value;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <CardTitle>Syllabus</CardTitle>
+          {syllabus.needs_review && !syllabus.reviewed_at && (
+            <Badge
+              variant="outline"
+              className="text-amber-600 border-amber-300"
+            >
+              Needs Review
+            </Badge>
+          )}
+        </div>
+        {(instructor || email) && (
+          <CardDescription>
+            {instructor}
+            {email && ` · ${email}`}
+          </CardDescription>
+        )}
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {officeHours && (
+          <div>
+            <p className="text-sm text-muted-foreground">Office Hours</p>
+            <p className="text-sm">{officeHours}</p>
+          </div>
+        )}
+
+        {gradeBreakdown.length > 0 && (
+          <div>
+            <p className="text-sm font-medium mb-2">Grade Breakdown</p>
+            <div className="space-y-1.5">
+              {gradeBreakdown.map((item, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary/60"
+                      style={{ width: `${item.weight}%` }}
+                    />
+                  </div>
+                  <span className="text-sm min-w-[120px] truncate">
+                    {item.component}
+                  </span>
+                  <span className="text-sm text-muted-foreground tabular-nums w-10 text-right">
+                    {item.weight}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <p className="text-xs text-muted-foreground">
+          {syllabus.file_name}
+          {syllabus.reviewed_at && " · Reviewed and confirmed"}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SyllabusDetailView — full syllabus details for the Syllabus tab
+// ---------------------------------------------------------------------------
+
+function SyllabusDetailView({
+  syllabus,
+  courseId,
+}: {
+  syllabus: Syllabus;
+  courseId: string;
+}) {
+  const extraction = syllabus.raw_extraction as SyllabusExtraction | null;
+  const gradeBreakdown = syllabus.grade_breakdown as {
+    component: string;
+    weight: number;
+    drop_policy?: string | null;
+  }[];
+
+  const instructor = extraction?.instructor_name?.value;
+  const email = extraction?.instructor_email?.value;
+  const officeHours = extraction?.office_hours?.value;
+  const schedule = extraction?.weekly_schedule ?? [];
+  const policies = extraction?.policies ?? {};
+  const policyEntries = Object.entries(policies);
+
+  const totalWeight = gradeBreakdown.reduce((sum, g) => sum + (g.weight ?? 0), 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Course info */}
+      {(instructor || email || officeHours) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Course Information</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            {instructor && (
+              <div>
+                <p className="text-sm text-muted-foreground">Instructor</p>
+                <p className="text-sm">{instructor}</p>
+              </div>
+            )}
+            {email && (
+              <div>
+                <p className="text-sm text-muted-foreground">Email</p>
+                <p className="text-sm">{email}</p>
+              </div>
+            )}
+            {officeHours && (
+              <div className="sm:col-span-2">
+                <p className="text-sm text-muted-foreground">Office Hours</p>
+                <p className="text-sm">{officeHours}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Grade breakdown */}
+      {gradeBreakdown.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Grade Breakdown</CardTitle>
+            <CardDescription>
+              {totalWeight === 100
+                ? "Weights sum to 100%"
+                : `Weights sum to ${totalWeight}%`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg border overflow-hidden">
+              <div className="grid grid-cols-[1fr_80px_1fr] gap-2 bg-muted/50 px-4 py-2 text-xs font-medium text-muted-foreground">
+                <span>Component</span>
+                <span className="text-right">Weight</span>
+                <span>Drop Policy</span>
+              </div>
+              {gradeBreakdown.map((item, i) => (
+                <div
+                  key={i}
+                  className={`grid grid-cols-[1fr_80px_1fr] gap-2 px-4 py-2.5 text-sm ${
+                    i % 2 === 1 ? "bg-muted/30" : ""
+                  }`}
+                >
+                  <span>{item.component}</span>
+                  <span className="text-right tabular-nums font-medium">
+                    {item.weight}%
+                  </span>
+                  <span className="text-muted-foreground">
+                    {item.drop_policy || "\u2014"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Weekly schedule */}
+      {schedule.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Weekly Schedule</CardTitle>
+            <CardDescription>
+              {schedule.length} weeks extracted from syllabus
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg border overflow-hidden">
+              <div className="grid grid-cols-[60px_1fr_1fr] gap-2 bg-muted/50 px-4 py-2 text-xs font-medium text-muted-foreground">
+                <span>Week</span>
+                <span>Topics</span>
+                <span>Readings / Due</span>
+              </div>
+              {schedule.map((week) => (
+                <div
+                  key={week.week_number}
+                  className={`grid grid-cols-[60px_1fr_1fr] gap-2 px-4 py-2.5 text-sm ${
+                    week.week_number % 2 === 0 ? "bg-muted/30" : ""
+                  }`}
+                >
+                  <span className="tabular-nums text-muted-foreground">
+                    {week.week_number}
+                  </span>
+                  <div>
+                    {week.topics.length > 0 ? (
+                      <p>{week.topics.join(", ")}</p>
+                    ) : (
+                      <p className="text-muted-foreground">&mdash;</p>
+                    )}
+                    {week.date_range?.value && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {week.date_range.value}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-0.5">
+                    {week.readings.map((r, ri) => (
+                      <p key={ri} className="text-muted-foreground text-xs">
+                        {r}
+                      </p>
+                    ))}
+                    {week.due_items.map((d, di) => (
+                      <p key={di} className="text-xs font-medium text-amber-600">
+                        Due: {d}
+                      </p>
+                    ))}
+                    {week.readings.length === 0 && week.due_items.length === 0 && (
+                      <p className="text-muted-foreground">&mdash;</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Policies */}
+      {policyEntries.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Course Policies</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {policyEntries.map(([key, value]) => (
+              <div key={key}>
+                <p className="text-sm font-medium capitalize">
+                  {key.replace(/_/g, " ")}
+                </p>
+                <p className="text-sm text-muted-foreground mt-0.5 whitespace-pre-line">
+                  {value}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Source file */}
+      <p className="text-xs text-muted-foreground px-1">
+        Source: {syllabus.file_name}
+        {syllabus.reviewed_at &&
+          ` · Reviewed ${format(new Date(syllabus.reviewed_at), "MMM d, yyyy")}`}
+      </p>
+    </div>
   );
 }

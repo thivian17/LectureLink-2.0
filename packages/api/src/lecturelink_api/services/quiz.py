@@ -322,7 +322,7 @@ async def _generate_quiz_async(
             logger.debug("LangFuse trace finalization failed", exc_info=True)
 
     except Exception as e:
-        logger.error("Quiz generation failed for %s: %s", quiz_id, e)
+        logger.exception("Quiz generation failed for %s: %s", quiz_id, e)
         try:
             (
                 supabase.table("quizzes")
@@ -434,7 +434,15 @@ Output as JSON array of question objects."""
             },
         )
 
-        regular_questions = json.loads(response.text)
+        raw_text = response.text
+        if raw_text:
+            try:
+                regular_questions = json.loads(raw_text)
+            except (json.JSONDecodeError, TypeError):
+                logger.warning("Simple quiz gen: invalid JSON for regular questions")
+                regular_questions = []
+        else:
+            logger.warning("Simple quiz gen: empty response for regular questions")
 
     # Generate coding questions in simple mode (no concepts available)
     coding_questions = []
@@ -473,12 +481,19 @@ Output as JSON array of question objects."""
             },
         )
         raw_coding_text = coding_response.text
-        try:
-            coding_questions = json.loads(raw_coding_text)
-        except json.JSONDecodeError:
-            from .code_question_generator import _repair_json_escapes
-            logger.debug("Repairing invalid JSON escapes in simple coding gen")
-            coding_questions = json.loads(_repair_json_escapes(raw_coding_text))
+        if raw_coding_text:
+            try:
+                coding_questions = json.loads(raw_coding_text)
+            except (json.JSONDecodeError, TypeError):
+                from .code_question_generator import _repair_json_escapes
+                logger.debug("Repairing invalid JSON escapes in simple coding gen")
+                try:
+                    coding_questions = json.loads(_repair_json_escapes(raw_coding_text))
+                except (json.JSONDecodeError, TypeError):
+                    logger.warning("Simple quiz gen: coding question JSON repair also failed")
+                    coding_questions = []
+        else:
+            logger.warning("Simple quiz gen: empty response for coding questions")
 
     # Interleave or use whichever list has questions
     if regular_questions and coding_questions:

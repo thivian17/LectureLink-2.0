@@ -2,8 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import { Monitor, LayoutDashboard, Users } from "lucide-react"; // ✅ Lucide icons
-import Image from "next/image";
+import { Monitor, LayoutDashboard, Users } from "lucide-react";
 
 // Avoid SSR hydration issues by loading react-countup on the client.
 const CountUp = dynamic(() => import("react-countup"), { ssr: false });
@@ -178,7 +177,7 @@ export default function Casestudies() {
                       : "border-gray-200 dark:border-gray-800",
                   ].join(" ")}
                 >
-                  <Image
+                  <img
                     src={study.image}
                     alt={`${study.name} portrait`}
                     width={300}

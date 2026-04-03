@@ -109,61 +109,83 @@ async def generate_questions(
 
     user_prompt = "\n".join(prompt_parts)
 
-    try:
-        response = await _get_client().aio.models.generate_content(
-            model=GENERATOR_MODEL,
-            contents=user_prompt,
-            config={
-                "system_instruction": GENERATOR_SYSTEM_PROMPT,
-                "temperature": 0.7,
-                "response_mime_type": "application/json",
-            },
-        )
+    max_attempts = 2
+    last_error: Exception | None = None
 
-        questions = json.loads(response.text)
+    for attempt in range(max_attempts):
+        try:
+            response = await _get_client().aio.models.generate_content(
+                model=GENERATOR_MODEL,
+                contents=user_prompt,
+                config={
+                    "system_instruction": GENERATOR_SYSTEM_PROMPT,
+                    "temperature": 0.7,
+                    "response_mime_type": "application/json",
+                },
+            )
 
-        validated = []
-        for i, q in enumerate(questions):
-            q["question_index"] = i
-
-            if q.get("question_type") == "mcq":
-                options = q.get("options", [])
-                if len(options) != 4:
-                    logger.warning(
-                        "Question %d: MCQ has %d options, expected 4",
-                        i, len(options),
-                    )
-                    continue
-                correct_count = sum(
-                    1 for o in options if o.get("is_correct")
-                )
-                if correct_count != 1:
-                    logger.warning(
-                        "Question %d: MCQ has %d correct, expected 1",
-                        i, correct_count,
-                    )
-                    continue
-
-            required = [
-                "question_text", "question_type",
-                "correct_answer", "explanation",
-            ]
-            if all(q.get(f) for f in required):
-                validated.append(q)
-            else:
-                missing = [f for f in required if not q.get(f)]
+            raw_text = response.text
+            if not raw_text:
                 logger.warning(
-                    "Question %d: Missing fields: %s", i, missing
+                    "Generator returned empty response (attempt %d/%d)",
+                    attempt + 1, max_attempts,
                 )
+                continue
 
-        return validated
+            questions = json.loads(raw_text)
 
-    except json.JSONDecodeError as e:
-        logger.error("Generator returned invalid JSON: %s", e)
-        raise
-    except Exception as e:
-        logger.error("Question generation failed: %s", e)
-        raise
+            validated = []
+            for i, q in enumerate(questions):
+                q["question_index"] = i
+
+                if q.get("question_type") == "mcq":
+                    options = q.get("options", [])
+                    if len(options) != 4:
+                        logger.warning(
+                            "Question %d: MCQ has %d options, expected 4",
+                            i, len(options),
+                        )
+                        continue
+                    correct_count = sum(
+                        1 for o in options if o.get("is_correct")
+                    )
+                    if correct_count != 1:
+                        logger.warning(
+                            "Question %d: MCQ has %d correct, expected 1",
+                            i, correct_count,
+                        )
+                        continue
+
+                required = [
+                    "question_text", "question_type",
+                    "correct_answer", "explanation",
+                ]
+                if all(q.get(f) for f in required):
+                    validated.append(q)
+                else:
+                    missing = [f for f in required if not q.get(f)]
+                    logger.warning(
+                        "Question %d: Missing fields: %s", i, missing
+                    )
+
+            return validated
+
+        except (json.JSONDecodeError, TypeError) as e:
+            last_error = e
+            logger.warning(
+                "Generator returned invalid JSON (attempt %d/%d): %s",
+                attempt + 1, max_attempts, e,
+            )
+            continue
+        except Exception as e:
+            logger.error("Question generation failed: %s", e, exc_info=True)
+            raise
+
+    # All attempts failed — return empty list so the caller can handle gracefully
+    logger.error(
+        "Generator failed after %d attempts: %s", max_attempts, last_error
+    )
+    return []
 
 
 # ---------------------------------------------------------------------------
