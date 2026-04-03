@@ -480,7 +480,7 @@ class TestHintEndpoint:
         quiz_id = str(uuid.uuid4())
         question_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -512,7 +512,7 @@ class TestHintEndpoint:
         quiz_id = str(uuid.uuid4())
         question_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -543,7 +543,7 @@ class TestHintEndpoint:
         quiz_id = str(uuid.uuid4())
         question_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -571,7 +571,7 @@ class TestHintEndpoint:
         quiz_id = str(uuid.uuid4())
         question_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -597,7 +597,7 @@ class TestHintEndpoint:
         quiz_id = str(uuid.uuid4())
         question_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -620,7 +620,7 @@ class TestHintEndpoint:
         quiz_id = str(uuid.uuid4())
         question_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -638,7 +638,7 @@ class TestHintEndpoint:
         quiz_id = str(uuid.uuid4())
         question_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 

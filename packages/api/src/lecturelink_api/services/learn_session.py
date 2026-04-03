@@ -62,6 +62,7 @@ async def _award_xp(supabase, user_id: str, action: str, **kwargs) -> dict:
         from lecturelink_api.services.gamification import award_xp
         return await award_xp(supabase, user_id, action, **kwargs)
     except Exception:
+        logger.debug("Gamification XP service unavailable for action %s", action, exc_info=True)
         amount = base_amounts.get(action, 10)
         return {"amount": amount, "total_xp": 0, "level": 1, "leveled_up": False}
 
@@ -72,6 +73,7 @@ async def _update_streak(supabase, user_id: str) -> dict:
         from lecturelink_api.services.gamification import update_streak
         return await update_streak(supabase, user_id)
     except Exception:
+        logger.debug("Gamification streak service unavailable", exc_info=True)
         return {
             "current_streak": 1,
             "longest_streak": 1,
@@ -89,6 +91,7 @@ async def _check_badges(supabase, user_id: str) -> list[dict]:
             supabase, user_id, trigger="session_complete", context={}
         )
     except Exception:
+        logger.debug("Badge service unavailable", exc_info=True)
         return []
 
 
@@ -225,7 +228,7 @@ async def start_learn_session(
                 if due.date() < now.date():
                     continue
             except Exception:
-                pass
+                pass  # Unparseable due_date — include the assessment anyway
         assessments.append(a)
 
     # 2b. Enrich with mastery data (needed for all paths)
@@ -396,7 +399,7 @@ async def start_learn_session(
         )
         course_name = course_result.data.get("name", "")
     except Exception:
-        pass
+        logger.debug("Failed to fetch course name for %s", course_id, exc_info=True)
 
     # 5. Build focus description
     focus_titles = [c["title"] for c in concepts_planned if c.get("title")]
@@ -836,7 +839,7 @@ async def get_power_quiz(
                 )
                 title = (c_row.data or {}).get("title", "") or ""
             except Exception:
-                pass
+                logger.debug("Failed to resolve concept title for %s", concept_id, exc_info=True)
 
         # Try hybrid search first (only if we have a non-empty query)
         if title.strip():
@@ -882,7 +885,7 @@ async def get_power_quiz(
                             )
                             lec_title = lec.data.get("title", "") if lec.data else ""
                         except Exception:
-                            pass
+                            logger.debug("Failed to resolve lecture title for %s", lecture_id, exc_info=True)
                         chunks.append({
                             "chunk_id": row["id"],
                             "lecture_id": row["lecture_id"],
@@ -1214,7 +1217,7 @@ async def complete_learn_session(
             start = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
             duration_minutes = int((now - start).total_seconds() / 60)
         except Exception:
-            pass
+            pass  # Unparseable timestamp — duration stays 0
 
     # 3. Concepts covered
     concepts_planned = session_data.get("daily_briefing", {}).get("concepts_planned", [])
@@ -1276,7 +1279,7 @@ async def complete_learn_session(
             "concepts_completed": len(concepts_covered),
         })
     except Exception:
-        pass
+        pass  # Observability is non-critical
 
     # 8. Tomorrow preview — only show upcoming (future) assessments
     tomorrow_preview = ""

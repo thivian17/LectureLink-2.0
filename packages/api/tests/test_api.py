@@ -133,7 +133,7 @@ class TestCourses:
     @pytest.mark.asyncio
     async def test_create_course(self, client):
         course = _sample_course()
-        with patch("lecturelink_api.routers.courses.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain([course])
@@ -154,7 +154,7 @@ class TestCourses:
     @pytest.mark.asyncio
     async def test_list_courses(self, client):
         courses = [_sample_course(), _sample_course()]
-        with patch("lecturelink_api.routers.courses.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain(courses)
@@ -167,7 +167,7 @@ class TestCourses:
     @pytest.mark.asyncio
     async def test_get_course(self, client):
         course = _sample_course("abc-123")
-        with patch("lecturelink_api.routers.courses.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain([course])
@@ -179,7 +179,7 @@ class TestCourses:
 
     @pytest.mark.asyncio
     async def test_get_course_not_found(self, client):
-        with patch("lecturelink_api.routers.courses.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain(None)
@@ -192,7 +192,7 @@ class TestCourses:
     async def test_update_course(self, client):
         updated = _sample_course("abc-123")
         updated["name"] = "Advanced CS"
-        with patch("lecturelink_api.routers.courses.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain([updated])
@@ -204,7 +204,7 @@ class TestCourses:
 
     @pytest.mark.asyncio
     async def test_update_course_empty_body(self, client):
-        with patch("lecturelink_api.routers.courses.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -214,7 +214,7 @@ class TestCourses:
 
     @pytest.mark.asyncio
     async def test_delete_course(self, client):
-        with patch("lecturelink_api.routers.courses.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain([{"id": "abc-123"}])
@@ -225,7 +225,7 @@ class TestCourses:
 
     @pytest.mark.asyncio
     async def test_delete_course_not_found(self, client):
-        with patch("lecturelink_api.routers.courses.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain([])
@@ -246,7 +246,10 @@ class TestSyllabi:
         course_id = str(uuid.uuid4())
         syllabus_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.syllabi.create_client") as mock_create:
+        with (
+            patch("lecturelink_api.auth.create_client") as mock_create,
+            patch("lecturelink_api.routers.syllabi._sb_admin", return_value=MagicMock()),
+        ):
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -308,7 +311,7 @@ class TestSyllabi:
             "reviewed_at": None,
             "created_at": _now_str(),
         }
-        with patch("lecturelink_api.routers.syllabi.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain([syllabus_data])
@@ -321,7 +324,7 @@ class TestSyllabi:
     @pytest.mark.asyncio
     async def test_get_syllabus_status_complete(self, client):
         sid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.syllabi.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain(
@@ -338,7 +341,7 @@ class TestSyllabi:
     @pytest.mark.asyncio
     async def test_get_syllabus_status_processing(self, client):
         sid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.syllabi.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain(
@@ -354,7 +357,7 @@ class TestSyllabi:
     @pytest.mark.asyncio
     async def test_get_syllabus_status_error(self, client):
         sid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.syllabi.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain(
@@ -383,7 +386,7 @@ class TestSyllabi:
             "reviewed_at": _now_str(),
             "created_at": _now_str(),
         }
-        with patch("lecturelink_api.routers.syllabi.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain([reviewed])
@@ -405,7 +408,7 @@ class TestSyllabusLock:
         """Upload should return 409 if a confirmed syllabus exists."""
         course_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.syllabi.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -435,7 +438,10 @@ class TestSyllabusLock:
         course_id = str(uuid.uuid4())
         syllabus_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.syllabi.create_client") as mock_create:
+        with (
+            patch("lecturelink_api.auth.create_client") as mock_create,
+            patch("lecturelink_api.routers.syllabi._sb_admin", return_value=MagicMock()),
+        ):
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -498,7 +504,7 @@ class TestAssessments:
         course_id = str(uuid.uuid4())
         assessments = [_sample_assessment(course_id), _sample_assessment(course_id)]
 
-        with patch("lecturelink_api.routers.assessments.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -527,7 +533,7 @@ class TestAssessments:
             }
         ]
 
-        with patch("lecturelink_api.routers.assessments.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -549,7 +555,7 @@ class TestAssessments:
         updated = _sample_assessment(course_id, assessment_id)
         updated["title"] = "Final Exam"
 
-        with patch("lecturelink_api.routers.assessments.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -581,7 +587,7 @@ class TestAssessments:
         course_id = str(uuid.uuid4())
         assessment_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.assessments.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 

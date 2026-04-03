@@ -4,18 +4,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from supabase import create_client
-
-from lecturelink_api.auth import get_current_user
+from lecturelink_api.auth import get_authenticated_supabase, get_current_user
 from lecturelink_api.config import Settings, get_settings
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
-def _sb(user: dict, settings: Settings):
-    client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
-    client.auth.set_session(user["token"], "")
-    return client
 
 
 @router.get("/briefing")
@@ -30,7 +24,7 @@ async def get_dashboard_briefing(
     """
     from lecturelink_api.services.dashboard_briefing import get_briefing
 
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     return await get_briefing(sb, user["id"])
 
 
@@ -52,7 +46,7 @@ async def dashboard_chat(
     """
     from lecturelink_api.services.dashboard_briefing import chat_cross_course
 
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     return await chat_cross_course(
         sb, user["id"], body.message, body.conversation_history
     )

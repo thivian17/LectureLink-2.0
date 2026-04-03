@@ -145,7 +145,7 @@ async def _generate_quiz_async(
                 },
             )
     except Exception:
-        pass
+        logger.debug("LangFuse trace init failed for quiz generation", exc_info=True)
 
     try:
         from .quiz_loop import run_quiz_generation_loop
@@ -319,7 +319,7 @@ async def _generate_quiz_async(
                 })
                 lf.flush()
         except Exception:
-            pass
+            logger.debug("LangFuse trace finalization failed", exc_info=True)
 
     except Exception as e:
         logger.error("Quiz generation failed for %s: %s", quiz_id, e)
@@ -705,7 +705,7 @@ async def score_quiz(
                 ),
             })
     except Exception:
-        pass
+        pass  # Observability is non-critical
 
     return {
         "score": score,

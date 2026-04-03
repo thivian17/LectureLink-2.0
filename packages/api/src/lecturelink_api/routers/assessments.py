@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from supabase import create_client
-
-from lecturelink_api.auth import get_current_user
+from lecturelink_api.auth import get_authenticated_supabase, get_current_user
 from lecturelink_api.config import Settings, get_settings
 from lecturelink_api.models.api_models import (
     AssessmentResponse,
@@ -17,10 +15,6 @@ from lecturelink_api.models.api_models import (
 router = APIRouter(tags=["assessments"])
 
 
-def _sb(user: dict, settings: Settings):
-    client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
-    client.auth.set_session(user["token"], "")
-    return client
 
 
 def _verify_course_ownership(sb, course_id: str, user_id: str):
@@ -44,7 +38,7 @@ async def list_assessments(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     _verify_course_ownership(sb, course_id, user["id"])
     result = (
         sb.table("assessments")
@@ -62,7 +56,7 @@ async def get_priorities(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     _verify_course_ownership(sb, course_id, user["id"])
     result = sb.rpc("get_study_priorities", {"p_course_id": course_id}).execute()
     return result.data
@@ -75,7 +69,7 @@ async def update_assessment(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     # Verify ownership via course join
     existing = (
         sb.table("assessments")
@@ -109,7 +103,7 @@ async def delete_assessment(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     existing = (
         sb.table("assessments")
         .select("id, course_id")
@@ -135,7 +129,7 @@ async def save_assessment_result(
     settings: Settings = Depends(get_settings),
 ):
     """Save a student's score for a past assessment (used during onboarding)."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     # Verify the assessment exists
     existing = (

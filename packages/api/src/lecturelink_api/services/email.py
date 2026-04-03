@@ -49,7 +49,7 @@ def _is_notifications_enabled(supabase, user_id: str) -> bool:
         if result.data:
             return result.data.get("email_notifications_enabled", True)
     except Exception:
-        pass
+        logger.debug("Failed to check email notification preference for user %s", user_id, exc_info=True)
     return True
 
 
@@ -105,7 +105,7 @@ async def send_daily_digest(
             )
             streak = streak_result.data.get("current_streak", 0) if streak_result.data else 0
         except Exception:
-            pass
+            logger.debug("Failed to fetch streak for daily digest", exc_info=True)
 
         # 3. Top study actions (deterministic, fast)
         from lecturelink_api.services.dashboard_actions import get_best_next_actions
@@ -184,7 +184,7 @@ async def send_assessment_reminder(
             logger.debug("48h reminder already sent for assessment %s", assessment_id)
             return False
     except Exception:
-        pass
+        logger.debug("Failed to check reminder log for assessment %s", assessment_id, exc_info=True)
 
     try:
         # Get readiness score (best-effort)
@@ -197,7 +197,7 @@ async def send_assessment_reminder(
             )
             readiness_score = readiness_data.get("readiness_score")
         except Exception:
-            pass
+            logger.debug("Failed to compute readiness for reminder email", exc_info=True)
 
         due_date = assessment.get("due_date", "")
         course_id = assessment.get("course_id", "")

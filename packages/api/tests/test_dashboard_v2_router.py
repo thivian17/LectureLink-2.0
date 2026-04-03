@@ -27,7 +27,7 @@ FAKE_SETTINGS = Settings(
     SUPABASE_ANON_KEY="fake-key",
 )
 
-_MOCK_SB = "lecturelink_api.routers.dashboard_v2.create_client"
+_MOCK_SB = "lecturelink_api.auth.create_client"
 
 
 @pytest.fixture(autouse=True)

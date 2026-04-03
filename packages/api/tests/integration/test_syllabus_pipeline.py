@@ -213,7 +213,10 @@ class TestUploadAndReviewFlow:
         course_id = str(uuid.uuid4())
         syllabus_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.syllabi.create_client") as mc:
+        with (
+            patch("lecturelink_api.auth.create_client") as mc,
+            patch("lecturelink_api.routers.syllabi._sb_admin", return_value=MagicMock()),
+        ):
             sb = MagicMock()
             mc.return_value = sb
 
@@ -256,7 +259,7 @@ class TestUploadAndReviewFlow:
             extraction_confidence=0.9,
         )
 
-        with patch("lecturelink_api.routers.syllabi.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain([reviewed])
@@ -287,7 +290,7 @@ class TestUploadAndReviewFlow:
         )
 
         with patch(
-            "lecturelink_api.routers.assessments.create_client"
+            "lecturelink_api.auth.create_client"
         ) as mc:
             sb = MagicMock()
             mc.return_value = sb

@@ -85,7 +85,7 @@ async def process_lecture(
                 },
             )
     except Exception:
-        pass  # observability is always non-fatal
+        pass  # Observability is non-critical
 
     try:
         # Guard: verify the lecture row still exists before starting.
@@ -146,7 +146,7 @@ async def process_lecture(
             if trace and processing_path in ("slides_only", "audio+slides"):
                 _slide_span = trace.span(name="slide_analysis")
         except Exception:
-            pass
+            pass  # Observability is non-critical
 
         if processing_path == "audio+slides":
             transcript_segments, slide_analysis = await asyncio.gather(
@@ -164,7 +164,7 @@ async def process_lecture(
             if _slide_span and slide_analysis:
                 _slide_span.end(output={"slides_analyzed": True})
         except Exception:
-            pass
+            pass  # Observability is non-critical
 
         # ── Stage 3: Content Alignment ──
         update_processing_status(
@@ -212,7 +212,7 @@ async def process_lecture(
                     input={"segment_count": len(aligned_segments)},
                 )
         except Exception:
-            pass
+            pass  # Observability is non-critical
 
         concepts, generated_title = await asyncio.gather(
             extract_concepts_v2(aligned_segments, existing_context),
@@ -232,7 +232,7 @@ async def process_lecture(
             if _concept_span:
                 _concept_span.end(output={"concepts_extracted": len(concepts)})
         except Exception:
-            pass
+            pass  # Observability is non-critical
 
         logger.info("Lecture %s: extracted %d concepts (V2)", lecture_id, len(concepts))
 
@@ -247,7 +247,7 @@ async def process_lecture(
             if trace:
                 _embed_span = trace.span(name="embedding_generation")
         except Exception:
-            pass
+            pass  # Observability is non-critical
 
         chunks = chunk_content(aligned_segments)
         chunks, concepts = await asyncio.gather(
@@ -259,7 +259,7 @@ async def process_lecture(
             if _embed_span:
                 _embed_span.end(output={"chunks": len(chunks), "concepts": len(concepts)})
         except Exception:
-            pass
+            pass  # Observability is non-critical
 
         logger.info(
             "Lecture %s: embedded %d chunks, %d concepts",
@@ -350,7 +350,7 @@ async def process_lecture(
                 })
                 lf.flush()
         except Exception:
-            pass
+            pass  # Observability is non-critical
 
         try:
             from ..services.observability import track_event
@@ -363,7 +363,7 @@ async def process_lecture(
                 "duration_seconds": elapsed,
             })
         except Exception:
-            pass
+            pass  # Observability is non-critical
 
         return {
             "lecture_id": lecture_id,
@@ -415,7 +415,7 @@ def _handle_failure(
             context={"lecture_id": lecture_id, "stage": stage},
         )
     except Exception:
-        pass
+        pass  # Observability is non-critical
     try:
         update_processing_status(
             supabase, lecture_id,

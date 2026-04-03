@@ -203,7 +203,7 @@ async def _extract_docx(file_bytes: bytes) -> dict[str, Any]:
                         seen_hf.add(text)
                         header_footer_texts.append(text)
             except Exception:
-                pass
+                pass  # Section header not accessible — skip
             try:
                 for para in section.footer.paragraphs:
                     text = para.text.strip()
@@ -211,7 +211,7 @@ async def _extract_docx(file_bytes: bytes) -> dict[str, Any]:
                         seen_hf.add(text)
                         header_footer_texts.append(text)
             except Exception:
-                pass
+                pass  # Section footer not accessible — skip
 
         if header_footer_texts:
             parts.append("--- Document Header/Footer ---")

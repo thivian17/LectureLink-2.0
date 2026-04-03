@@ -7,9 +7,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from supabase import create_client
-
-from lecturelink_api.auth import get_current_user
+from lecturelink_api.auth import get_authenticated_supabase, get_current_user
 from lecturelink_api.config import Settings, get_settings
 from lecturelink_api.models.tutor_models import (
     AssessmentReadinessResponse,
@@ -53,16 +51,12 @@ from lecturelink_api.services.tutor_planner import (
     get_assessment_readiness,
 )
 
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["tutor"])
 
 
-def _sb(user: dict, settings: Settings):
-    """Build a Supabase client authenticated with the user's token."""
-    client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
-    client.auth.set_session(user["token"], "")
-    return client
 
 
 def _verify_course_ownership(sb, course_id: str, user_id: str) -> dict:
@@ -113,7 +107,7 @@ async def entry_endpoint(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     _verify_course_ownership(sb, course_id, user["id"])
     return await get_session_entry_data(sb, course_id, user["id"])
 
@@ -134,7 +128,7 @@ async def start_session(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     _verify_course_ownership(sb, course_id, user["id"])
 
     # Return existing active session if one exists and has a valid plan
@@ -235,7 +229,7 @@ async def active_session_endpoint(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     _verify_course_ownership(sb, course_id, user["id"])
     session = await get_active_session(sb, course_id, user["id"])
     if session is None:
@@ -258,7 +252,7 @@ async def answer_question(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     session = _verify_session_ownership(sb, session_id, user["id"])
 
     if session["status"] != "active":
@@ -318,7 +312,7 @@ async def answer_question(
             if concept_result.data:
                 concept_id = concept_result.data[0]["id"]
         except Exception:
-            pass
+            logger.debug("Failed to resolve concept ID for %r", concept_title, exc_info=True)
 
     if concept_id:
         try:
@@ -414,7 +408,7 @@ async def pause_session_endpoint(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     session = _verify_session_ownership(sb, session_id, user["id"])
     await pause_session(sb, session_id, user["id"])
     await log_session_event(
@@ -437,7 +431,7 @@ async def resume_session_endpoint(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     session_row = _verify_session_ownership(sb, session_id, user["id"])
     result = await resume_session(sb, session_id, user["id"])
     await log_session_event(
@@ -461,7 +455,7 @@ async def complete_session_endpoint(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     session_row = _verify_session_ownership(sb, session_id, user["id"])
     summary = await complete_session(sb, session_id, user["id"])
 
@@ -506,7 +500,7 @@ async def submit_grading_feedback(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     _verify_session_ownership(sb, session_id, user["id"])
 
     sb.table("grading_feedback").insert({
@@ -533,7 +527,7 @@ async def history_endpoint(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     _verify_course_ownership(sb, course_id, user["id"])
     return await get_session_history(sb, course_id, user["id"])
 
@@ -552,7 +546,7 @@ async def summary_endpoint(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     _verify_session_ownership(sb, session_id, user["id"])
     return await get_session_summary(sb, session_id, user["id"])
 
@@ -582,7 +576,7 @@ async def next_block_endpoint(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     session = _verify_session_ownership(sb, session_id, user["id"])
 
     if session["status"] != "active":
@@ -636,7 +630,7 @@ async def generate_concept_endpoint(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     session = _verify_session_ownership(sb, session_id, user["id"])
 
     if concept_index is None:
@@ -665,7 +659,7 @@ async def chat_endpoint(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     session = _verify_session_ownership(sb, session_id, user["id"])
 
     if session["status"] != "active":
@@ -709,7 +703,7 @@ async def chat_stream_endpoint(
 
     Returns text/event-stream with chunks as they arrive from Gemini.
     """
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     session = _verify_session_ownership(sb, session_id, user["id"])
 
     if session["status"] != "active":
@@ -752,7 +746,7 @@ async def diagnostic_from_session_endpoint(
     settings: Settings = Depends(get_settings),
 ):
     """Generate diagnostic questions using session context."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     session = _verify_session_ownership(sb, session_id, user["id"])
 
     course_id = session["course_id"]
@@ -790,7 +784,7 @@ async def diagnostic_endpoint(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     _verify_course_ownership(sb, course_id, user["id"])
 
     return await generate_diagnostic(
@@ -813,7 +807,7 @@ async def diagnostic_submit_endpoint(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     session = _verify_session_ownership(sb, session_id, user["id"])
 
     # Grade each answer
@@ -875,7 +869,7 @@ async def assessment_readiness_endpoint(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     _verify_course_ownership(sb, course_id, user["id"])
     return await get_assessment_readiness(
         sb, course_id, user["id"], assessment_id,

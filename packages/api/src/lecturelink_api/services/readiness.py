@@ -229,6 +229,7 @@ async def get_course_readiness_summary(
         ).execute()
         mastery_data = mastery_result.data or []
     except Exception:
+        logger.warning("get_concept_mastery RPC failed for course readiness summary", exc_info=True)
         mastery_data = []
 
     concepts_total = len(mastery_data)

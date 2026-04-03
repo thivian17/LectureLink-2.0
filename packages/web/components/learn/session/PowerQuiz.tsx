@@ -132,11 +132,8 @@ export function PowerQuiz({ sessionId, questions, onComplete }: PowerQuizProps) 
             {/* Timer bar */}
             <div className="h-1 w-full bg-muted rounded-full overflow-hidden mb-3">
               <div
-                className="h-full bg-primary/40 rounded-full transition-all ease-linear"
-                style={{
-                  width: `${timerBarWidth}%`,
-                  transitionDuration: "1s",
-                }}
+                className="h-full bg-primary/40 rounded-full transition-all ease-linear duration-1000"
+                style={{ width: `${timerBarWidth}%` }}
               />
             </div>
 

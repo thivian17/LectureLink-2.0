@@ -9,7 +9,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from supabase import create_client
 
-from lecturelink_api.auth import get_current_user
+from lecturelink_api.auth import get_authenticated_supabase, get_current_user
 from lecturelink_api.config import Settings, get_settings
 from lecturelink_api.models.feedback_models import FeedbackResponse, FeedbackSubmitRequest
 
@@ -21,10 +21,6 @@ _ALLOWED_TYPES = {"image/png", "image/jpeg", "image/webp"}
 _MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 
 
-def _sb(user: dict, settings: Settings):
-    client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
-    client.auth.set_session(user["token"], "")
-    return client
 
 
 def _service_sb(settings: Settings):
@@ -125,7 +121,7 @@ async def submit_feedback(
     settings: Settings = Depends(get_settings),
 ):
     """Submit feedback and optionally create a GitHub issue."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     # Build screenshot URL if a storage path was provided
     screenshot_url = None

@@ -151,7 +151,7 @@ class TestSaveAssessmentResult:
         #   1. select assessment (verify exists)
         #   2. select course (verify ownership)
         #   3. update assessment (set student_score)
-        with patch("lecturelink_api.routers.assessments.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -203,7 +203,7 @@ class TestSaveAssessmentResult:
 
         assessment_row = {"id": assessment_id, "course_id": course_id}
         # Course owned by a *different* user → ownership check returns empty
-        with patch("lecturelink_api.routers.assessments.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -239,7 +239,7 @@ class TestCourseCreationOnboardingFlag:
     async def test_create_course_needs_onboarding(self, client):
         course = _sample_course()
 
-        with patch("lecturelink_api.routers.courses.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -275,7 +275,7 @@ class TestCourseCreationOnboardingFlag:
         course = _sample_course()
         other_course_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.courses.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 

@@ -36,7 +36,7 @@ class TestSearchEndpoint:
         ]
 
         with (
-            patch("lecturelink_api.routers.search.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.search.search_lectures",
                 new_callable=AsyncMock,
@@ -68,7 +68,7 @@ class TestSearchEndpoint:
         course_id = str(uuid.uuid4())
 
         with (
-            patch("lecturelink_api.routers.search.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.search.search_lectures",
                 new_callable=AsyncMock,
@@ -91,7 +91,7 @@ class TestSearchEndpoint:
     async def test_search_course_not_found(self, client):
         bad_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.search.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(None)
@@ -112,7 +112,7 @@ class TestSearchEndpoint:
         results = [make_search_result(lecture_id) for _ in range(3)]
 
         with (
-            patch("lecturelink_api.routers.search.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.search.search_lectures",
                 new_callable=AsyncMock,
@@ -142,7 +142,7 @@ class TestSearchEndpoint:
         lecture_id = str(uuid.uuid4())
 
         with (
-            patch("lecturelink_api.routers.search.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.search.search_lectures",
                 new_callable=AsyncMock,
@@ -202,7 +202,7 @@ class TestQAEndpoint:
         qa_result = self._qa_result()
 
         with (
-            patch("lecturelink_api.routers.search.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.search.check_rate_limit",
             ),
@@ -238,7 +238,7 @@ class TestQAEndpoint:
         }
 
         with (
-            patch("lecturelink_api.routers.search.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.search.check_rate_limit",
             ),
@@ -267,7 +267,7 @@ class TestQAEndpoint:
         bad_id = str(uuid.uuid4())
 
         with (
-            patch("lecturelink_api.routers.search.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.search.check_rate_limit",
             ),
@@ -314,7 +314,7 @@ class TestQAEndpoint:
         }
 
         with (
-            patch("lecturelink_api.routers.search.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.search.check_rate_limit",
             ),

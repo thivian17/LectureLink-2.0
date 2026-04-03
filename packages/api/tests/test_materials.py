@@ -19,7 +19,7 @@ FAKE_USER_ID = str(uuid.uuid4())
 FAKE_EMAIL = "test@university.edu"
 FAKE_TOKEN = "fake-jwt-token"
 
-_MOD = "lecturelink_api.routers.materials"
+_AUTH_MOD = "lecturelink_api.auth"
 
 
 def _fake_user():
@@ -158,7 +158,7 @@ class TestMaterialUpload:
     @pytest.mark.asyncio
     async def test_upload_rejects_invalid_extension(self, client):
         """Should reject non-allowed file types."""
-        with patch(f"{_MOD}.create_client") as mock_create:
+        with patch(f"{_AUTH_MOD}.create_client") as mock_create, patch("lecturelink_api.routers.materials._sb_admin", return_value=MagicMock()):
             _setup_upload_sb(mock_create)
 
             resp = await client.post(
@@ -173,7 +173,7 @@ class TestMaterialUpload:
     @pytest.mark.asyncio
     async def test_upload_rejects_oversized_file(self, client):
         """Should reject files over 50 MB."""
-        with patch(f"{_MOD}.create_client") as mock_create:
+        with patch(f"{_AUTH_MOD}.create_client") as mock_create, patch("lecturelink_api.routers.materials._sb_admin", return_value=MagicMock()):
             _setup_upload_sb(mock_create)
 
             big_content = b"x" * (51 * 1024 * 1024)
@@ -191,7 +191,7 @@ class TestMaterialUpload:
         """Should create DB record and enqueue processing."""
         material_record = _sample_material(processing_status="pending")
 
-        with patch(f"{_MOD}.create_client") as mock_create:
+        with patch(f"{_AUTH_MOD}.create_client") as mock_create, patch("lecturelink_api.routers.materials._sb_admin", return_value=MagicMock()):
             _setup_upload_sb(mock_create, {
                 "course_materials": ([material_record], None),
             })
@@ -212,7 +212,7 @@ class TestMaterialUpload:
     @pytest.mark.asyncio
     async def test_upload_verifies_course_ownership(self, client):
         """Should 404 if user doesn't own the course."""
-        with patch(f"{_MOD}.create_client") as mock_create:
+        with patch(f"{_AUTH_MOD}.create_client") as mock_create, patch("lecturelink_api.routers.materials._sb_admin", return_value=MagicMock()):
             _setup_upload_sb(mock_create, {
                 "courses": ([], None),
             })
@@ -238,7 +238,7 @@ class TestMaterialList:
         """Should return materials for the course."""
         materials = [_sample_material(), _sample_material()]
 
-        with patch(f"{_MOD}.create_client") as mock_create:
+        with patch(f"{_AUTH_MOD}.create_client") as mock_create, patch("lecturelink_api.routers.materials._sb_admin", return_value=MagicMock()):
             sb = MagicMock()
             mock_create.return_value = sb
             sb.auth.set_session = MagicMock()
@@ -255,7 +255,7 @@ class TestMaterialList:
         """Should filter by material_type query param."""
         materials = [_sample_material(material_type="notes")]
 
-        with patch(f"{_MOD}.create_client") as mock_create:
+        with patch(f"{_AUTH_MOD}.create_client") as mock_create, patch("lecturelink_api.routers.materials._sb_admin", return_value=MagicMock()):
             sb = MagicMock()
             mock_create.return_value = sb
             sb.auth.set_session = MagicMock()
@@ -282,7 +282,7 @@ class TestMaterialStatus:
         """Should return current processing status."""
         material = _sample_material(processing_status="processing")
 
-        with patch(f"{_MOD}.create_client") as mock_create:
+        with patch(f"{_AUTH_MOD}.create_client") as mock_create, patch("lecturelink_api.routers.materials._sb_admin", return_value=MagicMock()):
             sb = MagicMock()
             mock_create.return_value = sb
             sb.auth.set_session = MagicMock()
@@ -306,7 +306,7 @@ class TestMaterialDelete:
         """Should delete DB record and storage file."""
         material = _sample_material()
 
-        with patch(f"{_MOD}.create_client") as mock_create:
+        with patch(f"{_AUTH_MOD}.create_client") as mock_create, patch("lecturelink_api.routers.materials._sb_admin", return_value=MagicMock()):
             sb = MagicMock()
             mock_create.return_value = sb
             sb.auth.set_session = MagicMock()
@@ -322,7 +322,7 @@ class TestMaterialDelete:
         """Should 403 if user doesn't own the material."""
         material = _sample_material(user_id="other-user-id")
 
-        with patch(f"{_MOD}.create_client") as mock_create:
+        with patch(f"{_AUTH_MOD}.create_client") as mock_create, patch("lecturelink_api.routers.materials._sb_admin", return_value=MagicMock()):
             sb = MagicMock()
             mock_create.return_value = sb
             sb.auth.set_session = MagicMock()
@@ -344,7 +344,7 @@ class TestMaterialRetry:
         """Should 400 if material is not in failed state."""
         material = _sample_material(processing_status="completed")
 
-        with patch(f"{_MOD}.create_client") as mock_create:
+        with patch(f"{_AUTH_MOD}.create_client") as mock_create, patch("lecturelink_api.routers.materials._sb_admin", return_value=MagicMock()):
             sb = MagicMock()
             mock_create.return_value = sb
             sb.auth.set_session = MagicMock()
@@ -360,7 +360,7 @@ class TestMaterialRetry:
         """Should 400 if retry_count >= 3."""
         material = _sample_material(processing_status="failed", retry_count=3)
 
-        with patch(f"{_MOD}.create_client") as mock_create:
+        with patch(f"{_AUTH_MOD}.create_client") as mock_create, patch("lecturelink_api.routers.materials._sb_admin", return_value=MagicMock()):
             sb = MagicMock()
             mock_create.return_value = sb
             sb.auth.set_session = MagicMock()
@@ -376,7 +376,7 @@ class TestMaterialRetry:
         """Should re-enqueue and return updated status."""
         material = _sample_material(processing_status="failed", retry_count=1)
 
-        with patch(f"{_MOD}.create_client") as mock_create:
+        with patch(f"{_AUTH_MOD}.create_client") as mock_create, patch("lecturelink_api.routers.materials._sb_admin", return_value=MagicMock()):
             sb = MagicMock()
             mock_create.return_value = sb
             sb.auth.set_session = MagicMock()

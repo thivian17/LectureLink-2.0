@@ -40,7 +40,7 @@ class TestQuizGeneration:
         quiz_id = str(uuid.uuid4())
 
         with (
-            patch("lecturelink_api.routers.quizzes.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.quizzes.check_rate_limit",
             ),
@@ -73,7 +73,7 @@ class TestQuizGeneration:
         bad_id = str(uuid.uuid4())
 
         with (
-            patch("lecturelink_api.routers.quizzes.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.quizzes.check_rate_limit",
             ),
@@ -98,7 +98,7 @@ class TestQuizGeneration:
         assessment_id = str(uuid.uuid4())
 
         with (
-            patch("lecturelink_api.routers.quizzes.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.quizzes.check_rate_limit",
             ),
@@ -155,7 +155,7 @@ class TestQuizRetrieval:
                 return mock_chain([q1, q2])
             return mock_chain(None)
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.side_effect = _table
@@ -182,7 +182,7 @@ class TestQuizRetrieval:
                 return mock_chain([q])
             return mock_chain(None)
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.side_effect = _table
@@ -200,7 +200,7 @@ class TestQuizRetrieval:
     async def test_get_quiz_not_found(self, client):
         bad_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(None)
@@ -214,7 +214,7 @@ class TestQuizRetrieval:
         quiz_id = str(uuid.uuid4())
         quiz_data = make_quiz("cid", quiz_id=quiz_id, status="generating")
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain([quiz_data])
@@ -255,7 +255,7 @@ class TestQuizSubmission:
         }
 
         with (
-            patch("lecturelink_api.routers.quizzes.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.quizzes.score_quiz",
                 return_value=scoring_result,
@@ -299,7 +299,7 @@ class TestQuizSubmission:
         }
 
         with (
-            patch("lecturelink_api.routers.quizzes.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.quizzes.score_quiz",
                 return_value=scoring_result,
@@ -328,7 +328,7 @@ class TestQuizSubmission:
     async def test_submit_quiz_not_found(self, client):
         bad_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(None)
@@ -344,7 +344,7 @@ class TestQuizSubmission:
     async def test_submit_not_ready_quiz_rejected(self, client):
         quiz_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain([{"id": quiz_id, "status": "generating"}])
@@ -372,7 +372,7 @@ class TestQuizListing:
         q1 = make_quiz(course_id, status="ready", question_count=5)
         q2 = make_quiz(course_id, status="generating", question_count=0)
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.side_effect = _table_router({
@@ -391,7 +391,7 @@ class TestQuizListing:
     async def test_list_quizzes_course_not_found(self, client):
         bad_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.side_effect = _table_router({

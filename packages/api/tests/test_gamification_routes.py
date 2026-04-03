@@ -88,7 +88,7 @@ class TestGetState:
             new_callable=AsyncMock,
             return_value=mock_state,
         ), patch(
-            "lecturelink_api.routers.gamification.create_client",
+            "lecturelink_api.auth.create_client",
         ) as mock_create:
             mock_sb = MagicMock()
             mock_sb.auth = MagicMock()
@@ -115,7 +115,7 @@ class TestXPHistory:
             new_callable=AsyncMock,
             return_value=mock_history,
         ), patch(
-            "lecturelink_api.routers.gamification.create_client",
+            "lecturelink_api.auth.create_client",
         ) as mock_create:
             mock_sb = MagicMock()
             mock_sb.auth = MagicMock()
@@ -136,7 +136,7 @@ class TestStreakFreeze:
             new_callable=AsyncMock,
             return_value={"success": True, "freezes_remaining": 0},
         ), patch(
-            "lecturelink_api.routers.gamification.create_client",
+            "lecturelink_api.auth.create_client",
         ) as mock_create:
             mock_sb = MagicMock()
             mock_sb.auth = MagicMock()
@@ -154,7 +154,7 @@ class TestStreakFreeze:
             new_callable=AsyncMock,
             return_value={"success": False, "freezes_remaining": 0},
         ), patch(
-            "lecturelink_api.routers.gamification.create_client",
+            "lecturelink_api.auth.create_client",
         ) as mock_create:
             mock_sb = MagicMock()
             mock_sb.auth = MagicMock()
@@ -181,7 +181,7 @@ class TestBadges:
             new_callable=AsyncMock,
             return_value=mock_badges,
         ), patch(
-            "lecturelink_api.routers.gamification.create_client",
+            "lecturelink_api.auth.create_client",
         ) as mock_create:
             mock_sb = MagicMock()
             mock_sb.auth = MagicMock()
@@ -215,7 +215,7 @@ class TestReadiness:
             new_callable=AsyncMock,
             return_value=mock_readiness,
         ), patch(
-            "lecturelink_api.routers.gamification.create_client",
+            "lecturelink_api.auth.create_client",
         ) as mock_create:
             mock_sb = MagicMock()
             mock_sb.auth = MagicMock()
@@ -247,7 +247,7 @@ class TestReadinessDetail:
             new_callable=AsyncMock,
             return_value=mock_result,
         ), patch(
-            "lecturelink_api.routers.gamification.create_client",
+            "lecturelink_api.auth.create_client",
         ) as mock_create:
             mock_sb = MagicMock()
             mock_sb.auth = MagicMock()
@@ -265,7 +265,7 @@ class TestReadinessDetail:
             new_callable=AsyncMock,
             return_value={"assessment_id": "x", "readiness_score": 0, "error": "not_found"},
         ), patch(
-            "lecturelink_api.routers.gamification.create_client",
+            "lecturelink_api.auth.create_client",
         ) as mock_create:
             mock_sb = MagicMock()
             mock_sb.auth = MagicMock()
@@ -292,7 +292,7 @@ class TestCourseReadiness:
             new_callable=AsyncMock,
             return_value=mock_result,
         ), patch(
-            "lecturelink_api.routers.gamification.create_client",
+            "lecturelink_api.auth.create_client",
         ) as mock_create:
             mock_sb = MagicMock()
             mock_sb.auth = MagicMock()
@@ -319,7 +319,7 @@ class TestGradeProjection:
             new_callable=AsyncMock,
             return_value=mock_result,
         ), patch(
-            "lecturelink_api.routers.gamification.create_client",
+            "lecturelink_api.auth.create_client",
         ) as mock_create:
             mock_sb = MagicMock()
             mock_sb.auth = MagicMock()
@@ -335,7 +335,7 @@ class TestWeeklyProgress:
     @pytest.mark.asyncio
     async def test_returns_weekly_progress(self, client):
         with patch(
-            "lecturelink_api.routers.gamification.create_client",
+            "lecturelink_api.auth.create_client",
         ) as mock_create:
             mock_sb = MagicMock()
             mock_sb.auth = MagicMock()

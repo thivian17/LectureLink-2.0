@@ -10,8 +10,14 @@ Parameters per concept:
   p_guess:    P(correct | don't know) [default: 0.25]
   p_slip:     P(incorrect | know) [default: 0.1]
 """
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from supabase import Client as SupabaseClient
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +82,7 @@ def bkt_update(state: BKTState, is_correct: bool) -> BKTState:
 
 
 async def get_or_create_bkt_state(
-    supabase,
+    supabase: SupabaseClient,
     user_id: str,
     concept_id: str,
 ) -> BKTState:
@@ -114,7 +120,7 @@ async def get_or_create_bkt_state(
 
 
 async def persist_bkt_state(
-    supabase,
+    supabase: SupabaseClient,
     user_id: str,
     state: BKTState,
 ) -> None:
@@ -139,7 +145,7 @@ async def persist_bkt_state(
 
 
 async def update_mastery_from_quiz_result(
-    supabase,
+    supabase: SupabaseClient,
     user_id: str,
     concept_id: str,
     is_correct: bool,
@@ -155,7 +161,7 @@ async def update_mastery_from_quiz_result(
 
 
 async def record_learning_event(
-    supabase,
+    supabase: SupabaseClient,
     user_id: str,
     course_id: str,
     concept_id: str,
@@ -213,7 +219,7 @@ def mastery_tier(score: float) -> str:
 
 
 async def get_course_mastery_summary(
-    supabase,
+    supabase: SupabaseClient,
     user_id: str,
     course_id: str,
 ) -> list[dict]:

@@ -554,7 +554,7 @@ class TestOnboardingRouter:
         sb, _ = self._make_sb()
 
         with patch(
-            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+            "lecturelink_api.routers.onboarding.get_authenticated_supabase", return_value=sb,
         ):
             result = await start_onboarding(
                 course_id="course-1",
@@ -572,7 +572,7 @@ class TestOnboardingRouter:
         sb, _ = self._make_sb({"onboarding_completed_at": "2025-03-01T00:00:00"})
 
         with (
-            patch("lecturelink_api.routers.onboarding._sb", return_value=sb),
+            patch("lecturelink_api.routers.onboarding.get_authenticated_supabase", return_value=sb),
             pytest.raises(Exception) as exc_info,
         ):
             await start_onboarding(
@@ -593,7 +593,7 @@ class TestOnboardingRouter:
         })
 
         with patch(
-            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+            "lecturelink_api.routers.onboarding.get_authenticated_supabase", return_value=sb,
         ):
             result = await get_onboarding_status(
                 course_id="course-1",
@@ -612,7 +612,7 @@ class TestOnboardingRouter:
         sb, _ = self._make_sb()
 
         with patch(
-            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+            "lecturelink_api.routers.onboarding.get_authenticated_supabase", return_value=sb,
         ):
             result = await set_path(
                 course_id="course-1",
@@ -632,7 +632,7 @@ class TestOnboardingRouter:
         sb, _ = self._make_sb()
 
         with (
-            patch("lecturelink_api.routers.onboarding._sb", return_value=sb),
+            patch("lecturelink_api.routers.onboarding.get_authenticated_supabase", return_value=sb),
             pytest.raises(Exception) as exc_info,
         ):
             await update_step(
@@ -655,7 +655,7 @@ class TestOnboardingRouter:
         })
 
         with patch(
-            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+            "lecturelink_api.routers.onboarding.get_authenticated_supabase", return_value=sb,
         ):
             result = await update_step(
                 course_id="course-1",
@@ -673,7 +673,7 @@ class TestOnboardingRouter:
         sb, _ = self._make_sb()
 
         with patch(
-            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+            "lecturelink_api.routers.onboarding.get_authenticated_supabase", return_value=sb,
         ):
             result = await get_suggested_path(
                 course_id="course-1",
@@ -691,7 +691,7 @@ class TestOnboardingRouter:
         sb, _ = self._make_sb({"onboarding_path": "just_starting"})
 
         with patch(
-            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+            "lecturelink_api.routers.onboarding.get_authenticated_supabase", return_value=sb,
         ):
             result = await complete_onboarding(
                 course_id="course-1",
@@ -709,7 +709,7 @@ class TestOnboardingRouter:
         sb, _ = self._make_sb({"onboarding_path": "mid_semester"})
 
         with (
-            patch("lecturelink_api.routers.onboarding._sb", return_value=sb),
+            patch("lecturelink_api.routers.onboarding.get_authenticated_supabase", return_value=sb),
             patch(
                 "lecturelink_api.routers.onboarding.seed_mastery_from_scores",
                 new_callable=AsyncMock,
@@ -739,7 +739,7 @@ class TestOnboardingRouter:
         })
 
         with patch(
-            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+            "lecturelink_api.routers.onboarding.get_authenticated_supabase", return_value=sb,
         ):
             result = await get_personalized_message(
                 course_id="course-1",
@@ -762,7 +762,7 @@ class TestOnboardingRouter:
         })
 
         with patch(
-            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+            "lecturelink_api.routers.onboarding.get_authenticated_supabase", return_value=sb,
         ):
             result = await get_lecture_checklist(
                 course_id="course-1",
@@ -787,7 +787,7 @@ class TestOnboardingRouter:
         })
 
         with patch(
-            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+            "lecturelink_api.routers.onboarding.get_authenticated_supabase", return_value=sb,
         ):
             result = await get_semester_progress_endpoint(
                 course_id="course-1",
@@ -812,7 +812,7 @@ class TestOnboardingRouter:
         })
 
         with patch(
-            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+            "lecturelink_api.routers.onboarding.get_authenticated_supabase", return_value=sb,
         ):
             result = await update_lecture_checklist_item(
                 course_id="course-1",
@@ -845,7 +845,7 @@ class TestOnboardingRouter:
         })
 
         with patch(
-            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+            "lecturelink_api.routers.onboarding.get_authenticated_supabase", return_value=sb,
         ):
             with pytest.raises(HTTPException) as exc_info:
                 await update_lecture_checklist_item(
@@ -873,7 +873,7 @@ class TestOnboardingRouter:
         })
 
         with patch(
-            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+            "lecturelink_api.routers.onboarding.get_authenticated_supabase", return_value=sb,
         ):
             result = await add_lecture_checklist_item(
                 course_id="course-1",
@@ -915,7 +915,7 @@ class TestOnboardingRouter:
         })
 
         with patch(
-            "lecturelink_api.routers.onboarding._sb", return_value=sb,
+            "lecturelink_api.routers.onboarding.get_authenticated_supabase", return_value=sb,
         ):
             result = await get_lecture_checklist(
                 course_id="course-1",

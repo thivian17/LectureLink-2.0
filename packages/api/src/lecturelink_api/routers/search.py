@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from supabase import create_client
-
-from lecturelink_api.auth import get_current_user
+from lecturelink_api.auth import get_authenticated_supabase, get_current_user
 from lecturelink_api.config import Settings, get_settings
 from lecturelink_api.middleware.rate_limit import check_rate_limit
 from lecturelink_api.models.api_models import (
@@ -20,10 +18,6 @@ from lecturelink_api.services.search import highlight_search_terms, search_lectu
 router = APIRouter(prefix="/api", tags=["search"])
 
 
-def _sb(user: dict, settings: Settings):
-    client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
-    client.auth.set_session(user["token"], "")
-    return client
 
 
 @router.post("/search", response_model=list[SearchResult])
@@ -32,7 +26,7 @@ async def search(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     # Verify course ownership
     course = (
@@ -93,7 +87,7 @@ async def question_answer(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     # Rate limit
     check_rate_limit(sb, user["id"], "qa_question")

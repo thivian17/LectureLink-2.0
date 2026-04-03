@@ -45,8 +45,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
           placeholder="Ask a question..."
           rows={1}
           disabled={disabled || sending}
-          className="flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring min-h-[36px] max-h-[120px]"
-          style={{ height: "auto" }}
+          className="flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring min-h-[36px] max-h-[120px] h-auto"
           onInput={(e) => {
             const target = e.target as HTMLTextAreaElement;
             target.style.height = "auto";

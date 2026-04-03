@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -11,9 +13,9 @@ from fastapi import (
     UploadFile,
     status,
 )
-from supabase import create_client
+from supabase import Client as SupabaseClient, create_client
 
-from lecturelink_api.auth import get_current_user
+from lecturelink_api.auth import get_authenticated_supabase, get_current_user
 from lecturelink_api.config import Settings, get_settings
 from lecturelink_api.middleware.rate_limit import check_rate_limit
 from lecturelink_api.models.api_models import (
@@ -23,6 +25,8 @@ from lecturelink_api.models.api_models import (
 )
 from lecturelink_api.services.lecture_storage import cleanup_lecture_data
 from lecturelink_api.services.task_queue import TaskQueueService, get_task_queue
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["lectures"])
 
@@ -48,13 +52,9 @@ _MAX_AUDIO_BYTES = 500 * 1024 * 1024   # 500 MB
 _MAX_SLIDE_BYTES = 50 * 1024 * 1024    # 50 MB
 
 
-def _sb(user: dict, settings: Settings):
-    client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
-    client.auth.set_session(user["token"], "")
-    return client
 
 
-def _sb_admin(settings: Settings):
+def _sb_admin(settings: Settings) -> SupabaseClient:
     """Service-role client for storage operations (bypasses RLS)."""
     return create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
 
@@ -89,7 +89,7 @@ async def upload_lecture(
     settings: Settings = Depends(get_settings),
     task_queue: TaskQueueService = Depends(get_task_queue),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     # Rate limit
     check_rate_limit(sb, user["id"], "lecture_upload")
@@ -231,7 +231,7 @@ async def upload_lecture(
             "has_slides": bool(slides_storage_path),
         })
     except Exception:
-        pass
+        pass  # Observability is non-critical
 
     return {"lecture_id": lecture_id, "status": "processing"}
 
@@ -245,7 +245,7 @@ async def get_lecture(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     result = (
         sb.table("lectures")
@@ -301,7 +301,7 @@ async def get_lecture(
             )
             audio_url = signed["signedURL"]
         except Exception:
-            pass
+            logger.debug("Failed to generate signed URL for audio", exc_info=True)
     if lecture.get("slides_url"):
         try:
             signed = sb_admin.storage.from_("lectures").create_signed_url(
@@ -309,7 +309,7 @@ async def get_lecture(
             )
             slides_url = signed["signedURL"]
         except Exception:
-            pass
+            logger.debug("Failed to generate signed URL for slides", exc_info=True)
 
     # ── Processing path ──
     has_audio = lecture.get("audio_url") is not None
@@ -419,7 +419,7 @@ async def get_lecture_status(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     result = (
         sb.table("lectures")
@@ -448,7 +448,7 @@ async def list_course_lectures(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     # Verify course ownership
     course = (
@@ -488,7 +488,7 @@ async def retry_lecture(
     settings: Settings = Depends(get_settings),
     task_queue: TaskQueueService = Depends(get_task_queue),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     result = (
         sb.table("lectures")
@@ -550,7 +550,7 @@ async def reprocess_lecture(
     settings: Settings = Depends(get_settings),
     task_queue: TaskQueueService = Depends(get_task_queue),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     result = (
         sb.table("lectures")

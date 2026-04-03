@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from supabase import create_client
-
-from lecturelink_api.auth import get_current_user
+from lecturelink_api.auth import get_authenticated_supabase, get_current_user
 from lecturelink_api.config import Settings, get_settings
 from lecturelink_api.middleware.rate_limit import check_rate_limit
 from lecturelink_api.models.api_models import (
@@ -152,10 +150,6 @@ def _resolve_correct_option_index(
     return None
 
 
-def _sb(user: dict, settings: Settings):
-    client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
-    client.auth.set_session(user["token"], "")
-    return client
 
 
 @router.post("/quizzes/generate", status_code=status.HTTP_201_CREATED)
@@ -165,7 +159,7 @@ async def generate_quiz(
     settings: Settings = Depends(get_settings),
     task_queue: TaskQueueService = Depends(get_task_queue),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     # Rate limit
     check_rate_limit(sb, user["id"], "quiz_generate")
@@ -260,7 +254,7 @@ async def get_quiz(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     result = (
         sb.table("quizzes")
@@ -336,7 +330,7 @@ async def get_quiz_status(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     result = (
         sb.table("quizzes")
@@ -377,7 +371,7 @@ async def get_quiz_questions(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     # Verify quiz belongs to user and is ready
     quiz_result = (
@@ -446,7 +440,7 @@ async def submit_quiz(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     # Verify quiz exists and belongs to user
     result = (
@@ -479,7 +473,7 @@ async def list_course_quizzes(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     # Verify course ownership
     course = (
@@ -524,7 +518,7 @@ async def list_course_concepts(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     # Verify course ownership
     course = (
@@ -621,7 +615,7 @@ async def get_hint(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     # Verify quiz belongs to user
     quiz_result = (

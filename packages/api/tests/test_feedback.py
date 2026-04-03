@@ -58,7 +58,7 @@ class TestSubmitFeedback:
         mock_sb.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(data=[])
 
         with (
-            patch("lecturelink_api.routers.feedback.create_client", return_value=mock_sb),
+            patch("lecturelink_api.auth.create_client", return_value=mock_sb), patch("lecturelink_api.routers.feedback.create_client", return_value=mock_sb),
             patch(
                 "lecturelink_api.routers.feedback._create_github_issue",
                 new_callable=AsyncMock,
@@ -79,7 +79,7 @@ class TestSubmitFeedback:
         assert data["message"] == "Thank you for your feedback!"
 
     def test_invalid_type_rejects_422(self, client):
-        with patch("lecturelink_api.routers.feedback.create_client", return_value=MagicMock()):
+        with patch("lecturelink_api.auth.create_client", return_value=MagicMock()), patch("lecturelink_api.routers.feedback.create_client", return_value=MagicMock()):
             resp = client.post("/api/feedback", json={
                 "type": "complaint",
                 "description": "This is a long enough description",
@@ -88,7 +88,7 @@ class TestSubmitFeedback:
         assert resp.status_code == 422
 
     def test_description_too_short_rejects_422(self, client):
-        with patch("lecturelink_api.routers.feedback.create_client", return_value=MagicMock()):
+        with patch("lecturelink_api.auth.create_client", return_value=MagicMock()), patch("lecturelink_api.routers.feedback.create_client", return_value=MagicMock()):
             resp = client.post("/api/feedback", json={
                 "type": "bug",
                 "description": "short",
@@ -103,7 +103,7 @@ class TestSubmitFeedback:
         )
 
         with (
-            patch("lecturelink_api.routers.feedback.create_client", return_value=mock_sb),
+            patch("lecturelink_api.auth.create_client", return_value=mock_sb), patch("lecturelink_api.routers.feedback.create_client", return_value=mock_sb),
             patch(
                 "lecturelink_api.routers.feedback._create_github_issue",
                 new_callable=AsyncMock,
@@ -129,7 +129,7 @@ class TestUploadScreenshot:
         mock_sb = MagicMock()
         mock_sb.storage.from_.return_value.upload.return_value = None
 
-        with patch("lecturelink_api.routers.feedback.create_client", return_value=mock_sb):
+        with patch("lecturelink_api.auth.create_client", return_value=mock_sb), patch("lecturelink_api.routers.feedback.create_client", return_value=mock_sb):
             resp = client.post(
                 "/api/feedback/upload-screenshot",
                 files={"file": ("screenshot.png", BytesIO(b"\x89PNG" + b"\x00" * 100), "image/png")},
@@ -144,7 +144,7 @@ class TestUploadScreenshot:
         # 6 MB payload
         big_content = b"\x00" * (6 * 1024 * 1024)
 
-        with patch("lecturelink_api.routers.feedback.create_client", return_value=MagicMock()):
+        with patch("lecturelink_api.auth.create_client", return_value=MagicMock()), patch("lecturelink_api.routers.feedback.create_client", return_value=MagicMock()):
             resp = client.post(
                 "/api/feedback/upload-screenshot",
                 files={"file": ("big.png", BytesIO(big_content), "image/png")},
@@ -153,7 +153,7 @@ class TestUploadScreenshot:
         assert resp.status_code == 413
 
     def test_invalid_content_type_rejects(self, client, test_user):
-        with patch("lecturelink_api.routers.feedback.create_client", return_value=MagicMock()):
+        with patch("lecturelink_api.auth.create_client", return_value=MagicMock()), patch("lecturelink_api.routers.feedback.create_client", return_value=MagicMock()):
             resp = client.post(
                 "/api/feedback/upload-screenshot",
                 files={"file": ("doc.pdf", BytesIO(b"%PDF-1.4"), "application/pdf")},
@@ -225,7 +225,7 @@ class TestCreateGithubIssue:
         )
 
         with (
-            patch("lecturelink_api.routers.feedback.create_client", return_value=mock_sb),
+            patch("lecturelink_api.auth.create_client", return_value=mock_sb), patch("lecturelink_api.routers.feedback.create_client", return_value=mock_sb),
             patch(
                 "lecturelink_api.routers.feedback._create_github_issue",
                 new_callable=AsyncMock,

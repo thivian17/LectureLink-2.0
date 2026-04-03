@@ -87,7 +87,7 @@ class TestStartSession:
         }
 
         with (
-            patch("lecturelink_api.routers.learn.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch(
                 "lecturelink_api.routers.learn.start_learn_session",
                 new_callable=AsyncMock,
@@ -110,7 +110,7 @@ class TestStartSession:
     async def test_start_session_rejects_time_below_10(self, client):
         course_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.learn.create_client"):
+        with patch("lecturelink_api.auth.create_client"):
             resp = await client.post(
                 f"/api/learn/{course_id}/session/start",
                 json={"time_budget_minutes": 5},
@@ -122,7 +122,7 @@ class TestStartSession:
     async def test_start_session_rejects_time_above_25(self, client):
         course_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.learn.create_client"):
+        with patch("lecturelink_api.auth.create_client"):
             resp = await client.post(
                 f"/api/learn/{course_id}/session/start",
                 json={"time_budget_minutes": 30},
@@ -169,7 +169,7 @@ class TestSessionEndpoints:
     @pytest.mark.asyncio
     async def test_get_session_not_found(self, client):
         with (
-            patch("lecturelink_api.routers.learn.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch(
                 "lecturelink_api.routers.learn.get_session",
                 new_callable=AsyncMock,
@@ -204,7 +204,7 @@ class TestSessionEndpoints:
         }
 
         with (
-            patch("lecturelink_api.routers.learn.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch(
                 "lecturelink_api.routers.learn.get_concept_brief",
                 new_callable=AsyncMock,
@@ -235,7 +235,7 @@ class TestSessionEndpoints:
         }
 
         with (
-            patch("lecturelink_api.routers.learn.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch(
                 "lecturelink_api.routers.learn.get_session",
                 new_callable=AsyncMock,
@@ -279,7 +279,7 @@ class TestSessionEndpoints:
         }
 
         with (
-            patch("lecturelink_api.routers.learn.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch(
                 "lecturelink_api.routers.learn.complete_learn_session",
                 new_callable=AsyncMock,
@@ -304,7 +304,7 @@ class TestSessionEndpoints:
         }
 
         with (
-            patch("lecturelink_api.routers.learn.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch(
                 "lecturelink_api.routers.learn.abandon_learn_session",
                 new_callable=AsyncMock,
@@ -336,7 +336,7 @@ class TestSessionEndpoints:
         }
 
         with (
-            patch("lecturelink_api.routers.learn.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch(
                 "lecturelink_api.routers.learn.get_power_quiz",
                 new_callable=AsyncMock,
@@ -365,7 +365,7 @@ class TestSessionEndpoints:
         }
 
         with (
-            patch("lecturelink_api.routers.learn.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch(
                 "lecturelink_api.routers.learn.submit_power_quiz_answer",
                 new_callable=AsyncMock,

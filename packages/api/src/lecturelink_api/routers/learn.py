@@ -5,9 +5,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from supabase import create_client
-
-from lecturelink_api.auth import get_current_user
+from lecturelink_api.auth import get_authenticated_supabase, get_current_user
 from lecturelink_api.config import Settings, get_settings
 from lecturelink_api.models.learn import (
     FlashReviewAnswerRequest,
@@ -33,15 +31,12 @@ from lecturelink_api.services.spaced_repetition import (
     get_priority_concepts as get_priority_concepts_service,
 )
 
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/learn", tags=["learn"])
 
 
-def _sb(user: dict, settings: Settings):
-    client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
-    client.auth.set_session(user["token"], "")
-    return client
 
 
 @router.post("/{course_id}/session/start", response_model=StartSessionResponse)
@@ -51,7 +46,7 @@ async def start_session(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     result = await start_learn_session(
         sb,
         user_id=user["id"],
@@ -71,7 +66,7 @@ async def submit_flash_review(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     # Grade the flash review card
 
@@ -102,7 +97,7 @@ async def get_concept(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     try:
         brief = await get_concept_brief(
             sb,
@@ -132,7 +127,7 @@ async def submit_gut_check_answer(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     try:
         result = await submit_gut_check(
             sb,
@@ -154,7 +149,7 @@ async def get_quiz(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     try:
         result = await get_power_quiz(
             sb, user_id=user["id"], session_id=session_id
@@ -173,7 +168,7 @@ async def submit_quiz_answer(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     try:
         result = await submit_power_quiz_answer(
             sb,
@@ -196,7 +191,7 @@ async def complete_session(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     try:
         result = await complete_learn_session(
             sb, user_id=user["id"], session_id=session_id
@@ -214,7 +209,7 @@ async def abandon_session(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     try:
         result = await abandon_learn_session(
             sb, user_id=user["id"], session_id=session_id
@@ -232,7 +227,7 @@ async def get_session_state(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     session = await get_session(sb, user["id"], session_id)
     if not session:
         raise HTTPException(
@@ -248,7 +243,7 @@ async def lecture_mastery(
     settings: Settings = Depends(get_settings),
 ):
     """Per-lecture mastery stats for a course."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     return await get_lecture_mastery(sb, user["id"], course_id)
 
 
@@ -260,5 +255,5 @@ async def priority_concepts(
     settings: Settings = Depends(get_settings),
 ):
     """Top N priority concepts for spaced repetition study."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     return await get_priority_concepts_service(sb, user["id"], course_id, limit=limit)

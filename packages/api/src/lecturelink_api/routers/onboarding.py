@@ -6,9 +6,7 @@ import logging
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from supabase import create_client
-
-from lecturelink_api.auth import get_current_user
+from lecturelink_api.auth import get_authenticated_supabase, get_current_user
 from lecturelink_api.config import Settings, get_settings
 from lecturelink_api.models.api_models import (
     FileMatchRequest,
@@ -36,6 +34,7 @@ from lecturelink_api.services.onboarding import (
     suggest_onboarding_path,
 )
 
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/courses/{course_id}", tags=["onboarding"])
@@ -53,11 +52,6 @@ VALID_STEPS = {
 }
 
 
-def _sb(user: dict, settings: Settings):
-    """Build a Supabase client authenticated with the user's token."""
-    client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
-    client.auth.set_session(user["token"], "")
-    return client
 
 
 def _get_course(sb, course_id: str, user_id: str) -> dict:
@@ -92,7 +86,7 @@ async def start_onboarding(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     course = _get_course(sb, course_id, user["id"])
 
     if course.get("onboarding_completed_at"):
@@ -136,7 +130,7 @@ async def get_onboarding_status(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     course = _get_course(sb, course_id, user["id"])
 
     completed = course.get("onboarding_completed_at")
@@ -166,7 +160,7 @@ async def update_step(
             detail=f"Invalid step. Must be one of: {', '.join(sorted(VALID_STEPS))}",
         )
 
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     _get_course(sb, course_id, user["id"])
 
     # Update and read back in a single query via .select() on update
@@ -197,7 +191,7 @@ async def get_suggested_path(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     course = _get_course(sb, course_id, user["id"])
 
     suggested = suggest_onboarding_path(
@@ -224,7 +218,7 @@ async def set_path(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     course = _get_course(sb, course_id, user["id"])
 
     update_payload: dict = {"onboarding_path": body.path}
@@ -257,7 +251,7 @@ async def get_personalized_message(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     course = _get_course(sb, course_id, user["id"])
 
     force = body.force_regenerate if body else False
@@ -291,7 +285,7 @@ async def get_personalized_message(
         if profile_result.data:
             student_name = profile_result.data[0].get("first_name")
     except Exception:
-        pass
+        logger.debug("Failed to fetch student name for onboarding", exc_info=True)
 
     message = await generate_personalized_message(
         course=course,
@@ -329,7 +323,7 @@ async def get_lecture_checklist(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     course = _get_course(sb, course_id, user["id"])
 
     # Try to get weekly schedule from syllabus
@@ -421,7 +415,7 @@ async def match_files_endpoint(
     """Match uploaded filenames to lecture numbers using LLM + heuristics."""
     from lecturelink_api.services.file_matcher import match_files_to_lectures
 
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     course = _get_course(sb, course_id, user["id"])
 
     # Build checklist (same logic as get_lecture_checklist)
@@ -484,7 +478,7 @@ async def get_semester_progress_endpoint(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     course = _get_course(sb, course_id, user["id"])
 
     progress = get_semester_progress(course)
@@ -536,7 +530,7 @@ async def complete_onboarding(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     course = _get_course(sb, course_id, user["id"])
 
     now = datetime.utcnow().isoformat()
@@ -560,7 +554,7 @@ async def complete_onboarding(
             "path": course.get("onboarding_path"),
         })
     except Exception:
-        pass
+        pass  # Observability is non-critical
 
     return {"completed_at": now, "mastery_scores_seeded": mastery_count}
 
@@ -585,7 +579,7 @@ async def update_notification_preferences(
             detail="email_notifications_enabled required",
         )
 
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     sb.table("user_onboarding").upsert(
         {
             "user_id": user["id"],
@@ -614,7 +608,7 @@ async def update_lecture_checklist_item(
     settings: Settings = Depends(get_settings),
 ):
     """Edit the title, date, or description of an auto-generated lecture."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     course = _get_course(sb, course_id, user["id"])
 
     # Regenerate the checklist to find the original item
@@ -715,7 +709,7 @@ async def add_lecture_checklist_item(
     settings: Settings = Depends(get_settings),
 ):
     """Add a missing lecture to the checklist."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     course = _get_course(sb, course_id, user["id"])
 
     # Get current checklist to determine next lecture number

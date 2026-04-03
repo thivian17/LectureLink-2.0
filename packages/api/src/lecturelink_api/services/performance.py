@@ -37,7 +37,7 @@ async def get_performance(
         if cached is not None:
             return cached
     except Exception:
-        pass
+        pass  # Redis unavailable — fall through to DB
 
     # 1. Concept mastery via SQL function
     try:
@@ -196,7 +196,7 @@ async def get_performance(
 
         await cache_set(cache_key, result, ttl=60)
     except Exception:
-        pass
+        pass  # Redis unavailable — result still returned without caching
 
     return result
 

@@ -42,7 +42,7 @@ class TestEndpointLatency:
         """GET /api/lectures/{id}/status responds within 200ms."""
         lid = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.lectures.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain([{
@@ -71,7 +71,7 @@ class TestEndpointLatency:
         results = [make_search_result(lecture_id) for _ in range(10)]
 
         with (
-            patch("lecturelink_api.routers.search.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.search.search_lectures",
                 new_callable=AsyncMock,
@@ -117,7 +117,7 @@ class TestEndpointLatency:
                 return mock_chain(questions)
             return mock_chain(None)
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.side_effect = _table
@@ -149,7 +149,7 @@ class TestEndpointLatency:
         }
 
         with (
-            patch("lecturelink_api.routers.quizzes.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.quizzes.score_quiz",
                 return_value=scoring,
@@ -178,7 +178,7 @@ class TestEndpointLatency:
         """GET /api/courses/{id}/lectures responds within 200ms."""
         course_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.lectures.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.side_effect = _table_router({
@@ -209,7 +209,7 @@ class TestEndpointLatency:
                 return mock_chain([])
             return mock_chain(None)
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.side_effect = _table

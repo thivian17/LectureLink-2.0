@@ -23,7 +23,7 @@ class TestSyllabusStatusProgression:
     async def test_status_pending_after_creation(self, client):
         """Newly created syllabus with status='pending' returns 'processing'."""
         sid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.syllabi.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(
@@ -42,7 +42,7 @@ class TestSyllabusStatusProgression:
     async def test_status_processing_during_pipeline(self, client):
         """During pipeline run: status='processing' returns 'processing'."""
         sid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.syllabi.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(
@@ -63,7 +63,7 @@ class TestSyllabusStatusProgression:
         so this case would incorrectly return 'processing'.
         """
         sid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.syllabi.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(
@@ -82,7 +82,7 @@ class TestSyllabusStatusProgression:
     async def test_status_complete_after_review(self, client):
         """After review: status='processed' + needs_review=False → 'complete'."""
         sid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.syllabi.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(
@@ -101,7 +101,7 @@ class TestSyllabusStatusProgression:
     async def test_status_error_on_failure(self, client):
         """Pipeline failure: status='error' → 'error'."""
         sid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.syllabi.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(
@@ -119,7 +119,7 @@ class TestSyllabusStatusProgression:
     async def test_status_not_found(self, client):
         """Unknown syllabus returns 404."""
         sid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.syllabi.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(None)

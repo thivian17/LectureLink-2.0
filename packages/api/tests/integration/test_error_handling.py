@@ -66,7 +66,7 @@ class TestNotFoundErrors:
     @pytest.mark.asyncio
     async def test_lecture_not_found(self, client):
         lid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.lectures.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(None)
@@ -78,7 +78,7 @@ class TestNotFoundErrors:
     @pytest.mark.asyncio
     async def test_lecture_status_not_found(self, client):
         lid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.lectures.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(None)
@@ -90,7 +90,7 @@ class TestNotFoundErrors:
     @pytest.mark.asyncio
     async def test_quiz_not_found(self, client):
         qid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.quizzes.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(None)
@@ -102,7 +102,7 @@ class TestNotFoundErrors:
     @pytest.mark.asyncio
     async def test_quiz_submit_not_found(self, client):
         qid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.quizzes.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(None)
@@ -117,7 +117,7 @@ class TestNotFoundErrors:
     @pytest.mark.asyncio
     async def test_search_course_not_found(self, client):
         cid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.search.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(None)
@@ -194,7 +194,7 @@ class TestRateLimitErrors:
         course_id = str(uuid.uuid4())
 
         with (
-            patch("lecturelink_api.routers.search.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.search.check_rate_limit",
                 side_effect=HTTPException(
@@ -221,7 +221,7 @@ class TestRateLimitErrors:
         course_id = str(uuid.uuid4())
 
         with (
-            patch("lecturelink_api.routers.lectures.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.lectures.check_rate_limit",
                 side_effect=HTTPException(
@@ -247,7 +247,7 @@ class TestRateLimitErrors:
         course_id = str(uuid.uuid4())
 
         with (
-            patch("lecturelink_api.routers.quizzes.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch(
                 "lecturelink_api.routers.quizzes.check_rate_limit",
                 side_effect=HTTPException(
@@ -286,7 +286,7 @@ class TestRetryErrors:
         course_id = str(uuid.uuid4())
         lec = make_lecture(course_id, lecture_id=lid, processing_status="completed")
 
-        with patch("lecturelink_api.routers.lectures.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain([lec])
@@ -307,7 +307,7 @@ class TestRetryErrors:
             retry_count=3,
         )
 
-        with patch("lecturelink_api.routers.lectures.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain([lec])
@@ -321,7 +321,7 @@ class TestRetryErrors:
     async def test_retry_not_found(self, client):
         lid = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.lectures.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(None)

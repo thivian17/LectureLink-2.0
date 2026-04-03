@@ -60,7 +60,7 @@ async def get_current_user(
 
             await cache_set(cache_key, user_data, ttl=60)
         except Exception:
-            pass
+            pass  # Non-critical — token already validated
 
         return {**user_data, "token": token}
     except Exception as exc:

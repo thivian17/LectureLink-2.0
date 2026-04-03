@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, date, datetime, timedelta
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from supabase import Client as SupabaseClient
 
 from lecturelink_api.models.readiness_v2 import (
     EXAM_TYPES,
@@ -61,7 +65,7 @@ def _start_of_week() -> datetime:
 
 
 async def get_academic_timeline(
-    supabase,
+    supabase: SupabaseClient,
     user_id: str,
     days: int = 14,
 ) -> DashboardTimelineResponse:
@@ -270,7 +274,7 @@ async def get_academic_timeline(
 
 
 async def get_best_next_actions(
-    supabase,
+    supabase: SupabaseClient,
     user_id: str,
     limit: int = 4,
 ) -> DashboardActionsResponse:
@@ -331,7 +335,7 @@ async def get_best_next_actions(
                 )
                 links_by_assessment[a["id"]] = [c["concept_id"] for c in concepts]
             except Exception:
-                pass
+                logger.debug("Failed to fetch assessment concepts for %s", a["id"], exc_info=True)
 
     interacted_concepts: set[str] = set()
     if links_by_assessment:
@@ -347,7 +351,7 @@ async def get_best_next_actions(
                 e["concept_id"] for e in (events_result.data or []) if e.get("concept_id")
             }
         except Exception:
-            pass
+            logger.debug("Failed to fetch learning events for actions", exc_info=True)
 
     for a in exam_assessments:
         due_str = str(a.get("due_date", ""))[:10]
@@ -399,6 +403,7 @@ async def get_best_next_actions(
         )
         lectures = lectures_result.data or []
     except Exception:
+        logger.warning("Failed to fetch lectures for actions", exc_info=True)
         lectures = []
 
     if lectures:
@@ -414,7 +419,7 @@ async def get_best_next_actions(
             for c in concepts_result.data or []:
                 concepts_by_lecture.setdefault(c["lecture_id"], []).append(c["id"])
         except Exception:
-            pass
+            logger.debug("Failed to fetch concepts for lectures", exc_info=True)
 
         # Refresh interacted if needed
         if not interacted_concepts and concepts_by_lecture:
@@ -432,7 +437,7 @@ async def get_best_next_actions(
                     if e.get("concept_id")
                 }
             except Exception:
-                pass
+                logger.debug("Failed to refresh learning events", exc_info=True)
 
         for lec in lectures:
             lec_concepts = concepts_by_lecture.get(lec["id"], [])
@@ -506,7 +511,7 @@ async def get_best_next_actions(
 
 
 async def get_weekly_stats(
-    supabase,
+    supabase: SupabaseClient,
     user_id: str,
 ) -> StatsRow:
     """Compact stats for the command center header."""
@@ -525,7 +530,7 @@ async def get_weekly_stats(
         if streak_result.data:
             streak = streak_result.data[0].get("current_streak", 0)
     except Exception:
-        pass
+        logger.debug("Failed to fetch streak", exc_info=True)
 
     # XP this week
     xp_this_week = 0
@@ -539,7 +544,7 @@ async def get_weekly_stats(
         )
         xp_this_week = sum(e.get("amount", 0) for e in (xp_result.data or []))
     except Exception:
-        pass
+        logger.debug("Failed to fetch weekly XP", exc_info=True)
 
     # Study minutes this week (learn_sessions + tutor_sessions)
     study_minutes = 0
@@ -554,7 +559,7 @@ async def get_weekly_stats(
         for s in learn_result.data or []:
             study_minutes += (s.get("duration_seconds") or 0) // 60
     except Exception:
-        pass
+        logger.debug("Failed to fetch learn session minutes", exc_info=True)
 
     try:
         tutor_result = (
@@ -567,7 +572,7 @@ async def get_weekly_stats(
         for s in tutor_result.data or []:
             study_minutes += (s.get("duration_seconds") or 0) // 60
     except Exception:
-        pass
+        logger.debug("Failed to fetch tutor session minutes", exc_info=True)
 
     # Concepts practiced this week
     concepts_practiced = 0
@@ -583,7 +588,7 @@ async def get_weekly_stats(
             e["concept_id"] for e in (events_result.data or []) if e.get("concept_id")
         })
     except Exception:
-        pass
+        logger.debug("Failed to fetch concepts practiced", exc_info=True)
 
     return StatsRow(
         streak=streak,

@@ -168,7 +168,7 @@ async def daily_refresh_task(
                 )
                 reminders_enqueued += 1
             except Exception:
-                pass
+                logger.warning("Failed to enqueue reminder for assessment %s", assessment["id"], exc_info=True)
     except Exception:
         logger.warning("Deadline reminder dispatch failed", exc_info=True)
 

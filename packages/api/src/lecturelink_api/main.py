@@ -117,7 +117,7 @@ async def lifespan(application: FastAPI):
         )
         application.mount("/agents", adk_app)
     except Exception:
-        pass  # ADK mount is optional; API still works without it
+        pass  # ADK mount is optional — API still works without it
     yield
 
     # Shutdown: close Redis pool
@@ -126,7 +126,7 @@ async def lifespan(application: FastAPI):
 
         await close_redis_pool()
     except Exception:
-        pass
+        pass  # Best-effort cleanup on shutdown
 
 
 app = FastAPI(title="LectureLink V2 API", lifespan=lifespan)

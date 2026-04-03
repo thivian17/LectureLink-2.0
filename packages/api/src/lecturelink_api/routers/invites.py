@@ -6,16 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from supabase import create_client
 
-from lecturelink_api.auth import get_current_user
+from lecturelink_api.auth import get_authenticated_supabase, get_current_user
 from lecturelink_api.config import Settings, get_settings
 
 router = APIRouter(prefix="/api/invites", tags=["invites"])
 
 
-def _sb(user: dict, settings: Settings):
-    client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
-    client.auth.set_session(user["token"], "")
-    return client
 
 
 class CreateInviteRequest(BaseModel):
@@ -30,7 +26,7 @@ async def create_invite(
     settings: Settings = Depends(get_settings),
 ):
     """Create an invite link."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     from lecturelink_api.services.invites import create_invite as _create
 
     return await _create(sb, user["id"], body.email, body.max_uses)
@@ -42,7 +38,7 @@ async def list_my_invites(
     settings: Settings = Depends(get_settings),
 ):
     """List invite links created by the current user."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     from lecturelink_api.services.invites import get_my_invites
 
     return await get_my_invites(sb, user["id"])
@@ -73,7 +69,7 @@ async def use_invite(
     settings: Settings = Depends(get_settings),
 ):
     """Record that the current user signed up via this invite."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     from lecturelink_api.services.invites import record_invite_use
 
     await record_invite_use(sb, invite_code, user["id"])
@@ -87,7 +83,7 @@ async def create_share_token(
     settings: Settings = Depends(get_settings),
 ):
     """Create a read-only share token for a course."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     # Verify ownership
     course = (

@@ -14,6 +14,10 @@ from __future__ import annotations
 import json
 import logging
 from datetime import date
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from supabase import Client as SupabaseClient
 
 from .mastery import compute_mastery
 
@@ -74,7 +78,7 @@ DO NOT:
 Respond as natural conversational text (not JSON). Keep responses concise (3-6 sentences)."""
 
 
-async def gather_briefing_context(supabase, user_id: str) -> dict:
+async def gather_briefing_context(supabase: SupabaseClient, user_id: str) -> dict:
     """Gather all structured data for the briefing. Zero LLM calls.
 
     Returns a dict with student_name, streak, xp, courses (with assessments,
@@ -114,7 +118,7 @@ async def gather_briefing_context(supabase, user_id: str) -> dict:
                     or (user_result.user.email or "").split("@")[0]
                 )
     except Exception:
-        pass
+        logger.debug("Failed to fetch student profile", exc_info=True)
 
     # --- Streak + XP ---
     try:
@@ -128,7 +132,7 @@ async def gather_briefing_context(supabase, user_id: str) -> dict:
         if streak_result.data:
             context["current_streak"] = streak_result.data.get("current_streak", 0)
     except Exception:
-        pass
+        logger.debug("Failed to fetch streak data", exc_info=True)
 
     try:
         level_result = (
@@ -142,7 +146,7 @@ async def gather_briefing_context(supabase, user_id: str) -> dict:
             context["total_xp"] = level_result.data.get("total_xp", 0)
             context["current_level"] = level_result.data.get("current_level", 1)
     except Exception:
-        pass
+        logger.debug("Failed to fetch level data", exc_info=True)
 
     # --- Courses ---
     try:
@@ -208,7 +212,7 @@ async def gather_briefing_context(supabase, user_id: str) -> dict:
                     highest_priority = priority
                     top_course_id = cid
         except Exception:
-            pass
+            logger.debug("Failed to fetch next assessment for course %s", cid, exc_info=True)
 
         # --- Weak concepts (bottom 3 by mastery) ---
         try:
@@ -234,7 +238,7 @@ async def gather_briefing_context(supabase, user_id: str) -> dict:
             scored.sort(key=lambda x: x["mastery"])
             course_entry["weak_concepts"] = scored[:3]
         except Exception:
-            pass
+            logger.debug("Failed to compute weak concepts for course %s", cid, exc_info=True)
 
         # --- Most recent completed learn session ---
         try:
@@ -264,7 +268,7 @@ async def gather_briefing_context(supabase, user_id: str) -> dict:
                     "quiz_score": round(correct_q / max(total_q, 1), 2),
                 }
         except Exception:
-            pass
+            logger.debug("Failed to fetch recent session for course %s", cid, exc_info=True)
 
         # --- Lecture gap ---
         try:
@@ -290,7 +294,7 @@ async def gather_briefing_context(supabase, user_id: str) -> dict:
                 )
                 course_entry["lecture_gap"] = gap_result.missing_count
         except Exception:
-            pass
+            logger.debug("Failed to compute lecture gap for course %s", cid, exc_info=True)
 
         # --- Session recommendation (concepts to study) ---
         if course_entry["next_assessment"] and course_entry["weak_concepts"]:
@@ -320,7 +324,7 @@ async def gather_briefing_context(supabase, user_id: str) -> dict:
                         "time_budget": 15,
                     }
             except Exception:
-                pass
+                logger.debug("Failed to fetch concepts for recommendation", exc_info=True)
         elif course_entry["weak_concepts"]:
             # No upcoming assessment but has weak concepts — general review
             course_entry["session_recommendation"] = {
@@ -388,7 +392,7 @@ async def generate_greeting(context: dict) -> dict:
         }
 
 
-async def get_briefing(supabase, user_id: str) -> dict:
+async def get_briefing(supabase: SupabaseClient, user_id: str) -> dict:
     """Orchestrator: gather data → generate greeting.
 
     Regenerates on every visit for a fresh, contextual experience.
@@ -407,7 +411,7 @@ async def get_briefing(supabase, user_id: str) -> dict:
 
 
 async def chat_cross_course(
-    supabase,
+    supabase: SupabaseClient,
     user_id: str,
     message: str,
     conversation_history: list[dict] | None = None,

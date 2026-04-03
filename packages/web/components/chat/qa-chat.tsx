@@ -296,8 +296,7 @@ export function QAChat({ courseId, lectureIds, position, onClose }: QAChatProps)
                 onKeyDown={handleKeyDown}
                 disabled={loading}
                 rows={1}
-                className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                style={{ maxHeight: 120 }}
+                className="w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 max-h-[120px]"
               />
             </div>
             <Button

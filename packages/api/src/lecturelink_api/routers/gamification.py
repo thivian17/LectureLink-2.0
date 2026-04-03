@@ -5,9 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from supabase import create_client
-
-from lecturelink_api.auth import get_current_user
+from lecturelink_api.auth import get_authenticated_supabase, get_current_user
 from lecturelink_api.config import Settings, get_settings
 from lecturelink_api.models.gamification import (
     AssessmentReadiness,
@@ -32,10 +30,6 @@ from lecturelink_api.services.readiness import (
 router = APIRouter(prefix="/api/gamification", tags=["gamification"])
 
 
-def _sb(user: dict, settings: Settings):
-    client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
-    client.auth.set_session(user["token"], "")
-    return client
 
 
 @router.get("/state", response_model=GamificationState)
@@ -44,7 +38,7 @@ async def get_state(
     settings: Settings = Depends(get_settings),
 ):
     """Get complete gamification state for the home screen."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     state = await get_user_gamification(sb, user["id"])
 
     return GamificationState(
@@ -73,7 +67,7 @@ async def xp_history(
     settings: Settings = Depends(get_settings),
 ):
     """Get XP earned per day for the last N days."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     return await get_xp_history(sb, user["id"], days=days)
 
 
@@ -83,7 +77,7 @@ async def streak_freeze(
     settings: Settings = Depends(get_settings),
 ):
     """Use a streak freeze to prevent streak reset."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     result = await use_streak_freeze(sb, user["id"])
     if not result["success"]:
         raise HTTPException(
@@ -99,7 +93,7 @@ async def badges(
     settings: Settings = Depends(get_settings),
 ):
     """Get all badges + progress."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     return await get_user_badges(sb, user["id"])
 
 
@@ -110,7 +104,7 @@ async def readiness(
     settings: Settings = Depends(get_settings),
 ):
     """Get readiness scores for all upcoming assessments."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     return await get_all_assessment_readiness(sb, user["id"], course_id=course_id)
 
 
@@ -121,7 +115,7 @@ async def readiness_detail(
     settings: Settings = Depends(get_settings),
 ):
     """Get readiness for a single assessment."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     result = await get_assessment_readiness(sb, user["id"], assessment_id)
     if result.get("error") == "not_found":
         raise HTTPException(
@@ -140,7 +134,7 @@ async def course_readiness(
     settings: Settings = Depends(get_settings),
 ):
     """Get course readiness summary."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     return await get_course_readiness_summary(sb, user["id"], course_id)
 
 
@@ -153,7 +147,7 @@ async def grade_projection(
     settings: Settings = Depends(get_settings),
 ):
     """Get projected final grade for a course."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     return await get_grade_projection(sb, user["id"], course_id)
 
 
@@ -163,7 +157,7 @@ async def weekly_progress(
     settings: Settings = Depends(get_settings),
 ):
     """Get weekly progress summary."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     now = datetime.now(UTC)
     week_ago = now - timedelta(days=7)
 

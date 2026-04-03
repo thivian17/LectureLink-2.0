@@ -50,7 +50,7 @@ class TestLectureUpload:
         lecture_id = str(uuid.uuid4())
 
         with (
-            patch("lecturelink_api.routers.lectures.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch("lecturelink_api.routers.lectures.check_rate_limit"),
         ):
             sb = MagicMock()
@@ -83,7 +83,7 @@ class TestLectureUpload:
         course_id = str(uuid.uuid4())
 
         with (
-            patch("lecturelink_api.routers.lectures.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch("lecturelink_api.routers.lectures.check_rate_limit"),
         ):
             sb = MagicMock()
@@ -109,7 +109,7 @@ class TestLectureUpload:
         bad_course = str(uuid.uuid4())
 
         with (
-            patch("lecturelink_api.routers.lectures.create_client") as mc,
+            patch("lecturelink_api.auth.create_client") as mc,
             patch("lecturelink_api.routers.lectures.check_rate_limit"),
         ):
             sb = MagicMock()
@@ -139,7 +139,7 @@ class TestLectureStatusProgression:
     @pytest.mark.asyncio
     async def test_status_pending(self, client):
         lid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.lectures.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain([{
@@ -159,7 +159,7 @@ class TestLectureStatusProgression:
     @pytest.mark.asyncio
     async def test_status_processing_with_stage(self, client):
         lid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.lectures.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain([{
@@ -180,7 +180,7 @@ class TestLectureStatusProgression:
     @pytest.mark.asyncio
     async def test_status_completed(self, client):
         lid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.lectures.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain([{
@@ -201,7 +201,7 @@ class TestLectureStatusProgression:
     @pytest.mark.asyncio
     async def test_status_failed_shows_error(self, client):
         lid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.lectures.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain([{
@@ -221,7 +221,7 @@ class TestLectureStatusProgression:
     @pytest.mark.asyncio
     async def test_status_not_found(self, client):
         lid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.lectures.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.return_value = mock_chain(None)
@@ -245,7 +245,7 @@ class TestLectureListAndDetail:
         lec1 = make_lecture(course["id"])
         lec2 = make_lecture(course["id"], title="Lecture 2: Heat Transfer")
 
-        with patch("lecturelink_api.routers.lectures.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.side_effect = _table_router({
@@ -263,7 +263,7 @@ class TestLectureListAndDetail:
     @pytest.mark.asyncio
     async def test_list_lectures_course_not_found(self, client):
         cid = str(uuid.uuid4())
-        with patch("lecturelink_api.routers.lectures.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.side_effect = _table_router({
@@ -304,7 +304,7 @@ class TestLectureListAndDetail:
                 return mock_chain([{"slide_number": 3}, {"slide_number": 5}])
             return mock_chain(None)
 
-        with patch("lecturelink_api.routers.lectures.create_client") as mc:
+        with patch("lecturelink_api.auth.create_client") as mc:
             sb = MagicMock()
             mc.return_value = sb
             sb.table.side_effect = _table

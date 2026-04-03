@@ -710,7 +710,7 @@ class TestTutorRouter:
         })
 
         with patch(
-            "lecturelink_api.routers.tutor._sb", return_value=sb,
+            "lecturelink_api.routers.tutor.get_authenticated_supabase", return_value=sb,
         ):
             result = await start_session(
                 course_id="course-1",
@@ -739,7 +739,7 @@ class TestTutorRouter:
         user = {"id": "user-1", "token": "tok", "email": "a@b.com"}
 
         with patch(
-            "lecturelink_api.routers.tutor._sb", return_value=sb,
+            "lecturelink_api.routers.tutor.get_authenticated_supabase", return_value=sb,
         ):
             pause_result = await pause_session_endpoint(
                 session_id="sess-1", user=user, settings=MagicMock(),
@@ -751,7 +751,7 @@ class TestTutorRouter:
             "tutor_sessions": [{**SESSION_ROW, "status": "active"}],
         })
         with patch(
-            "lecturelink_api.routers.tutor._sb", return_value=sb2,
+            "lecturelink_api.routers.tutor.get_authenticated_supabase", return_value=sb2,
         ):
             resume_result = await resume_session_endpoint(
                 session_id="sess-1", user=user, settings=MagicMock(),
@@ -797,7 +797,7 @@ class TestTutorRouter:
         sb.table.side_effect = table_dispatch
 
         with patch(
-            "lecturelink_api.routers.tutor._sb", return_value=sb,
+            "lecturelink_api.routers.tutor.get_authenticated_supabase", return_value=sb,
         ):
             result = await complete_session_endpoint(
                 session_id="sess-1",
@@ -817,7 +817,7 @@ class TestTutorRouter:
         })
 
         with patch(
-            "lecturelink_api.routers.tutor._sb", return_value=sb,
+            "lecturelink_api.routers.tutor.get_authenticated_supabase", return_value=sb,
         ):
             result = await submit_grading_feedback(
                 session_id="sess-1",
@@ -844,7 +844,7 @@ class TestTutorRouter:
         })
 
         with patch(
-            "lecturelink_api.routers.tutor._sb", return_value=sb,
+            "lecturelink_api.routers.tutor.get_authenticated_supabase", return_value=sb,
         ):
             result = await history_endpoint(
                 course_id="course-1",
@@ -887,7 +887,7 @@ class TestTutorRouter:
         sb.table.side_effect = table_dispatch
 
         with patch(
-            "lecturelink_api.routers.tutor._sb", return_value=sb,
+            "lecturelink_api.routers.tutor.get_authenticated_supabase", return_value=sb,
         ):
             result = await answer_question(
                 session_id="sess-1",
@@ -934,7 +934,7 @@ class TestTutorRouter:
         sb.table.side_effect = table_dispatch
 
         with patch(
-            "lecturelink_api.routers.tutor._sb", return_value=sb,
+            "lecturelink_api.routers.tutor.get_authenticated_supabase", return_value=sb,
         ):
             result = await answer_question(
                 session_id="sess-1",

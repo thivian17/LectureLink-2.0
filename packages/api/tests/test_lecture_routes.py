@@ -126,8 +126,9 @@ class TestLectureUpload:
         lecture_id = str(uuid.uuid4())
 
         with (
-            patch("lecturelink_api.routers.lectures.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch("lecturelink_api.routers.lectures.check_rate_limit"),
+            patch("lecturelink_api.routers.lectures._sb_admin", return_value=MagicMock()),
         ):
             sb = MagicMock()
             mock_create.return_value = sb
@@ -157,7 +158,7 @@ class TestLectureUpload:
     @pytest.mark.asyncio
     async def test_upload_rejects_invalid_type(self, client):
         with (
-            patch("lecturelink_api.routers.lectures.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch("lecturelink_api.routers.lectures.check_rate_limit"),
         ):
             sb = MagicMock()
@@ -176,7 +177,7 @@ class TestLectureUpload:
     @pytest.mark.asyncio
     async def test_upload_rejects_oversized_file(self, client):
         with (
-            patch("lecturelink_api.routers.lectures.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch("lecturelink_api.routers.lectures.check_rate_limit"),
         ):
             sb = MagicMock()
@@ -221,7 +222,7 @@ class TestLectureUpload:
         from fastapi import HTTPException
 
         with (
-            patch("lecturelink_api.routers.lectures.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch(
                 "lecturelink_api.routers.lectures.check_rate_limit",
                 side_effect=HTTPException(
@@ -253,7 +254,7 @@ class TestLectureGet:
     async def test_get_lecture_detail(self, client):
         lecture = _sample_lecture()
 
-        with patch("lecturelink_api.routers.lectures.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -283,7 +284,7 @@ class TestLectureGet:
     async def test_get_lecture_status(self, client):
         lecture_id = str(uuid.uuid4())
 
-        with patch("lecturelink_api.routers.lectures.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain([{
@@ -306,7 +307,7 @@ class TestLectureGet:
         course_id = str(uuid.uuid4())
         lectures = [_sample_lecture(course_id=course_id), _sample_lecture(course_id=course_id)]
 
-        with patch("lecturelink_api.routers.lectures.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -333,7 +334,7 @@ class TestLectureRetry:
     async def test_retry_failed_lecture(self, client):
         lecture = _sample_lecture(processing_status="failed", retry_count=1)
 
-        with patch("lecturelink_api.routers.lectures.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -359,7 +360,7 @@ class TestLectureRetry:
     async def test_retry_non_failed_lecture(self, client):
         lecture = _sample_lecture(processing_status="completed")
 
-        with patch("lecturelink_api.routers.lectures.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain([lecture])
@@ -373,7 +374,7 @@ class TestLectureRetry:
     async def test_retry_max_exceeded(self, client):
         lecture = _sample_lecture(processing_status="failed", retry_count=3)
 
-        with patch("lecturelink_api.routers.lectures.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain([lecture])
@@ -388,7 +389,7 @@ class TestLectureRetry:
         lecture = _sample_lecture()
 
         with (
-            patch("lecturelink_api.routers.lectures.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch(
                 "lecturelink_api.routers.lectures.cleanup_lecture_data",
             ),

@@ -19,7 +19,7 @@ from fastapi import (
 from pydantic import BaseModel
 from supabase import create_client
 
-from lecturelink_api.auth import get_current_user
+from lecturelink_api.auth import get_authenticated_supabase, get_current_user
 from lecturelink_api.config import Settings, get_settings
 from lecturelink_api.middleware.rate_limit import check_rate_limit
 from lecturelink_api.services.task_queue import TaskQueueService, get_task_queue
@@ -99,10 +99,6 @@ class MaterialStatusResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _sb(user: dict, settings: Settings):
-    client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
-    client.auth.set_session(user["token"], "")
-    return client
 
 
 def _sb_admin(settings: Settings):
@@ -161,7 +157,7 @@ async def upload_material(
     settings: Settings = Depends(get_settings),
     task_queue: TaskQueueService = Depends(get_task_queue),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     # Rate limit
     check_rate_limit(sb, user["id"], "material_upload")
@@ -300,7 +296,7 @@ async def list_course_materials(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     query = (
         sb.table("course_materials")
@@ -340,7 +336,7 @@ async def get_material(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     material = _verify_ownership(sb, "course_materials", material_id, user["id"], "Material")
 
     # Generate signed URL
@@ -398,7 +394,7 @@ async def get_material_status(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     material = _verify_ownership(sb, "course_materials", material_id, user["id"], "Material")
 
     # Get chunk count
@@ -432,7 +428,7 @@ async def delete_material(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     material = _verify_ownership(sb, "course_materials", material_id, user["id"], "Material")
 
     # Delete from storage
@@ -453,7 +449,7 @@ async def retry_material(
     settings: Settings = Depends(get_settings),
     task_queue: TaskQueueService = Depends(get_task_queue),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     material = _verify_ownership(sb, "course_materials", material_id, user["id"], "Material")
 
     if material["processing_status"] != "failed":
@@ -529,7 +525,7 @@ async def update_material(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     material = _verify_ownership(sb, "course_materials", material_id, user["id"], "Material")
 
     update_data: dict[str, Any] = {}

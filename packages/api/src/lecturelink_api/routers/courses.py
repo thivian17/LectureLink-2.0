@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from supabase import create_client
-
-from lecturelink_api.auth import get_current_user
+from lecturelink_api.auth import get_authenticated_supabase, get_current_user
 from lecturelink_api.config import Settings, get_settings
 from lecturelink_api.models.api_models import (
     CourseCreate,
@@ -17,11 +15,6 @@ from lecturelink_api.models.api_models import (
 router = APIRouter(prefix="/api/courses", tags=["courses"])
 
 
-def _sb(user: dict, settings: Settings):
-    """Build a Supabase client authenticated with the user's token."""
-    client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
-    client.auth.set_session(user["token"], "")
-    return client
 
 
 @router.post("", response_model=CourseCreateResponse, status_code=status.HTTP_201_CREATED)
@@ -30,7 +23,7 @@ async def create_course(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     payload = body.model_dump(mode="json", exclude_none=True)
     payload["user_id"] = user["id"]
     result = sb.table("courses").insert(payload).execute()
@@ -58,7 +51,7 @@ async def list_courses(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     result = (
         sb.table("courses")
         .select("*")
@@ -75,7 +68,7 @@ async def get_course(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     result = (
         sb.table("courses")
         .select("*")
@@ -95,7 +88,7 @@ async def update_course(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     payload = body.model_dump(mode="json", exclude_none=True)
     if not payload:
         raise HTTPException(
@@ -119,7 +112,7 @@ async def delete_course(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     result = (
         sb.table("courses")
         .delete()
@@ -138,7 +131,7 @@ async def get_course_performance(
     settings: Settings = Depends(get_settings),
 ):
     """Get performance analytics for a student in a course."""
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     course = (
         sb.table("courses")

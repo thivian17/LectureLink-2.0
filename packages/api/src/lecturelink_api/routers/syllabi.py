@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from supabase import create_client
 
-from lecturelink_api.auth import get_current_user
+from lecturelink_api.auth import get_authenticated_supabase, get_current_user
 from lecturelink_api.config import Settings, get_settings
 from lecturelink_api.models.api_models import (
     SyllabusResponse,
@@ -23,10 +23,6 @@ _ALLOWED_TYPES = {
 }
 
 
-def _sb(user: dict, settings: Settings):
-    client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
-    client.auth.set_session(user["token"], "")
-    return client
 
 
 def _sb_admin(settings: Settings):
@@ -48,7 +44,7 @@ async def upload_syllabus(
             detail=f"Unsupported file type: {file.content_type}. Only PDF and DOCX are accepted.",
         )
 
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
 
     # Verify course belongs to user
     course = (
@@ -132,7 +128,7 @@ async def get_syllabus(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     result = (
         sb.table("syllabi")
         .select("*")
@@ -151,7 +147,7 @@ async def get_syllabus_status(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     result = (
         sb.table("syllabi")
         .select("id, status, needs_review")
@@ -184,7 +180,7 @@ async def review_syllabus(
     user: dict = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    sb = _sb(user, settings)
+    sb = get_authenticated_supabase(user, settings)
     result = (
         sb.table("syllabi")
         .update({

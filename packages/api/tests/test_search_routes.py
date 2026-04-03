@@ -96,7 +96,7 @@ class TestSearch:
         ]
 
         with (
-            patch("lecturelink_api.routers.search.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch(
                 "lecturelink_api.routers.search.search_lectures",
                 new_callable=AsyncMock,
@@ -176,7 +176,7 @@ class TestQA:
         }
 
         with (
-            patch("lecturelink_api.routers.search.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch("lecturelink_api.routers.search.check_rate_limit"),
             patch(
                 "lecturelink_api.routers.search.ask_lecture_question",
@@ -203,7 +203,7 @@ class TestQA:
         from fastapi import HTTPException
 
         with (
-            patch("lecturelink_api.routers.search.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch(
                 "lecturelink_api.routers.search.check_rate_limit",
                 side_effect=HTTPException(

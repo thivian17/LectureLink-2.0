@@ -156,7 +156,7 @@ class TestQuizGenerate:
         quiz_id = str(uuid.uuid4())
 
         with (
-            patch("lecturelink_api.routers.quizzes.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch(
                 "lecturelink_api.routers.quizzes.check_rate_limit",
             ),
@@ -186,7 +186,7 @@ class TestQuizGenerate:
         from fastapi import HTTPException
 
         with (
-            patch("lecturelink_api.routers.quizzes.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch(
                 "lecturelink_api.routers.quizzes.check_rate_limit",
                 side_effect=HTTPException(
@@ -218,7 +218,7 @@ class TestQuizGet:
         quiz = _sample_quiz()
         questions = _sample_questions(quiz["id"])
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -266,7 +266,7 @@ class TestQuizGet:
     async def test_get_generating_quiz_no_questions(self, client):
         quiz = _sample_quiz(status="generating")
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             sb.table.return_value = _mock_chain([quiz])
@@ -315,7 +315,7 @@ class TestQuizSubmit:
         }
 
         with (
-            patch("lecturelink_api.routers.quizzes.create_client") as mock_create,
+            patch("lecturelink_api.auth.create_client") as mock_create,
             patch(
                 "lecturelink_api.routers.quizzes.score_quiz",
                 return_value=mock_score_result,
@@ -361,7 +361,7 @@ class TestCourseQuizzes:
             _sample_quiz(course_id=course_id, best_score=85.0, attempt_count=2),
         ]
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -408,7 +408,7 @@ class TestCourseQuizzes:
             {"id": links[0]["assessment_id"], "title": "Midterm 1"}
         ]
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
 
@@ -444,7 +444,7 @@ class TestCourseQuizzes:
         """Quizzes owned by another user should not be visible."""
         quiz = _sample_quiz(user_id=OTHER_USER_ID)
 
-        with patch("lecturelink_api.routers.quizzes.create_client") as mock_create:
+        with patch("lecturelink_api.auth.create_client") as mock_create:
             sb = MagicMock()
             mock_create.return_value = sb
             # Simulate RLS: user_id filter returns no data
