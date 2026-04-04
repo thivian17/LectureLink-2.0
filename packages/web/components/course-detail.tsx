@@ -7,10 +7,15 @@ import { toast } from "sonner";
 import Link from "next/link";
 import {
   ArrowLeft,
+  BookOpen,
   CalendarDays,
+  ClipboardCheck,
   GraduationCap,
+  MessageSquare,
+  MoreHorizontal,
   Pencil,
   Scale,
+  Target,
   Trash2,
 } from "lucide-react";
 
@@ -37,6 +42,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { CourseForm } from "@/components/course-form";
 import { SyllabusUpload } from "@/components/syllabus-upload";
 import { AssessmentCalendar } from "@/components/assessment-calendar";
@@ -97,6 +107,41 @@ function formatMeetingTime(raw: string | null): string | null {
   return `${to12h(parts[0])} – ${to12h(parts[1])}`;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Study tools config (mirrors dashboard study tools)                */
+/* ------------------------------------------------------------------ */
+
+const studyTools = [
+  {
+    icon: GraduationCap,
+    title: "Learn Session",
+    description: "AI-guided study sessions",
+    path: "/learn",
+  },
+  {
+    icon: ClipboardCheck,
+    title: "Practice Tests",
+    description: "Test your knowledge",
+    path: "/quizzes",
+  },
+  {
+    icon: Target,
+    title: "Assessment Prep",
+    description: "Targeted exam readiness",
+    path: "/readiness",
+  },
+  {
+    icon: MessageSquare,
+    title: "Tutor Chat",
+    description: "Ask about any concept",
+    path: "/tutor",
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/*  Main component                                                    */
+/* ------------------------------------------------------------------ */
+
 export function CourseDetail({
   course,
   assessmentCount,
@@ -106,6 +151,7 @@ export function CourseDetail({
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [syllabus, setSyllabus] = useState<Syllabus | null>(initialSyllabus);
 
   function handleUploadComplete(newSyllabus: Syllabus) {
@@ -140,137 +186,130 @@ export function CourseDetail({
 
   return (
     <div className="space-y-6">
-      {/* Back to Study Hub */}
+      {/* Back link */}
       <Link
         href="/dashboard"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-brand transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Study Hub
       </Link>
 
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{course.name}</h1>
-          {course.code && (
-            <p className="text-muted-foreground">{course.code}</p>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <Dialog open={editOpen} onOpenChange={setEditOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Pencil className="mr-2 h-4 w-4" />
-                Edit
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Edit Course</DialogTitle>
-                <DialogDescription>
-                  Update your course details below.
-                </DialogDescription>
-              </DialogHeader>
-              <CourseForm
-                course={course}
-                onSuccess={() => {
-                  setEditOpen(false);
-                  router.refresh();
-                }}
-              />
-            </DialogContent>
-          </Dialog>
-          <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-            <DialogTrigger asChild>
-              <Button variant="destructive" size="sm">
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Delete Course</DialogTitle>
-                <DialogDescription>
-                  This action cannot be undone.
-                </DialogDescription>
-              </DialogHeader>
-              <p className="text-sm text-muted-foreground">
-                Are you sure you want to delete &ldquo;{course.name}&rdquo;?
-                This will also delete all associated syllabi, assessments, and
-                concepts.
-              </p>
-              <div className="flex gap-2 justify-end">
-                <Button
-                  variant="outline"
-                  onClick={() => setDeleteOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={handleDelete}
-                  disabled={deleting}
-                >
-                  {deleting ? "Deleting..." : "Delete"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card">
+        {/* Gradient accent */}
+        <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-brand/10 to-transparent" />
 
-      {/* Info badges */}
-      <div className="flex flex-wrap gap-2">
-        <Badge variant="outline">
-          {format(start, "MMM d")} &ndash; {format(end, "MMM d, yyyy")}
-        </Badge>
-        {course.meeting_days.length > 0 && (
-          <Badge variant="outline">{course.meeting_days.join(", ")}</Badge>
-        )}
-        {course.meeting_time && (
-          <Badge variant="outline">{formatMeetingTime(course.meeting_time)}</Badge>
-        )}
-        <Badge variant="outline">Target: {gradeLabel}</Badge>
-      </div>
-
-      {/* Study Tutor CTA */}
-      <Card className="border-primary/20 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 shadow-sm">
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                <GraduationCap className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="font-semibold">Study Tutor</p>
-                <p className="text-sm text-muted-foreground">
-                  Interactive AI lessons tailored to your weak spots
-                </p>
-              </div>
+        <div className="relative px-6 pt-6 pb-5 space-y-4">
+          {/* Title row */}
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              {course.code && (
+                <span className="text-xs font-semibold uppercase tracking-wider text-brand">
+                  {course.code}
+                </span>
+              )}
+              <h1 className="text-2xl font-bold tracking-tight">
+                {course.name}
+              </h1>
             </div>
-            <Button asChild>
-              <Link href={`/dashboard/courses/${course.id}/tutor`}>
-                Start Studying
-              </Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* Tabs */}
+            {/* Actions popover */}
+            <Popover open={actionsOpen} onOpenChange={setActionsOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-40 p-1">
+                <button
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors"
+                  onClick={() => {
+                    setActionsOpen(false);
+                    setEditOpen(true);
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit Course
+                </button>
+                <button
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                  onClick={() => {
+                    setActionsOpen(false);
+                    setDeleteOpen(true);
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete Course
+                </button>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Info badges */}
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="secondary" className="text-xs font-normal gap-1.5">
+              <CalendarDays className="h-3 w-3" />
+              {format(start, "MMM d")} &ndash; {format(end, "MMM d, yyyy")}
+            </Badge>
+            {course.meeting_days.length > 0 && (
+              <Badge variant="secondary" className="text-xs font-normal">
+                {course.meeting_days.join(", ")}
+              </Badge>
+            )}
+            {course.meeting_time && (
+              <Badge variant="secondary" className="text-xs font-normal">
+                {formatMeetingTime(course.meeting_time)}
+              </Badge>
+            )}
+            <Badge variant="secondary" className="text-xs font-normal gap-1.5">
+              <Target className="h-3 w-3" />
+              Target: {gradeLabel}
+            </Badge>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Study Tools Grid ───────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {studyTools.map((tool) => {
+          const Icon = tool.icon;
+          return (
+            <Link
+              key={tool.title}
+              href={`/dashboard/courses/${course.id}${tool.path}`}
+              className="group"
+            >
+              <Card className="h-full border-border/60 hover:border-brand/40 hover:shadow-md hover:shadow-brand/5 transition-all">
+                <CardContent className="flex flex-col items-center text-center gap-2 py-4 px-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-light text-brand transition-transform group-hover:scale-110">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <p className="text-sm font-medium group-hover:text-brand transition-colors">
+                    {tool.title}
+                  </p>
+                  <p className="text-xs text-muted-foreground leading-tight">
+                    {tool.description}
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
+      </div>
+
+      {/* ── Tabs ───────────────────────────────────────────────── */}
       <Tabs defaultValue="overview">
         <div className="overflow-x-auto -mx-1 px-1">
           <TabsList className="inline-flex w-max">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="syllabus">Syllabus</TabsTrigger>
-            <TabsTrigger value="lectures">Lectures</TabsTrigger>
-            <TabsTrigger value="assessments">
+            <TabsTrigger value="overview" className="data-[state=active]:text-brand">Overview</TabsTrigger>
+            <TabsTrigger value="syllabus" className="data-[state=active]:text-brand">Syllabus</TabsTrigger>
+            <TabsTrigger value="lectures" className="data-[state=active]:text-brand">Lectures</TabsTrigger>
+            <TabsTrigger value="assessments" className="data-[state=active]:text-brand">
               Assessments ({assessmentCount})
             </TabsTrigger>
-            <TabsTrigger value="calendar">Calendar</TabsTrigger>
-            <TabsTrigger value="search">Search</TabsTrigger>
-            <TabsTrigger value="quizzes">Practice Tests</TabsTrigger>
+            <TabsTrigger value="calendar" className="data-[state=active]:text-brand">Calendar</TabsTrigger>
+            <TabsTrigger value="search" className="data-[state=active]:text-brand">Search</TabsTrigger>
           </TabsList>
         </div>
 
@@ -390,7 +429,7 @@ export function CourseDetail({
                     {Math.round(syllabus.extraction_confidence * 100)}%
                   </p>
                 )}
-                <Button asChild>
+                <Button asChild className="bg-brand hover:bg-brand-hover text-brand-foreground">
                   <Link href={`/dashboard/courses/${course.id}/syllabus/review`}>
                     Review Extraction
                   </Link>
@@ -417,12 +456,57 @@ export function CourseDetail({
         <TabsContent value="search" className="mt-6">
           <SearchPageClient courseId={course.id} />
         </TabsContent>
-
-        <TabsContent value="quizzes" className="mt-6">
-          <QuizList courseId={course.id} courseName={course.name} />
-        </TabsContent>
-
       </Tabs>
+
+      {/* ── Dialogs ────────────────────────────────────────────── */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Course</DialogTitle>
+            <DialogDescription>
+              Update your course details below.
+            </DialogDescription>
+          </DialogHeader>
+          <CourseForm
+            course={course}
+            onSuccess={() => {
+              setEditOpen(false);
+              router.refresh();
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Course</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to delete &ldquo;{course.name}&rdquo;?
+            This will also delete all associated syllabi, assessments, and
+            concepts.
+          </p>
+          <div className="flex gap-2 justify-end">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <FloatingQAButton courseId={course.id} />
     </div>
@@ -718,7 +802,7 @@ function SyllabusOverviewCard({
           {syllabus.needs_review && !syllabus.reviewed_at && (
             <Badge
               variant="outline"
-              className="text-amber-600 border-amber-300"
+              className="text-brand border-brand/30 bg-brand-light"
             >
               Needs Review
             </Badge>
@@ -747,7 +831,7 @@ function SyllabusOverviewCard({
                 <div key={i} className="flex items-center gap-2">
                   <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-primary/60"
+                      className="h-full rounded-full bg-brand/60"
                       style={{ width: `${item.weight}%` }}
                     />
                   </div>

@@ -1,23 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   GraduationCap,
   ClipboardCheck,
   Target,
   MessageSquare,
   Pencil,
+  ChevronRight,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { getCourses } from "@/lib/api";
+import type { Course } from "@/types/database";
 
 interface Tool {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   description: string;
-  /** Path suffix appended to /dashboard/courses/[courseId] */
   coursePath: string;
   comingSoon?: boolean;
 }
@@ -57,13 +63,13 @@ const tools: Tool[] = [
 ];
 
 export function StudyToolsLibrary() {
-  const [firstCourseId, setFirstCourseId] = useState<string | null>(null);
+  const router = useRouter();
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [openTool, setOpenTool] = useState<string | null>(null);
 
   useEffect(() => {
     getCourses()
-      .then((courses) => {
-        if (courses.length > 0) setFirstCourseId(courses[0].id);
-      })
+      .then(setCourses)
       .catch(() => {});
   }, []);
 
@@ -73,12 +79,9 @@ export function StudyToolsLibrary() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {tools.map((tool) => {
           const Icon = tool.icon;
-          const disabled = tool.comingSoon || !firstCourseId;
-          const href = firstCourseId
-            ? `/dashboard/courses/${firstCourseId}${tool.coursePath}`
-            : "/dashboard";
+          const disabled = tool.comingSoon || courses.length === 0;
 
-          const content = (
+          const cardContent = (
             <Card
               className={`p-3 text-center space-y-2 hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer relative ${
                 disabled ? "opacity-60" : ""
@@ -103,13 +106,71 @@ export function StudyToolsLibrary() {
           );
 
           if (disabled) {
-            return <div key={tool.title}>{content}</div>;
+            return <div key={tool.title}>{cardContent}</div>;
           }
 
+          // Single course — navigate directly
+          if (courses.length === 1) {
+            return (
+              <div
+                key={tool.title}
+                role="button"
+                tabIndex={0}
+                onClick={() =>
+                  router.push(
+                    `/dashboard/courses/${courses[0].id}${tool.coursePath}`,
+                  )
+                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    router.push(
+                      `/dashboard/courses/${courses[0].id}${tool.coursePath}`,
+                    );
+                  }
+                }}
+              >
+                {cardContent}
+              </div>
+            );
+          }
+
+          // Multiple courses — show picker popover
           return (
-            <Link key={tool.title} href={href}>
-              {content}
-            </Link>
+            <Popover
+              key={tool.title}
+              open={openTool === tool.title}
+              onOpenChange={(open) => setOpenTool(open ? tool.title : null)}
+            >
+              <PopoverTrigger asChild>
+                <div role="button" tabIndex={0}>
+                  {cardContent}
+                </div>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-1" align="center">
+                <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                  Choose a course
+                </p>
+                {courses.map((course) => (
+                  <button
+                    key={course.id}
+                    onClick={() => {
+                      setOpenTool(null);
+                      router.push(
+                        `/dashboard/courses/${course.id}${tool.coursePath}`,
+                      );
+                    }}
+                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors text-left"
+                  >
+                    <span className="truncate flex-1">
+                      {course.code ? `${course.code} — ` : ""}
+                      {course.name}
+                    </span>
+                    <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
           );
         })}
       </div>
