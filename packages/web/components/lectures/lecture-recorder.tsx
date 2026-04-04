@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { Mic, Square, Upload, Loader2, CalendarIcon } from "lucide-react";
+import { Mic, Square, Upload, Loader2, CalendarIcon, FileAudio } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -72,6 +72,10 @@ export function LectureRecorder() {
 
   // Slide files
   const [slideFiles, setSlideFiles] = useState<File[]>([]);
+
+  // Uploaded audio file (pre-recorded)
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const audioFileInputRef = useRef<HTMLInputElement>(null);
 
   // Upload result
   const [lectureId, setLectureId] = useState<string | null>(null);
@@ -167,13 +171,14 @@ export function LectureRecorder() {
   const discardRecording = useCallback(() => {
     setAudioBlob(null);
     setAudioUrl(null);
+    setAudioFile(null);
     setElapsedSeconds(0);
     setPhase("idle");
   }, []);
 
   const handleSubmit = useCallback(async () => {
     if (!selectedCourseId || !lectureNumber.trim()) return;
-    if (!audioBlob && slideFiles.length === 0) return;
+    if (!audioBlob && !audioFile && slideFiles.length === 0) return;
 
     setPhase("uploading");
     try {
@@ -185,6 +190,8 @@ export function LectureRecorder() {
           type: audioBlob.type,
         });
         formData.append("files", file);
+      } else if (audioFile) {
+        formData.append("files", audioFile);
       }
 
       slideFiles.forEach((sf) => formData.append("files", sf));
@@ -214,11 +221,11 @@ export function LectureRecorder() {
         err instanceof Error ? err.message : "Failed to upload recording",
       );
     }
-  }, [audioBlob, slideFiles, selectedCourseId, lectureNumber, lectureDate, router]);
+  }, [audioBlob, audioFile, slideFiles, selectedCourseId, lectureNumber, lectureDate, router]);
 
   const canSubmit =
     (phase === "idle" || phase === "recorded") &&
-    (audioBlob !== null || slideFiles.length > 0) &&
+    (audioBlob !== null || audioFile !== null || slideFiles.length > 0) &&
     selectedCourseId !== "" &&
     lectureNumber.trim().length > 0;
 
@@ -266,28 +273,84 @@ export function LectureRecorder() {
         </CardContent>
       </Card>
 
-      {/* Audio recording (optional) */}
+      {/* Audio (optional) */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Audio Recording</CardTitle>
+          <CardTitle className="text-base">Audio (Optional)</CardTitle>
           <CardDescription>
-            Optionally record or add audio to align with your slides.
+            Record live or upload a pre-recorded audio file to align with your slides.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {phase === "idle" && (
-            <div className="flex flex-col items-center gap-4 rounded-lg border-2 border-dashed p-8">
-              <Mic className="h-10 w-10 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                Click to start recording from your microphone.
-              </p>
-              <Button variant="outline" onClick={startRecording}>
-                <Mic className="mr-2 h-4 w-4" />
-                Start Recording
-              </Button>
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
-              )}
+          {phase === "idle" && !audioFile && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {/* Record live */}
+              <div className="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed p-6">
+                <Mic className="h-8 w-8 text-muted-foreground" />
+                <p className="text-sm font-medium">Record live</p>
+                <p className="text-xs text-muted-foreground text-center">
+                  Use your microphone to record audio directly.
+                </p>
+                <Button variant="outline" onClick={startRecording} size="sm">
+                  <Mic className="mr-2 h-4 w-4" />
+                  Start Recording
+                </Button>
+                {error && (
+                  <p className="text-sm text-destructive">{error}</p>
+                )}
+              </div>
+
+              {/* Upload audio file */}
+              <div className="flex flex-col items-center gap-3 rounded-lg border-2 border-dashed p-6">
+                <FileAudio className="h-8 w-8 text-muted-foreground" />
+                <p className="text-sm font-medium">Upload audio file</p>
+                <p className="text-xs text-muted-foreground text-center">
+                  .mp3, .wav, .m4a, .flac, .ogg, .webm, .mp4
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => audioFileInputRef.current?.click()}
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Choose File
+                </Button>
+                <input
+                  ref={audioFileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept=".mp3,.wav,.m4a,.flac,.ogg,.webm,.mp4,audio/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setAudioFile(file);
+                    }
+                    if (audioFileInputRef.current) audioFileInputRef.current.value = "";
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Uploaded audio file preview */}
+          {phase === "idle" && audioFile && (
+            <div className="flex flex-col items-center gap-3 p-4">
+              <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-4 py-3 w-full max-w-md">
+                <FileAudio className="h-5 w-5 text-muted-foreground shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate">{audioFile.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {(audioFile.size / (1024 * 1024)).toFixed(1)} MB
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAudioFile(null)}
+                >
+                  Remove
+                </Button>
+              </div>
             </div>
           )}
 
@@ -422,7 +485,7 @@ export function LectureRecorder() {
             Discard Recording
           </Button>
         )}
-        <Button onClick={handleSubmit} disabled={!canSubmit}>
+        <Button onClick={handleSubmit} disabled={!canSubmit} className="bg-brand hover:bg-brand-hover text-brand-foreground">
           <Upload className="mr-2 h-4 w-4" />
           Upload and Process
         </Button>

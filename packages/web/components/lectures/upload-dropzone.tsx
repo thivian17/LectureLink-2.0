@@ -210,9 +210,9 @@ export function UploadDropzone({ files, onFilesChange, accept = "all" }: UploadD
           </p>
         </div>
         <Button
-          variant="outline"
           size="sm"
           type="button"
+          className="bg-brand hover:bg-brand-hover text-brand-foreground"
           onClick={(e) => {
             e.stopPropagation();
             fileInputRef.current?.click();

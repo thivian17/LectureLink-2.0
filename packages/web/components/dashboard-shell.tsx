@@ -52,7 +52,7 @@ export function DashboardShell({
     getCourses()
       .then(setCourses)
       .catch(() => {});
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     const supabase = createClient();
