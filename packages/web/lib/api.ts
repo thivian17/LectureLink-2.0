@@ -13,6 +13,7 @@ import type {
   QuizAnswer,
   QuizDifficulty,
   HintResponse,
+  SearchResult,
   SearchResponse,
   QAResponse,
   PerformanceData,
@@ -460,7 +461,27 @@ export async function searchLectures(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  return resp.json();
+  const data = await resp.json();
+  // Backend returns a plain array of {chunk_id, content, highlight, score, ...};
+  // map to the frontend SearchResult shape.
+  const raw: Record<string, unknown>[] = Array.isArray(data) ? data : (data.results ?? []);
+  const results: SearchResult[] = raw.map((r) => ({
+    id: (r.chunk_id ?? r.id ?? "") as string,
+    lecture_id: r.lecture_id as string,
+    lecture_title: (r.lecture_title ?? "") as string,
+    lecture_number: (r.lecture_number ?? null) as number | null,
+    chunk_type: ((r.chunk_type as string) ?? "transcript") as SearchResult["chunk_type"],
+    content_snippet: (r.content ?? r.content_snippet ?? "") as string,
+    highlighted_snippet: (r.highlight ?? r.highlighted_snippet ?? "") as string,
+    timestamp_seconds: (r.start_time ?? r.timestamp_seconds ?? null) as number | null,
+    slide_number: (r.slide_number ?? null) as number | null,
+    relevance_score: (r.score ?? r.relevance_score ?? 0) as number,
+  }));
+  return {
+    query,
+    results,
+    total_count: results.length,
+  };
 }
 
 // ---------------------------------------------------------------------------
