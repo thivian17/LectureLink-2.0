@@ -20,7 +20,7 @@ function getDotColor(item: TimelineItem): DotColor {
   const examTypes = new Set(["exam", "midterm", "quiz"]);
 
   if (item.needs_review) return "blue";
-  if (item.item_type === "lecture_review") return "blue";
+  if (item.item_type === "practice_quiz") return "blue";
   if (!examTypes.has(item.item_type)) return "gray";
 
   const r = item.readiness;

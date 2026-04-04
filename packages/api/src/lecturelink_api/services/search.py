@@ -42,16 +42,16 @@ async def search_lectures(
     query_embedding = await embed_query(query)
 
     # 2. Call the SQL hybrid_search function via RPC
+    # Explicitly pass all parameters (including optional ones as None) so
+    # PostgREST can disambiguate between overloaded hybrid_search functions.
     params: dict = {
         "p_query_embedding": query_embedding,
         "p_query_text": query,
         "p_course_id": course_id,
         "p_limit": limit,
+        "p_lecture_ids": lecture_ids,
+        "p_material_ids": None,
     }
-
-    # Add optional lecture filter
-    if lecture_ids:
-        params["p_lecture_ids"] = lecture_ids
 
     result = supabase.rpc("hybrid_search", params).execute()
 

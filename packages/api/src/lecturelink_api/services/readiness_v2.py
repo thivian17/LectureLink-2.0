@@ -169,10 +169,10 @@ def _generate_actions(
 
         if signal_name == "coverage":
             actions.append(SuggestedAction(
-                action_type="lecture_review",
-                title="Review Uncovered Material",
-                description="Review lectures covering concepts you haven't interacted with yet.",
-                estimated_minutes=20,
+                action_type="practice_test",
+                title="Quiz Uncovered Material",
+                description="Take a practice quiz on concepts you haven't studied yet.",
+                estimated_minutes=10,
                 target_course_id=course_id,
                 target_assessment_id=assessment_id,
                 urgency=urgency,

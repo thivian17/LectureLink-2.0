@@ -24,7 +24,7 @@ function getItemIcon(item: TimelineItem) {
     const color = readinessColor(item.readiness);
     return <GraduationCap className={cn("h-4 w-4 shrink-0", color)} />;
   }
-  if (item.item_type === "lecture_review") {
+  if (item.item_type === "practice_quiz") {
     return <BookOpen className="h-4 w-4 shrink-0 text-blue-500" />;
   }
   if (item.item_type === "discussion") {
@@ -74,9 +74,9 @@ function ItemRow({ item }: { item: TimelineItem }) {
     );
   }
 
-  if (item.item_type === "lecture_review") {
+  if (item.item_type === "practice_quiz") {
     return (
-      <Link href={`/dashboard/courses/${item.course_id}`}>
+      <Link href={`/dashboard/courses/${item.course_id}/quizzes`}>
         {content}
       </Link>
     );

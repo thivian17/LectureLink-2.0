@@ -16,8 +16,7 @@ const URGENCY_DOT: Record<string, string> = {
 
 const ACTION_CTA: Record<string, { label: string; path: string }> = {
   study_session: { label: "Start", path: "learn" },
-  practice_test: { label: "Practice", path: "" },
-  lecture_review: { label: "Review", path: "" },
+  practice_test: { label: "Practice", path: "quizzes" },
   flash_review: { label: "Refresh", path: "learn" },
 };
 

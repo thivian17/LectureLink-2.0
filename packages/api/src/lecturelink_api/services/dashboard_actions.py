@@ -187,7 +187,7 @@ async def get_academic_timeline(
             )
         )
 
-    # 2b. Lectures needing review
+    # 2b. Lectures needing practice — suggest quiz instead of review
     try:
         lectures_result = (
             supabase.table("lectures")
@@ -253,8 +253,8 @@ async def get_academic_timeline(
             items.append(
                 TimelineItem(
                     date=lec_date,
-                    item_type="lecture_review",
-                    title=lec["title"],
+                    item_type="practice_quiz",
+                    title=f"Quiz: {lec['title']}",
                     course_id=lec["course_id"],
                     course_name=course.get("name", ""),
                     course_code=course.get("code"),
@@ -449,15 +449,15 @@ async def get_best_next_actions(
 
             concept_count = len(lec_concepts)
             actions.append((
-                0.5,  # medium priority for lecture reviews
+                0.5,  # medium priority for unreviewed lecture quizzes
                 SuggestedAction(
-                    action_type="lecture_review",
-                    title=f"Review {lec['title']}",
-                    description=f"Covers {concept_count} new concepts",
-                    estimated_minutes=15,
+                    action_type="practice_test",
+                    title=f"Quiz yourself on {lec['title']}",
+                    description=f"Test {concept_count} concepts from this lecture",
+                    estimated_minutes=10,
                     target_course_id=lec["course_id"],
                     urgency="medium",
-                    expected_impact=f"Unlock {concept_count} concepts",
+                    expected_impact=f"Learn {concept_count} concepts",
                 ),
             ))
 

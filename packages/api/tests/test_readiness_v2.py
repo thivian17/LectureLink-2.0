@@ -452,9 +452,8 @@ async def test_suggested_actions_generated():
 
     result = await compute_assessment_readiness(sb, "user1", "a1")
 
-    # All signals are 0, so all 4 action types should be generated
+    # All signals are 0, so all 3 action types should be generated
     action_types = {a.action_type for a in result.suggested_actions}
-    assert "lecture_review" in action_types
     assert "practice_test" in action_types
     assert "flash_review" in action_types
     assert "study_session" in action_types

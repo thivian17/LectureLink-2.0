@@ -206,10 +206,10 @@ class TestGetAcademicTimeline:
         )
         result = await get_academic_timeline(sb, "user1")
 
-        review_items = [i for i in result.items if i.item_type == "lecture_review"]
-        assert len(review_items) == 1
-        assert review_items[0].needs_review is True
-        assert review_items[0].title == "Lecture 5"
+        quiz_items = [i for i in result.items if i.item_type == "practice_quiz"]
+        assert len(quiz_items) == 1
+        assert quiz_items[0].needs_review is True
+        assert quiz_items[0].title == "Quiz: Lecture 5"
 
     @pytest.mark.asyncio
     async def test_lecture_with_interactions_excluded(self):
@@ -232,8 +232,8 @@ class TestGetAcademicTimeline:
         )
         result = await get_academic_timeline(sb, "user1")
 
-        review_items = [i for i in result.items if i.item_type == "lecture_review"]
-        assert len(review_items) == 0
+        quiz_items = [i for i in result.items if i.item_type == "practice_quiz"]
+        assert len(quiz_items) == 0
 
     @pytest.mark.asyncio
     async def test_empty_courses_returns_empty(self):
@@ -287,8 +287,8 @@ class TestGetBestNextActions:
         assert "Quiz 1" in action.title
 
     @pytest.mark.asyncio
-    async def test_unreviewed_lecture_generates_action(self):
-        """Unreviewed lecture → lecture_review action."""
+    async def test_unreviewed_lecture_generates_quiz_action(self):
+        """Unreviewed lecture → practice_test action prompting quiz."""
         courses = [{"id": "c1", "name": "Math", "code": "MATH101"}]
         lectures = [
             {
@@ -310,9 +310,9 @@ class TestGetBestNextActions:
         )
         result = await get_best_next_actions(sb, "user1")
 
-        lecture_actions = [a for a in result.actions if a.action_type == "lecture_review"]
-        assert len(lecture_actions) >= 1
-        assert "Lecture 8" in lecture_actions[0].title
+        quiz_actions = [a for a in result.actions if a.action_type == "practice_test"]
+        assert len(quiz_actions) >= 1
+        assert "Lecture 8" in quiz_actions[0].title
 
     @pytest.mark.asyncio
     @patch("lecturelink_api.services.dashboard_actions.get_assessment_concepts", new_callable=AsyncMock)

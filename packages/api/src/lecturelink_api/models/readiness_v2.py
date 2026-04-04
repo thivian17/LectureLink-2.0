@@ -31,7 +31,7 @@ class WeakConcept(BaseModel):
 class SuggestedAction(BaseModel):
     """A recommended preparation action."""
 
-    action_type: str  # "study_session" | "practice_test" | "lecture_review" | "flash_review"
+    action_type: str  # "study_session" | "practice_test" | "flash_review"
     title: str
     description: str
     estimated_minutes: int
@@ -77,7 +77,7 @@ class TimelineItem(BaseModel):
     """One item on the 14-day academic timeline."""
 
     date: str  # ISO date
-    item_type: str  # "exam" | "quiz" | "midterm" | "assignment" | "project" | "discussion" | "lecture_review"
+    item_type: str  # "exam" | "quiz" | "midterm" | "assignment" | "project" | "discussion" | "practice_quiz"
     title: str
     course_id: str
     course_name: str

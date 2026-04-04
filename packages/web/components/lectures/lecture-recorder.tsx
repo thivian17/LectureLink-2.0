@@ -172,17 +172,21 @@ export function LectureRecorder() {
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (!audioBlob || !selectedCourseId || !lectureNumber.trim()) return;
+    if (!selectedCourseId || !lectureNumber.trim()) return;
+    if (!audioBlob && slideFiles.length === 0) return;
 
     setPhase("uploading");
     try {
-      const ext = audioBlob.type.includes("mp4") ? "m4a" : "webm";
-      const file = new File([audioBlob], `recording-${Date.now()}.${ext}`, {
-        type: audioBlob.type,
-      });
-
       const formData = new FormData();
-      formData.append("files", file);
+
+      if (audioBlob) {
+        const ext = audioBlob.type.includes("mp4") ? "m4a" : "webm";
+        const file = new File([audioBlob], `recording-${Date.now()}.${ext}`, {
+          type: audioBlob.type,
+        });
+        formData.append("files", file);
+      }
+
       slideFiles.forEach((sf) => formData.append("files", sf));
       formData.append("lecture_number", lectureNumber);
       if (lectureDate) {
@@ -194,7 +198,7 @@ export function LectureRecorder() {
       setPhase("processing");
       toast.success("Upload complete! Processing started.");
     } catch (err) {
-      setPhase("recorded");
+      setPhase(audioBlob ? "recorded" : "idle");
       if (err instanceof AuthError) {
         toast.error("Session expired. Please log in again.");
         router.push("/login");
@@ -213,8 +217,8 @@ export function LectureRecorder() {
   }, [audioBlob, slideFiles, selectedCourseId, lectureNumber, lectureDate, router]);
 
   const canSubmit =
-    phase === "recorded" &&
-    audioBlob !== null &&
+    (phase === "idle" || phase === "recorded") &&
+    (audioBlob !== null || slideFiles.length > 0) &&
     selectedCourseId !== "" &&
     lectureNumber.trim().length > 0;
 
@@ -239,16 +243,36 @@ export function LectureRecorder() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Record Lecture</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Upload Lecture</h1>
         <p className="text-muted-foreground">
-          Record a lecture directly from your microphone.
+          Upload your lecture slides and optionally add an audio recording.
         </p>
       </div>
 
-      {/* Recording card */}
+      {/* Lecture slides (primary) */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Recording</CardTitle>
+          <CardTitle className="text-base">Lecture Slides</CardTitle>
+          <CardDescription>
+            Upload your slide deck (PDF or PPTX) to get started.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <UploadDropzone
+            files={slideFiles}
+            onFilesChange={setSlideFiles}
+            accept="slides"
+          />
+        </CardContent>
+      </Card>
+
+      {/* Audio recording (optional) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Audio Recording</CardTitle>
+          <CardDescription>
+            Optionally record or add audio to align with your slides.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {phase === "idle" && (
@@ -257,7 +281,7 @@ export function LectureRecorder() {
               <p className="text-sm text-muted-foreground">
                 Click to start recording from your microphone.
               </p>
-              <Button onClick={startRecording}>
+              <Button variant="outline" onClick={startRecording}>
                 <Mic className="mr-2 h-4 w-4" />
                 Start Recording
               </Button>
@@ -300,26 +324,9 @@ export function LectureRecorder() {
           {phase === "uploading" && (
             <div className="flex flex-col items-center gap-4 p-8">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Uploading recording...</p>
+              <p className="text-sm text-muted-foreground">Uploading...</p>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Lecture slides (optional) */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Lecture Slides</CardTitle>
-          <CardDescription>
-            Optionally upload slide decks to align with the recording.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <UploadDropzone
-            files={slideFiles}
-            onFilesChange={setSlideFiles}
-            accept="slides"
-          />
         </CardContent>
       </Card>
 
@@ -410,9 +417,9 @@ export function LectureRecorder() {
 
       {/* Submit buttons */}
       <div className="flex justify-end gap-2">
-        {phase === "recorded" && (
+        {phase === "recorded" && audioBlob && (
           <Button variant="outline" onClick={discardRecording}>
-            Re-record
+            Discard Recording
           </Button>
         )}
         <Button onClick={handleSubmit} disabled={!canSubmit}>

@@ -1001,7 +1001,7 @@ export interface WeakConcept {
 }
 
 export interface SuggestedAction {
-  action_type: "study_session" | "practice_test" | "lecture_review" | "flash_review";
+  action_type: "study_session" | "practice_test" | "flash_review";
   title: string;
   description: string;
   estimated_minutes: number;
@@ -1047,7 +1047,7 @@ export interface CourseIntelligenceV2 {
 
 export interface TimelineItem {
   date: string;
-  item_type: "exam" | "quiz" | "midterm" | "assignment" | "project" | "discussion" | "lecture_review";
+  item_type: "exam" | "quiz" | "midterm" | "assignment" | "project" | "discussion" | "practice_quiz";
   title: string;
   course_id: string;
   course_name: string;

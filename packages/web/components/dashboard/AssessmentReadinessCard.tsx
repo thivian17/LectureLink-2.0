@@ -17,8 +17,7 @@ interface AssessmentReadinessCardProps {
 
 const ACTION_ROUTES: Record<string, string> = {
   study_session: "learn",
-  practice_test: "",
-  lecture_review: "",
+  practice_test: "quizzes",
   flash_review: "learn",
 };
 

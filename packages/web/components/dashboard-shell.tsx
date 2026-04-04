@@ -170,13 +170,13 @@ export function DashboardShell({
             className="flex w-full items-center gap-3 rounded-lg border border-dashed border-sidebar-foreground/20 px-3 py-2.5 text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-brand hover:border-brand/30"
           >
             <MessageSquarePlus className="h-4 w-4 shrink-0" />
-            <span className="truncate">Roast us (nicely)</span>
+            <span className="truncate">Feedback</span>
           </button>
         </div>
       </aside>
 
       {/* Main content */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         {/* Top bar */}
         <header className="flex h-14 items-center justify-between border-b px-4">
           <Button
