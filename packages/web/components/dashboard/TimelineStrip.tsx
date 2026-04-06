@@ -68,9 +68,9 @@ export function TimelineStrip({
 
   if (loading) {
     return (
-      <div className="flex gap-2 overflow-hidden py-1">
+      <div className="grid grid-cols-14 gap-1 py-1">
         {Array.from({ length: 14 }).map((_, i) => (
-          <Skeleton key={i} className="h-24 w-20 shrink-0 rounded-xl" />
+          <Skeleton key={i} className="h-24 rounded-xl" />
         ))}
       </div>
     );
@@ -94,7 +94,10 @@ export function TimelineStrip({
   }
 
   return (
-    <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory py-1 scrollbar-none">
+    <div
+      className="grid gap-1 py-1"
+      style={{ gridTemplateColumns: "repeat(14, minmax(0, 1fr))" }}
+    >
       {dates.map((date) => {
         const isToday = date === today;
         const isSelected = date === selectedDate;
@@ -109,7 +112,7 @@ export function TimelineStrip({
             ref={isToday ? todayRef : undefined}
             onClick={() => onSelectDate(date)}
             className={cn(
-              "flex w-20 shrink-0 snap-start flex-col items-center gap-1.5 rounded-xl px-2 py-3 transition-colors border",
+              "flex flex-col items-center gap-1.5 rounded-xl px-1 py-3 transition-colors border min-w-0",
               isToday && "ring-2 ring-primary bg-primary/5 border-primary/20",
               isSelected && !isToday && "bg-accent border-accent-foreground/20",
               !isSelected && !isToday && "border-transparent hover:bg-accent/50",

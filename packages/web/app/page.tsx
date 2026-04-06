@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import {
   Upload,
   Brain,
@@ -86,8 +85,8 @@ export default function Home() {
     <div className="min-h-screen bg-background">
       <Navbar />
 
-      {/* Hero */}
-      <section className="relative pt-32 pb-24 px-6 overflow-hidden">
+      {/* Hero — text only, no screenshot */}
+      <section className="relative pt-32 pb-20 px-6 overflow-hidden">
         <div className="max-w-4xl mx-auto text-center space-y-8">
           <Badge
             variant="secondary"
@@ -127,32 +126,6 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Hero screenshot */}
-        <div className="max-w-4xl mx-auto mt-16 px-6 relative z-10">
-          <div className="rounded-2xl overflow-hidden border border-border shadow-2xl">
-            <div className="flex items-center gap-2 px-4 py-3 bg-muted border-b border-border">
-              <div className="flex gap-1.5">
-                <div className="w-3 h-3 rounded-full bg-red-400" />
-                <div className="w-3 h-3 rounded-full bg-yellow-400" />
-                <div className="w-3 h-3 rounded-full bg-green-400" />
-              </div>
-              <div className="flex-1 flex justify-center">
-                <div className="px-4 py-1 rounded-md bg-background text-xs text-muted-foreground border border-border">
-                  lecturelink.ca/dashboard
-                </div>
-              </div>
-            </div>
-            <Image
-              src="/images/screenshots/dashboard.png"
-              alt="LectureLink Dashboard"
-              width={1200}
-              height={800}
-              className="w-full"
-              priority
-            />
-          </div>
-        </div>
-
         {/* Decorative gradient blobs */}
         <div className="absolute -top-40 -right-40 h-96 w-96 rounded-full bg-primary/5 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-40 -left-40 h-96 w-96 rounded-full bg-primary/5 blur-3xl pointer-events-none" />
@@ -165,7 +138,7 @@ export default function Home() {
         </p>
       </section>
 
-      {/* Features — Tier 1: Accordion */}
+      {/* Features — Accordion with interactive mockups */}
       <section id="features" className="bg-muted">
         <div className="max-w-6xl mx-auto px-6 py-24">
           <div className="text-center mb-16">

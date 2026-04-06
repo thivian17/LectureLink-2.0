@@ -22,7 +22,7 @@ export function AcademicCommandCenter({
   const [selectedDate, setSelectedDate] = useState(today);
 
   return (
-    <section className="space-y-3 overflow-hidden">
+    <section className="space-y-3">
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-base font-semibold shrink-0">Academic Command Center</h2>
         <StatsRow stats={stats} loading={loading} />
