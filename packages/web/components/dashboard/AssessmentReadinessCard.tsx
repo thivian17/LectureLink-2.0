@@ -14,12 +14,6 @@ interface AssessmentReadinessCardProps {
   assessment: AssessmentReadinessV2;
 }
 
-const ACTION_ROUTES: Record<string, string> = {
-  study_session: "learn",
-  practice_test: "quizzes",
-  flash_review: "learn",
-};
-
 function getStudyHref(data: AssessmentReadinessV2): string {
   const base = `/dashboard/courses/${data.course_id}/learn`;
   if (data.weak_concepts && data.weak_concepts.length > 0) {
@@ -156,35 +150,6 @@ export function AssessmentReadinessCard({
                     {wc.title}
                   </span>
                 ))}
-              </div>
-            )}
-
-            {/* Suggested actions */}
-            {data.suggested_actions && data.suggested_actions.length > 0 && (
-              <div className="space-y-1.5">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Suggested Preparation
-                </p>
-                <div className="space-y-1">
-                  {data.suggested_actions.map((action, i) => {
-                    const courseId = action.target_course_id;
-                    const routeSuffix =
-                      ACTION_ROUTES[action.action_type] ?? "";
-                    const href = courseId
-                      ? `/dashboard/courses/${courseId}${routeSuffix ? `/${routeSuffix}` : ""}`
-                      : "/dashboard";
-                    return (
-                      <Link
-                        key={i}
-                        href={href}
-                        className="flex items-center gap-1 text-xs text-primary hover:underline"
-                      >
-                        <span>{action.title}</span>
-                        <span>&rarr;</span>
-                      </Link>
-                    );
-                  })}
-                </div>
               </div>
             )}
 
