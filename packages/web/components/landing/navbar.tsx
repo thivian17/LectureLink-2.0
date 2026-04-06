@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 const NAV_LINKS = [
   { label: "Features", href: "#features" },
   { label: "How It Works", href: "#how" },
-  { label: "Dashboard", href: "#dashboard" },
   { label: "Stack", href: "/stack" },
 ] as const;
 
@@ -75,7 +74,7 @@ export function Navbar({ activeLink }: NavbarProps) {
             asChild
             className="hidden sm:inline-flex bg-primary text-primary-foreground rounded-lg px-5 py-2 text-sm font-semibold"
           >
-            <Link href="/login">Try It Free</Link>
+            <Link href="/login">Try the Demo</Link>
           </Button>
           <button
             className="md:hidden p-2 rounded-lg hover:bg-muted transition-colors"
@@ -109,7 +108,7 @@ export function Navbar({ activeLink }: NavbarProps) {
             );
           })}
           <Button asChild className="w-full mt-2" size="sm">
-            <Link href="/login">Try It Free</Link>
+            <Link href="/login">Try the Demo</Link>
           </Button>
         </div>
       )}
