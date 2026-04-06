@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import dynamic from "next/dynamic";
 import {
   BookOpen,
@@ -8,8 +9,6 @@ import {
   Brain,
   Target,
   Sparkles,
-  Search,
-  CalendarCheck,
   GraduationCap,
   Shield,
   Zap,
@@ -19,92 +18,59 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
+import { SecondaryFeatures } from "@/components/landing/secondary-features";
 import { Feature197 } from "@/components/accordion-feature-section";
 import { ZoomParallax } from "@/components/zoom-parallax";
 
 const Casestudies = dynamic(() => import("@/components/case-studies"), {
   ssr: false,
 });
-const RuixenStats = dynamic(() => import("@/components/ruixen-stats"), {
-  ssr: false,
-});
-
-/* Try importing Track B components; fall back to placeholders */
-let FeaturePreviews: Record<string, React.ComponentType> = {};
-let SecondaryFeatures: React.ComponentType | null = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  FeaturePreviews = require("@/components/landing/feature-previews");
-} catch {
-  /* Track B hasn't created this yet */
-}
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const mod = require("@/components/landing/secondary-features");
-  SecondaryFeatures = mod.SecondaryFeatures ?? mod.default ?? null;
-} catch {
-  /* Track B hasn't created this yet */
-}
 
 // ─── Feature data for accordion ────────────────────────────────────────
-const FEATURE_KEYS = [
-  "AiTutorPreview",
-  "ExamReadinessPreview",
-  "SmartQuizzesPreview",
-  "DailySessionsPreview",
-  "AskLecturesPreview",
-  "SyllabusAwarePreview",
-] as const;
-
 const FEATURES = [
   {
     id: 1,
     title: "AI Tutor",
     description:
       "One-on-one study sessions that diagnose your knowledge gaps, teach concepts step by step, and test your understanding — all pulled from your actual lecture content. It asks the right questions, catches misconceptions, and adapts on the fly across three study modes.",
-    image: "",
+    image: "/images/screenshots/learn.png",
   },
   {
     id: 2,
     title: "Exam Readiness",
     description:
       "Instead of a single grade, four independent signals — Coverage, Practice, Freshness, and Effort — give you an honest picture of where you stand before each assessment. The model updates in real-time as you study.",
-    image: "",
+    image: "/images/screenshots/assessments.png",
   },
   {
     id: 3,
     title: "Smart Quizzes",
     description:
       "Every question is generated from your lectures — not a generic question bank. The system tracks what you know at the concept level and quietly adjusts difficulty so you're always working at the edge of your understanding.",
-    image: "",
+    image: "/images/screenshots/studyhub.png",
   },
   {
     id: 4,
     title: "Daily Study Sessions",
     description:
       "Fifteen-minute guided sessions that surface the concepts most at risk of fading. Each session blends flash reviews, focused teaching, and a quick quiz — then shows you exactly what moved.",
-    image: "",
+    image: "/images/screenshots/learn.png",
   },
   {
     id: 5,
     title: "Ask Your Lectures",
     description:
       'Type a question and get an answer sourced directly from your course material — with the exact lecture, timestamp, and slide number cited. It searches across everything you\'ve uploaded.',
-    image: "",
+    image: "/images/screenshots/dashboard.png",
   },
   {
     id: 6,
     title: "Syllabus-Aware",
     description:
       "Upload a syllabus PDF and LectureLink extracts your full schedule, assessments, and grade weights automatically. From that point on, every recommendation, quiz, and study session is aligned to what's actually being graded.",
-    image: "",
+    image: "/images/screenshots/syllabus.png",
   },
-].map((f, i) => {
-  // Attempt to use Track B preview component as image placeholder
-  const key = FEATURE_KEYS[i];
-  const PreviewComp = FeaturePreviews[key];
-  return { ...f, _preview: PreviewComp ?? null };
-});
+];
 
 // ─── Tech stack ────────────────────────────────────────────────────────
 const TECH_STACK = [
@@ -141,58 +107,6 @@ const STEPS = [
     desc: "Watch your readiness scores update as you study. Always know where you stand.",
   },
 ];
-
-// ─── Readiness ring SVG helper ─────────────────────────────────────────
-function ReadinessRing({
-  pct,
-  label,
-  color,
-}: {
-  pct: number;
-  label: string;
-  color: string;
-}) {
-  const r = 36;
-  const circ = 2 * Math.PI * r;
-  const offset = circ - (pct / 100) * circ;
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <svg width="88" height="88" viewBox="0 0 88 88">
-        <circle
-          cx="44"
-          cy="44"
-          r={r}
-          fill="none"
-          stroke="currentColor"
-          className="text-muted"
-          strokeWidth="6"
-        />
-        <circle
-          cx="44"
-          cy="44"
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth="6"
-          strokeLinecap="round"
-          strokeDasharray={circ}
-          strokeDashoffset={offset}
-          transform="rotate(-90 44 44)"
-        />
-        <text
-          x="44"
-          y="44"
-          textAnchor="middle"
-          dominantBaseline="central"
-          className="fill-foreground text-sm font-semibold"
-        >
-          {pct}%
-        </text>
-      </svg>
-      <span className="text-xs text-muted-foreground font-medium">{label}</span>
-    </div>
-  );
-}
 
 // ═══════════════════════════════════════════════════════════════════════
 // Landing page
@@ -258,6 +172,32 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Hero screenshot */}
+        <div className="max-w-4xl mx-auto mt-16 px-6 relative z-10">
+          <div className="rounded-2xl overflow-hidden border border-border shadow-2xl">
+            <div className="flex items-center gap-2 px-4 py-3 bg-muted border-b border-border">
+              <div className="flex gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-red-400" />
+                <div className="w-3 h-3 rounded-full bg-yellow-400" />
+                <div className="w-3 h-3 rounded-full bg-green-400" />
+              </div>
+              <div className="flex-1 flex justify-center">
+                <div className="px-4 py-1 rounded-md bg-background text-xs text-muted-foreground border border-border">
+                  lecturelink.ca/dashboard
+                </div>
+              </div>
+            </div>
+            <Image
+              src="/images/screenshots/dashboard.png"
+              alt="LectureLink Dashboard"
+              width={1200}
+              height={800}
+              className="w-full"
+              priority
+            />
+          </div>
+        </div>
+
         {/* Decorative gradient blobs */}
         <div className="absolute -top-40 -right-40 h-96 w-96 rounded-full bg-primary/5 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-40 -left-40 h-96 w-96 rounded-full bg-primary/5 blur-3xl pointer-events-none" />
@@ -283,51 +223,22 @@ export default function Home() {
           <p className="text-center text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-8">
             Plus everything else you need
           </p>
-          {SecondaryFeatures ? (
-            <SecondaryFeatures />
-          ) : (
-            <div className="rounded-2xl border border-border bg-background p-12 text-center text-muted-foreground">
-              {/* TODO: Track B will provide SecondaryFeatures component */}
-              Secondary features coming soon
-            </div>
-          )}
+          <SecondaryFeatures />
         </div>
       </section>
 
       {/* 4. Zoom Parallax */}
       <ZoomParallax
         images={[
-          {
-            src: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800&q=80",
-            alt: "Students collaborating",
-          },
-          {
-            src: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=600&q=80",
-            alt: "Studying at desk",
-          },
-          {
-            src: "https://images.unsplash.com/photo-1513258496099-48168024aec0?w=600&q=80",
-            alt: "Laptop and notes",
-          },
-          {
-            src: "https://images.unsplash.com/photo-1501504905252-473c47e087f8?w=600&q=80",
-            alt: "Library study",
-          },
-          {
-            src: "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=600&q=80",
-            alt: "Campus life",
-          },
-          {
-            src: "https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?w=600&q=80",
-            alt: "Group study",
-          },
-          {
-            src: "https://images.unsplash.com/photo-1488190211105-8b0e65b80b4e?w=600&q=80",
-            alt: "Writing notes",
-          },
+          { src: "/images/screenshots/dashboard.png", alt: "LectureLink Dashboard" },
+          { src: "/images/screenshots/syllabus.png", alt: "Syllabus Review" },
+          { src: "/images/screenshots/learn.png", alt: "Learn Session" },
+          { src: "/images/screenshots/assessments.png", alt: "Assessments Overview" },
+          { src: "/images/screenshots/studyhub.png", alt: "Study Hub" },
+          { src: "/images/screenshots/create-course.png", alt: "Create Course" },
+          { src: "/images/screenshots/dashboard.png", alt: "Academic Command Center" },
         ]}
       />
-      {/* TODO: Replace with actual app screenshots */}
 
       {/* 5. How It Works */}
       <section id="how" className="py-24 px-6">
@@ -382,9 +293,8 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Browser chrome mockup */}
+          {/* Browser chrome mockup with real screenshot */}
           <div className="rounded-2xl border border-border bg-background shadow-xl overflow-hidden max-w-4xl mx-auto">
-            {/* Title bar */}
             <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/50">
               <div className="flex gap-1.5">
                 <div className="h-3 w-3 rounded-full bg-red-400" />
@@ -397,115 +307,13 @@ export default function Home() {
                 </div>
               </div>
             </div>
-
-            {/* Content */}
-            <div className="p-6 sm:p-8 space-y-6">
-              {/* Greeting */}
-              <div>
-                <h3 className="text-xl font-semibold tracking-tight">
-                  Good morning, Alex
-                </h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Your midterm is in 3 days. Here&apos;s what to focus on today.
-                </p>
-              </div>
-
-              {/* Stats row */}
-              <div className="grid grid-cols-4 gap-3">
-                {[
-                  { emoji: "\uD83D\uDD25", value: "12", label: "Day Streak" },
-                  { emoji: "\u26A1", value: "2,450", label: "XP Earned" },
-                  { emoji: "\uD83D\uDCDA", value: "18.5h", label: "Study Time" },
-                  { emoji: "\uD83E\uDDE0", value: "47", label: "Concepts" },
-                ].map((s) => (
-                  <div
-                    key={s.label}
-                    className="rounded-xl bg-muted p-3 text-center"
-                  >
-                    <p className="text-lg font-semibold">
-                      {s.emoji} {s.value}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{s.label}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Two columns */}
-              <div className="grid sm:grid-cols-2 gap-6">
-                {/* Readiness rings */}
-                <Card>
-                  <CardContent className="pt-5">
-                    <p className="text-sm font-medium mb-4">
-                      Assessment Readiness
-                    </p>
-                    <div className="grid grid-cols-2 gap-4 justify-items-center">
-                      <ReadinessRing
-                        pct={82}
-                        label="Midterm 1"
-                        color="hsl(142 71% 45%)"
-                      />
-                      <ReadinessRing
-                        pct={65}
-                        label="Quiz 3"
-                        color="hsl(48 96% 53%)"
-                      />
-                      <ReadinessRing
-                        pct={71}
-                        label="Assignment 4"
-                        color="hsl(142 71% 45%)"
-                      />
-                      <ReadinessRing
-                        pct={55}
-                        label="Lab Report"
-                        color="hsl(0 84% 60%)"
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Action cards */}
-                <div className="space-y-3">
-                  {[
-                    {
-                      urgency: "Critical",
-                      color: "bg-red-100 text-red-700",
-                      title: "Review Linked Lists",
-                      sub: "Midterm in 3 days - lowest readiness",
-                    },
-                    {
-                      urgency: "High",
-                      color: "bg-yellow-100 text-yellow-700",
-                      title: "Practice Recursion",
-                      sub: "Quiz 3 next week - 2 weak concepts",
-                    },
-                    {
-                      urgency: "Medium",
-                      color: "bg-blue-100 text-blue-700",
-                      title: "Finish Lab 4 Notes",
-                      sub: "Report due in 10 days",
-                    },
-                  ].map((a) => (
-                    <Card key={a.title}>
-                      <CardContent className="py-3 px-4 flex items-center gap-3">
-                        <Badge
-                          className={`${a.color} text-xs font-medium border-0 shrink-0`}
-                        >
-                          {a.urgency}
-                        </Badge>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {a.title}
-                          </p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {a.sub}
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <Image
+              src="/images/screenshots/dashboard.png"
+              alt="LectureLink Study Hub Dashboard"
+              width={1200}
+              height={800}
+              className="w-full"
+            />
           </div>
         </div>
       </section>

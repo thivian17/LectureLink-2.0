@@ -55,7 +55,52 @@ export default function LoginPage() {
           <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
           <CardDescription>Sign in to your LectureLink account</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="grid gap-6">
+          {/* Demo access */}
+          <div className="grid gap-2">
+            <Button
+              type="button"
+              className="w-full"
+              size="lg"
+              onClick={async () => {
+                setLoading(true);
+                try {
+                  const supabase = createClient();
+                  const { error } = await supabase.auth.signInWithPassword({
+                    email: "demo@lecturelink.ca",
+                    password: "demodemo123",
+                  });
+                  if (error) throw error;
+                  router.push("/dashboard");
+                  router.refresh();
+                } catch {
+                  toast.error(
+                    "Demo login failed. Please try signing in manually.",
+                  );
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              disabled={loading}
+            >
+              {loading ? "Signing in..." : "Try the Demo Account \u2192"}
+            </Button>
+            <p className="text-center text-xs text-muted-foreground">
+              Pre-loaded with a CS course, lectures, and study progress
+            </p>
+          </div>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">
+                or sign in with your account
+              </span>
+            </div>
+          </div>
+
           <form onSubmit={handleLogin} className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
