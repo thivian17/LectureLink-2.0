@@ -1035,6 +1035,7 @@ export interface CourseIntelligenceV2 {
   readiness: number;
   risk: "low" | "medium" | "high";
   next_assessment: {
+    assessment_id: string;
     title: string;
     type: string;
     due_date: string | null;

@@ -610,6 +610,7 @@ async def compute_course_readiness(
             if closest_days is None or result.days_until_due < closest_days:
                 closest_days = result.days_until_due
                 next_assessment_data = {
+                    "assessment_id": result.assessment_id,
                     "title": result.title,
                     "type": result.assessment_type,
                     "due_date": result.due_date,

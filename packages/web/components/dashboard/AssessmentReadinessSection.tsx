@@ -29,7 +29,7 @@ export function AssessmentReadinessSection({
 
       // Build a partial AssessmentReadinessV2 from the summary data
       items.push({
-        assessment_id: `${course.course_id}-next`,
+        assessment_id: next.assessment_id,
         title: next.title,
         course_id: course.course_id,
         course_name: course.course_name,
