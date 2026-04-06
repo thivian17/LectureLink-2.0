@@ -1,47 +1,40 @@
 "use client";
 
-import { BookOpen, Target, RefreshCw, TrendingUp } from "lucide-react";
-import { Progress } from "@/components/ui/progress";
-import { cn } from "@/lib/utils";
+import { ReadinessRing } from "./ReadinessRing";
 import type { ReadinessBreakdownV2 } from "@/types/database";
 
 interface ReadinessBreakdownProps {
   breakdown: ReadinessBreakdownV2;
+  /** Use smaller rings for compact contexts */
+  compact?: boolean;
 }
 
-const signals = [
-  { key: "coverage" as const, icon: BookOpen, label: "Coverage" },
-  { key: "practice" as const, icon: Target, label: "Practice" },
-  { key: "freshness" as const, icon: RefreshCw, label: "Freshness" },
-  { key: "effort" as const, icon: TrendingUp, label: "Study Effort" },
+const SIGNALS = [
+  { key: "coverage" as const, label: "Coverage", color: "#2563EB" },
+  { key: "practice" as const, label: "Practice", color: "#F59E0B" },
+  { key: "freshness" as const, label: "Freshness", color: "#16A34A" },
+  { key: "effort" as const, label: "Effort", color: "#8B5CF6" },
 ] as const;
 
-function barColor(value: number): string {
-  if (value < 0.4) return "[&>div]:bg-red-500";
-  if (value < 0.7) return "[&>div]:bg-amber-500";
-  return "[&>div]:bg-green-500";
-}
+export function ReadinessBreakdown({
+  breakdown,
+  compact,
+}: ReadinessBreakdownProps) {
+  const ringSize = compact ? 48 : 64;
+  const strokeWidth = compact ? 4 : 5;
 
-export function ReadinessBreakdown({ breakdown }: ReadinessBreakdownProps) {
   return (
-    <div className="space-y-2">
-      {signals.map(({ key, icon: Icon, label }) => {
-        const value = breakdown[key];
-        const pct = Math.round(value * 100);
-        return (
-          <div key={key} className="flex items-center gap-2">
-            <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="text-xs w-16 shrink-0">{label}</span>
-            <Progress
-              value={pct}
-              className={cn("h-2 flex-1", barColor(value))}
-            />
-            <span className="text-xs tabular-nums w-8 text-right text-muted-foreground">
-              {pct}%
-            </span>
-          </div>
-        );
-      })}
+    <div className="flex items-center justify-around py-2">
+      {SIGNALS.map(({ key, label, color }) => (
+        <ReadinessRing
+          key={key}
+          value={breakdown[key]}
+          label={label}
+          color={color}
+          size={ringSize}
+          strokeWidth={strokeWidth}
+        />
+      ))}
     </div>
   );
 }

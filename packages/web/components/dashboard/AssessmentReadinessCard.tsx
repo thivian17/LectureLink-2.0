@@ -129,8 +129,26 @@ export function AssessmentReadinessCard({
         {/* Expanded content */}
         {expanded && (
           <div className="space-y-3 pt-1">
-            {/* Breakdown */}
+            {/* Breakdown rings */}
             {hasBreakdown && <ReadinessBreakdown breakdown={data.breakdown} />}
+
+            {/* Overall readiness bar */}
+            {hasBreakdown && (
+              <div className="space-y-1.5 pt-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-muted-foreground">
+                    Overall Readiness
+                  </span>
+                  <span className="font-bold tabular-nums">{pct}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-1000"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Weak concepts */}
             {data.weak_concepts && data.weak_concepts.length > 0 && (
