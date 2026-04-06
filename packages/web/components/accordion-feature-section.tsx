@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 
 import {
   Accordion,
@@ -20,45 +21,7 @@ interface Feature197Props {
   features: FeatureItem[];
 }
 
-const defaultFeatures: FeatureItem[] = [
-  {
-    id: 1,
-    title: "Ready-to-Use UI Blocks",
-    image: "/images/block/placeholder-1.svg",
-    description:
-      "Browse through our extensive collection of pre-built UI blocks designed with shadcn/ui. Each block is carefully crafted to be responsive, accessible, and easily customizable. Simply copy and paste the code into your project.",
-  },
-  {
-    id: 2,
-    title: "Tailwind CSS & TypeScript",
-    image: "/images/block/placeholder-2.svg",
-    description:
-      "Built with Tailwind CSS for rapid styling and TypeScript for type safety. Our blocks leverage the full power of Tailwind's utility classes while maintaining clean, type-safe code that integrates seamlessly with your Next.js projects.",
-  },
-  {
-    id: 3,
-    title: "Dark Mode & Customization",
-    image: "/images/block/placeholder-3.svg",
-    description:
-      "Every block supports dark mode out of the box and can be customized to match your brand. Modify colors, spacing, and typography using Tailwind's configuration. The shadcn/ui theming system makes it easy to maintain consistency across your site.",
-  },
-  {
-    id: 4,
-    title: "Accessibility First",
-    image: "/images/block/placeholder-4.svg",
-    description:
-      "All blocks are built with accessibility in mind, following WCAG guidelines. They include proper ARIA labels, keyboard navigation support, and semantic HTML structure. Ensure your website is usable by everyone without extra effort.",
-  },
-  {
-    id: 5,
-    title: "Modern Development Stack",
-    image: "/images/block/placeholder-5.svg",
-    description:
-      "Built for modern web development with React 18, Next.js 14, and the latest shadcn/ui components. Take advantage of React Server Components, TypeScript strict mode, and other cutting-edge features while maintaining excellent performance.",
-  },
-];
-
-const Feature197 = ({ features = defaultFeatures }: Feature197Props) => {
+const Feature197 = ({ features }: Feature197Props) => {
   const [activeTabId, setActiveTabId] = useState<number | null>(1);
   const [activeImage, setActiveImage] = useState(features[0].image);
 
@@ -88,9 +51,11 @@ const Feature197 = ({ features = defaultFeatures }: Feature197Props) => {
                       {tab.description}
                     </p>
                     <div className="mt-4 md:hidden">
-                      <img
+                      <Image
                         src={tab.image}
                         alt={tab.title}
+                        width={600}
+                        height={450}
                         className="h-full max-h-80 w-full rounded-md object-cover"
                       />
                     </div>
@@ -100,9 +65,11 @@ const Feature197 = ({ features = defaultFeatures }: Feature197Props) => {
             </Accordion>
           </div>
           <div className="relative m-auto hidden w-1/2 overflow-hidden rounded-xl bg-muted md:block">
-            <img
+            <Image
               src={activeImage}
               alt="Feature preview"
+              width={600}
+              height={450}
               className="aspect-[4/3] rounded-md object-cover pl-4"
             />
           </div>
