@@ -64,6 +64,7 @@ import {
 } from "@/lib/api";
 import type { UpdateAssessmentInput } from "@/lib/api";
 import { AssessmentEditDialog } from "@/components/syllabus-review/assessment-edit-dialog";
+import { AssessmentScheduleTable } from "@/components/course-detail/assessment-schedule-table";
 import type { Assessment, Course, Syllabus } from "@/types/database";
 import type { SyllabusExtraction } from "@/types/extraction";
 
@@ -380,7 +381,21 @@ export function CourseDetail({
               onUploadComplete={handleUploadComplete}
             />
           ) : (
-            <SyllabusOverviewCard syllabus={syllabus} courseId={course.id} />
+            <AssessmentScheduleTable
+              courseId={course.id}
+              syllabusFileName={syllabus.file_name}
+              reviewedAt={syllabus.reviewed_at}
+              instructorName={
+                (syllabus.raw_extraction as SyllabusExtraction | null)
+                  ?.instructor_name?.value
+              }
+              gradeBreakdown={
+                syllabus.grade_breakdown as {
+                  component: string;
+                  weight: number;
+                }[]
+              }
+            />
           )}
         </TabsContent>
 

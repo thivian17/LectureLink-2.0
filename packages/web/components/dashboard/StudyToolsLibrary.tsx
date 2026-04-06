@@ -7,7 +7,9 @@ import {
   ClipboardCheck,
   Target,
   MessageSquare,
+  Search,
   Pencil,
+  Brain,
   ChevronRight,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -30,28 +32,34 @@ interface Tool {
 
 const tools: Tool[] = [
   {
-    icon: GraduationCap,
-    title: "Learn Session",
-    description: "AI-guided study sessions",
+    icon: MessageSquare,
+    title: "AI Tutor",
+    description: "Diagnose gaps, teach step by step, test understanding",
+    coursePath: "/tutor",
+  },
+  {
+    icon: Brain,
+    title: "Daily Study Session",
+    description: "15-min guided sessions targeting concepts at risk of fading",
     coursePath: "/learn",
   },
   {
     icon: ClipboardCheck,
-    title: "Practice Tests",
-    description: "Test your knowledge",
+    title: "Smart Quizzes",
+    description: "Questions from your lectures, adapting to your level",
     coursePath: "/quizzes",
   },
   {
-    icon: Target,
-    title: "Assessment Prep",
-    description: "Targeted exam preparation",
-    coursePath: "/readiness",
+    icon: Search,
+    title: "Ask Your Lectures",
+    description: "Answers sourced from your material with citations",
+    coursePath: "/search",
   },
   {
-    icon: MessageSquare,
-    title: "Tutor Chat",
-    description: "Ask about any concept",
-    coursePath: "/tutor",
+    icon: Target,
+    title: "Exam Readiness",
+    description: "Coverage, Practice, Freshness & Effort signals per assessment",
+    coursePath: "/readiness",
   },
   {
     icon: Pencil,
@@ -76,7 +84,7 @@ export function StudyToolsLibrary() {
   return (
     <section className="space-y-3">
       <h2 className="text-base font-semibold">Study Tools</h2>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {tools.map((tool) => {
           const Icon = tool.icon;
           const disabled = tool.comingSoon || courses.length === 0;
