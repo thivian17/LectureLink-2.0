@@ -10,7 +10,7 @@ interface ReadinessRingProps {
   label: string;
   /** Ring color (hex) */
   color: string;
-  /** Ring size in pixels (desktop). Scales to 52px on mobile via CSS. */
+  /** Ring size in pixels */
   size?: number;
   /** Stroke width */
   strokeWidth?: number;
@@ -21,7 +21,7 @@ export function ReadinessRing({
   value,
   label,
   color,
-  size = 64,
+  size = 72,
   strokeWidth = 5,
   className,
 }: ReadinessRingProps) {
@@ -63,12 +63,18 @@ export function ReadinessRing({
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-sm font-bold tabular-nums text-foreground">
+          <span
+            className="font-bold tabular-nums"
+            style={{ fontSize: 15, color: "var(--color-foreground)" }}
+          >
             {percentage}%
           </span>
         </div>
       </div>
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <span
+        className="font-semibold uppercase"
+        style={{ fontSize: 11, letterSpacing: "0.04em", color: "var(--color-muted-foreground)" }}
+      >
         {label}
       </span>
     </div>

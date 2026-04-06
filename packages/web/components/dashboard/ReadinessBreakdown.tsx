@@ -20,11 +20,11 @@ export function ReadinessBreakdown({
   breakdown,
   compact,
 }: ReadinessBreakdownProps) {
-  const ringSize = compact ? 48 : 64;
-  const strokeWidth = compact ? 4 : 5;
+  const ringSize = compact ? 52 : 72;
+  const strokeWidth = 5;
 
   return (
-    <div className="flex items-center justify-around py-2">
+    <div className="flex items-center justify-around py-3">
       {SIGNALS.map(({ key, label, color }) => (
         <ReadinessRing
           key={key}
