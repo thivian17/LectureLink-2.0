@@ -13,7 +13,6 @@ import { FEATURE_PREVIEWS } from "@/components/landing/feature-previews";
 interface FeatureItem {
   id: number;
   title: string;
-  image: string;
   description: string;
 }
 

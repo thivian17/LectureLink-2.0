@@ -21,42 +21,36 @@ const FEATURES = [
     title: "AI Tutor",
     description:
       "One-on-one study sessions that diagnose your knowledge gaps, teach concepts step by step, and test your understanding \u2014 all pulled from your actual lecture content.",
-    image: "/images/screenshots/learn.png",
   },
   {
     id: 2,
     title: "Exam Readiness",
     description:
       "Four independent signals \u2014 Coverage, Practice, Freshness, and Effort \u2014 give you an honest picture of where you stand before each assessment. Updates in real-time as you study.",
-    image: "/images/screenshots/assessments.png",
   },
   {
     id: 3,
     title: "Smart Quizzes",
     description:
       "Every question is generated from your lectures \u2014 not a generic question bank. The system tracks what you know at the concept level and adjusts difficulty automatically.",
-    image: "/images/screenshots/studyhub.png",
   },
   {
     id: 4,
     title: "Daily Study Sessions",
     description:
       "Fifteen-minute guided sessions that surface the concepts most at risk of fading. Flash reviews, focused teaching, and a quick quiz \u2014 then you see exactly what moved.",
-    image: "/images/screenshots/learn.png",
   },
   {
     id: 5,
     title: "Ask Your Lectures",
     description:
       "Type a question and get an answer sourced directly from your course material \u2014 with the exact lecture, timestamp, and slide number cited.",
-    image: "/images/screenshots/dashboard.png",
   },
   {
     id: 6,
     title: "Syllabus-Aware",
     description:
       "Upload a syllabus PDF and LectureLink extracts your schedule, assessments, and grade weights automatically. Every recommendation aligns to what\u2019s actually being graded.",
-    image: "/images/screenshots/syllabus.png",
   },
 ];
 
