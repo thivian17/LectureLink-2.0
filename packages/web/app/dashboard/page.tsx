@@ -137,11 +137,15 @@ export default function DashboardPage() {
         </Card>
       ) : (
         <>
-          <AcademicCommandCenter
-            timeline={timeline}
-            stats={stats}
-            loading={loading}
-          />
+          {/* Timeline + Assessment Readiness side by side */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
+            <AcademicCommandCenter
+              timeline={timeline}
+              stats={stats}
+              loading={loading}
+            />
+            <AssessmentReadinessSection courses={courseData} loading={loading} />
+          </div>
           <BestNextActions actions={actions} loading={loading} />
           {priorityConcepts && (
             <PriorityConceptsWidget
@@ -155,7 +159,6 @@ export default function DashboardPage() {
             />
           )}
           <CourseIntelligenceGrid courses={courseData} loading={loading} />
-          <AssessmentReadinessSection courses={courseData} loading={loading} />
           <StudyToolsLibrary />
         </>
       )}

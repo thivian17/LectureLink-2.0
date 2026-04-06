@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -40,36 +40,38 @@ function daysLabel(days: number | null): string {
 export function AssessmentReadinessCard({
   assessment: initialData,
 }: AssessmentReadinessCardProps) {
-  const [expanded, setExpanded] = useState(false);
   const [fullData, setFullData] = useState<AssessmentReadinessV2 | null>(null);
-  const [fetching, setFetching] = useState(false);
+  const [fetching, setFetching] = useState(true);
 
   const data = fullData ?? initialData;
   const pct = Math.round(data.readiness * 100);
   const hasBreakdown = fullData != null;
 
-  async function handleToggle() {
-    if (!expanded && !fullData && !fetching) {
-      setFetching(true);
-      try {
-        const result = await getAssessmentReadinessV2(data.assessment_id);
-        setFullData(result);
-      } catch {
-        // Show what we have
-      } finally {
-        setFetching(false);
-      }
-    }
-    setExpanded((prev) => !prev);
-  }
+  // Auto-fetch full breakdown on mount
+  useEffect(() => {
+    let cancelled = false;
+    getAssessmentReadinessV2(initialData.assessment_id)
+      .then((result) => {
+        if (!cancelled) setFullData(result);
+      })
+      .catch(() => {
+        // Show initial data as fallback
+      })
+      .finally(() => {
+        if (!cancelled) setFetching(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialData.assessment_id]);
 
   return (
     <Card>
       <CardContent className="pt-5 pb-5">
-        {/* Header — matches mockup: title + subtitle left, days pill right */}
+        {/* Header — title + subtitle left, days pill right */}
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="min-w-0">
-            <h3 className="text-base font-bold text-foreground truncate">
+            <h3 className="text-[17px] font-bold text-foreground truncate leading-tight">
               {data.title}
             </h3>
             {data.course_name && (
@@ -78,93 +80,75 @@ export function AssessmentReadinessCard({
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {data.days_until_due != null && (
-              <span
-                className={cn(
-                  "text-xs font-semibold px-3 py-1 rounded-full",
-                  daysPillStyle(data.days_until_due),
-                )}
-              >
-                {daysLabel(data.days_until_due)}
-              </span>
-            )}
+          {data.days_until_due != null && (
+            <span
+              className={cn(
+                "text-xs font-semibold px-3 py-1 rounded-full shrink-0",
+                daysPillStyle(data.days_until_due),
+              )}
+            >
+              {daysLabel(data.days_until_due)}
+            </span>
+          )}
+        </div>
+
+        {/* Rings — always visible */}
+        {fetching ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : hasBreakdown ? (
+          <ReadinessBreakdown breakdown={data.breakdown} />
+        ) : (
+          <ReadinessBreakdown
+            breakdown={initialData.breakdown}
+          />
+        )}
+
+        {/* Overall readiness bar — gradient fill */}
+        <div className="mt-2">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-semibold text-muted-foreground">
+              Overall Readiness
+            </span>
+            <span className="text-xs font-bold tabular-nums text-foreground">
+              {pct}%
+            </span>
+          </div>
+          <div className="h-2 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-1000"
+              style={{
+                width: `${pct}%`,
+                background: "linear-gradient(90deg, #2563EB, #3B82F6)",
+              }}
+            />
           </div>
         </div>
 
-        {/* Expand toggle */}
-        <button
-          onClick={handleToggle}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mb-1"
-        >
-          {fetching ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : expanded ? (
-            <ChevronUp className="h-3 w-3" />
-          ) : (
-            <ChevronDown className="h-3 w-3" />
-          )}
-          {expanded ? "Hide details" : "Show details"}
-        </button>
+        {/* Weak areas — inline tags */}
+        {data.weak_concepts && data.weak_concepts.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap mt-3">
+            <span className="text-[11px] font-medium text-muted-foreground">
+              Weak areas:
+            </span>
+            {data.weak_concepts.slice(0, 5).map((wc) => (
+              <span
+                key={wc.concept_id}
+                className="text-[11px] font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded-md"
+              >
+                {wc.title}
+              </span>
+            ))}
+          </div>
+        )}
 
-        {/* Expanded content — matches mockup layout */}
-        {expanded && (
-          <div className="space-y-3 pt-1">
-            {/* Rings */}
-            {hasBreakdown && (
-              <ReadinessBreakdown breakdown={data.breakdown} />
-            )}
-
-            {/* Overall readiness bar — gradient fill matching mockup */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-semibold text-muted-foreground">
-                  Overall Readiness
-                </span>
-                <span className="text-xs font-bold tabular-nums text-foreground">
-                  {pct}%
-                </span>
-              </div>
-              <div className="h-2 rounded-full bg-muted overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-1000"
-                  style={{
-                    width: `${pct}%`,
-                    background: "linear-gradient(90deg, #2563EB, #3B82F6)",
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Weak areas — inline style matching mockup */}
-            {data.weak_concepts && data.weak_concepts.length > 0 && (
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] font-medium text-muted-foreground">
-                  Weak areas:
-                </span>
-                {data.weak_concepts.slice(0, 5).map((wc) => (
-                  <span
-                    key={wc.concept_id}
-                    className="text-[11px] font-medium bg-muted text-muted-foreground px-2 py-0.5 rounded-md"
-                  >
-                    {wc.title}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* Study button */}
-            {data.course_id && (
-              <div className="pt-1">
-                <Button
-                  asChild
-                  size="sm"
-                  className="text-xs"
-                >
-                  <Link href={getStudyHref(data)}>Start Studying</Link>
-                </Button>
-              </div>
-            )}
+        {/* Study button */}
+        {data.course_id && (
+          <div className="pt-3">
+            <Button asChild size="sm" className="text-xs">
+              <Link href={getStudyHref(data)}>Start Studying</Link>
+            </Button>
           </div>
         )}
       </CardContent>
