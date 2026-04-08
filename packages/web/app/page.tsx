@@ -1,17 +1,16 @@
+"use client";
+
 import Link from "next/link";
-import {
-  Upload,
-  Brain,
-  Target,
-  Sparkles,
-  BookOpen,
-} from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
 import { SecondaryFeatures } from "@/components/landing/secondary-features";
-import { Feature197 } from "@/components/accordion-feature-section";
+import { FloatingConcepts, TypewriterHeadline } from "@/components/landing/hero-animations";
+import { FeatureCardsAnimated } from "@/components/landing/feature-cards-animated";
+import { PipelineAnimated } from "@/components/landing/pipeline-animated";
+import { ReadinessRingAnimated } from "@/components/landing/readiness-ring-animated";
 
 // ─── Feature data for accordion ────────────────────────────────────────
 const FEATURES = [
@@ -53,29 +52,6 @@ const FEATURES = [
   },
 ];
 
-// ─── How it works steps ────────────────────────────────────────────────
-const STEPS = [
-  {
-    icon: Upload,
-    title: "Upload Syllabus",
-    desc: "Drop your PDF. Schedule, assessments, and grade weights are extracted automatically.",
-  },
-  {
-    icon: BookOpen,
-    title: "Add Lectures",
-    desc: "Upload recordings or slides. The pipeline transcribes, extracts concepts, and indexes everything.",
-  },
-  {
-    icon: Brain,
-    title: "Study Smart",
-    desc: "AI tutor, adaptive quizzes, and daily sessions \u2014 personalized to your weak spots and deadlines.",
-  },
-  {
-    icon: Target,
-    title: "Track Readiness",
-    desc: "Watch your readiness scores update as you study. Always know where you stand.",
-  },
-];
 
 // ═══════════════════════════════════════════════════════════════════════
 // Landing page
@@ -85,9 +61,13 @@ export default function Home() {
     <div className="min-h-screen bg-background">
       <Navbar />
 
-      {/* Hero — text only, no screenshot */}
+      {/* Hero */}
       <section className="relative pt-32 pb-20 px-6 overflow-hidden">
-        <div className="max-w-4xl mx-auto text-center space-y-8">
+        {/* Pills — z-index 0, behind all content */}
+        <FloatingConcepts />
+
+        {/* Hero content — z-index 1, in front of pills */}
+        <div className="relative z-10 max-w-4xl mx-auto text-center space-y-8">
           <Badge
             variant="secondary"
             className="px-4 py-1.5 text-sm font-medium"
@@ -96,11 +76,7 @@ export default function Home() {
             AI-Powered Study Platform
           </Badge>
 
-          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-[800] tracking-tight leading-[1.08]">
-            Know what to study.
-            <br />
-            <span className="text-primary">Know when to study it.</span>
-          </h1>
+          <TypewriterHeadline />
 
           <p className="max-w-2xl mx-auto text-lg text-muted-foreground leading-relaxed">
             Upload your syllabus and lectures. LectureLink learns your course,
@@ -114,15 +90,18 @@ export default function Home() {
               size="lg"
               className="bg-primary text-primary-foreground rounded-lg px-8 text-base font-semibold"
             >
-              <Link href="/login">Try the Demo &rarr;</Link>
+              <Link href="/login?demo=true">Try the Demo &rarr;</Link>
             </Button>
-            <Button asChild variant="outline" size="lg" className="rounded-lg">
-              <a href="#how">See How It Works</a>
+            <Button asChild variant="outline" size="lg" className="rounded-lg px-8 text-base font-semibold">
+              <Link href="/signup">Sign Up Free</Link>
             </Button>
           </div>
 
           <p className="text-sm text-muted-foreground">
-            No signup required &mdash; explore a pre-loaded CS course instantly
+            No credit card required &mdash; or{" "}
+            <a href="#how" className="underline underline-offset-4 hover:text-foreground transition-colors">
+              see how it works
+            </a>
           </p>
         </div>
 
@@ -150,7 +129,7 @@ export default function Home() {
               assessment.
             </p>
           </div>
-          <Feature197 features={FEATURES} />
+          <FeatureCardsAnimated features={FEATURES} />
         </div>
 
         {/* Tier 2: Secondary features */}
@@ -170,31 +149,20 @@ export default function Home() {
               From lecture recording to study-ready
             </h2>
           </div>
+          <PipelineAnimated />
+        </div>
+      </section>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {STEPS.map((step, i) => (
-              <div key={step.title} className="relative text-center space-y-4">
-                {i < STEPS.length - 1 && (
-                  <div className="hidden lg:block absolute top-6 left-[calc(50%+24px)] right-[calc(-50%+24px)] h-px bg-border" />
-                )}
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground relative z-10">
-                  <step.icon className="h-5 w-5" />
-                </div>
-                <Badge
-                  variant="outline"
-                  className="text-xs font-medium tabular-nums"
-                >
-                  Step {i + 1}
-                </Badge>
-                <h3 className="text-lg font-semibold tracking-tight">
-                  {step.title}
-                </h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {step.desc}
-                </p>
-              </div>
-            ))}
+      {/* Assessment Readiness */}
+      <section className="py-24 px-6">
+        <div className="max-w-2xl mx-auto">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl font-[800] tracking-tight">See your readiness in real time</h2>
+            <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
+              Four independent signals combine into a single score, updated every time you study.
+            </p>
           </div>
+          <ReadinessRingAnimated />
         </div>
       </section>
 
@@ -208,21 +176,28 @@ export default function Home() {
             Explore a pre-loaded CS course with real lectures, quizzes, and
             study progress &mdash; no account needed.
           </p>
-          <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <Button
               asChild
               size="lg"
               className="bg-primary text-primary-foreground rounded-lg px-8 text-base font-semibold"
             >
-              <Link href="/login">Try the Demo &rarr;</Link>
+              <Link href="/login?demo=true">Try the Demo &rarr;</Link>
             </Button>
-            <p className="text-xs text-muted-foreground">
-              Or{" "}
-              <Link href="/stack" className="text-primary hover:underline">
-                see the full technical architecture
-              </Link>
-            </p>
+            <Button
+              asChild
+              variant="outline"
+              size="lg"
+              className="rounded-lg px-8 text-base font-semibold"
+            >
+              <Link href="/signup">Sign Up Free</Link>
+            </Button>
           </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            <Link href="/stack" className="text-primary hover:underline">
+              See the full technical architecture &rarr;
+            </Link>
+          </p>
         </div>
       </section>
 
