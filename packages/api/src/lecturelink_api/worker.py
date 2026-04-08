@@ -137,17 +137,17 @@ async def task_process_lecture(
 ) -> dict | None:
     """Process a lecture through the full pipeline.
 
-    Uses the service-role Supabase client (from worker startup) instead of
-    the user's JWT token. User JWTs expire after a few minutes, which causes
-    ``PGRST303 JWT expired`` errors on long-running lecture processing.
+    Prefers the service-role key (bypasses RLS, never expires). Falls back
+    to the caller's JWT when no service key is configured.
     """
     from lecturelink_api.pipeline.background import run_lecture_processing_async
 
+    service_key = ctx["settings"].SUPABASE_SERVICE_KEY
     logger.info("Processing lecture %s", lecture_id)
     return await run_lecture_processing_async(
         supabase_url=ctx["settings"].SUPABASE_URL,
-        supabase_key=ctx["settings"].SUPABASE_SERVICE_KEY or ctx["settings"].SUPABASE_ANON_KEY,
-        user_token="",  # Use service role — user JWTs expire during long processing
+        supabase_key=service_key or ctx["settings"].SUPABASE_ANON_KEY,
+        user_token="" if service_key else user_token,
         lecture_id=lecture_id,
         course_id=course_id,
         user_id=user_id,
@@ -174,14 +174,19 @@ async def task_generate_quiz(
     coding_language: str = "python",
     coding_only: bool = False,
 ) -> None:
-    """Generate quiz questions via the generator-critic loop."""
+    """Generate quiz questions via the generator-critic loop.
+
+    Prefers the service-role key (bypasses RLS, never expires). Falls back
+    to the caller's JWT when no service key is configured.
+    """
     from lecturelink_api.services.quiz import run_quiz_generation_async
 
+    service_key = ctx["settings"].SUPABASE_SERVICE_KEY
     logger.info("Generating quiz %s", quiz_id)
     await run_quiz_generation_async(
         supabase_url=ctx["settings"].SUPABASE_URL,
-        supabase_key=ctx["settings"].SUPABASE_SERVICE_KEY or ctx["settings"].SUPABASE_ANON_KEY,
-        user_token="",  # Use service role — user JWTs expire during long processing
+        supabase_key=service_key or ctx["settings"].SUPABASE_ANON_KEY,
+        user_token="" if service_key else user_token,
         quiz_id=quiz_id,
         course_id=course_id,
         user_id=user_id,
@@ -209,16 +214,23 @@ async def task_process_syllabus(
     supabase_key: str = "",
     user_token: str = "",
 ) -> None:
-    """Process a syllabus upload."""
+    """Process a syllabus upload.
+
+    Prefers the service-role key (bypasses RLS, never expires). Falls back
+    to the caller's JWT when no service key is configured.
+    """
     from supabase import create_client
 
     from lecturelink_api.services.syllabus_service import process_syllabus
 
+    service_key = ctx["settings"].SUPABASE_SERVICE_KEY
     logger.info("Processing syllabus %s", syllabus_id)
     sb = create_client(
         ctx["settings"].SUPABASE_URL,
-        ctx["settings"].SUPABASE_SERVICE_KEY or ctx["settings"].SUPABASE_ANON_KEY,
+        service_key or ctx["settings"].SUPABASE_ANON_KEY,
     )
+    if not service_key and user_token:
+        sb.auth.set_session(user_token, "")
 
     await process_syllabus(
         syllabus_id=syllabus_id,
@@ -246,14 +258,19 @@ async def task_process_material(
     user_token: str = "",
     is_reprocess: bool = False,
 ) -> dict | None:
-    """Process a course material through the extraction pipeline."""
+    """Process a course material through the extraction pipeline.
+
+    Prefers the service-role key (bypasses RLS, never expires). Falls back
+    to the caller's JWT when no service key is configured.
+    """
     from lecturelink_api.pipeline.material_background import run_material_processing_async
 
+    service_key = ctx["settings"].SUPABASE_SERVICE_KEY
     logger.info("Processing material %s", material_id)
     return await run_material_processing_async(
         supabase_url=ctx["settings"].SUPABASE_URL,
-        supabase_key=ctx["settings"].SUPABASE_SERVICE_KEY or ctx["settings"].SUPABASE_ANON_KEY,
-        user_token="",  # Use service role — user JWTs expire during long processing
+        supabase_key=service_key or ctx["settings"].SUPABASE_ANON_KEY,
+        user_token="" if service_key else user_token,
         material_id=material_id,
         course_id=course_id,
         user_id=user_id,

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,11 +16,46 @@ import {
 } from "@/components/ui/card";
 import { BookOpen } from "lucide-react";
 import { toast } from "sonner";
+
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginPageInner />
+    </Suspense>
+  );
+}
+
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Auto-trigger demo login if ?demo=true
+  useEffect(() => {
+    if (searchParams.get("demo") === "true") {
+      handleDemoLogin();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleDemoLogin() {
+    setLoading(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithPassword({
+        email: "demo@lecturelink.ca",
+        password: "password",
+      });
+      if (error) throw error;
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      toast.error("Demo login failed. Please try signing in manually.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -62,25 +97,7 @@ export default function LoginPage() {
               type="button"
               className="w-full"
               size="lg"
-              onClick={async () => {
-                setLoading(true);
-                try {
-                  const supabase = createClient();
-                  const { error } = await supabase.auth.signInWithPassword({
-                    email: "demo@lecturelink.ca",
-                    password: "demodemo123",
-                  });
-                  if (error) throw error;
-                  router.push("/dashboard");
-                  router.refresh();
-                } catch {
-                  toast.error(
-                    "Demo login failed. Please try signing in manually.",
-                  );
-                } finally {
-                  setLoading(false);
-                }
-              }}
+              onClick={handleDemoLogin}
               disabled={loading}
             >
               {loading ? "Signing in..." : "Try the Demo Account \u2192"}

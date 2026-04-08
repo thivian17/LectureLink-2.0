@@ -133,9 +133,9 @@ const studyTools = [
   },
   {
     icon: MessageSquare,
-    title: "Tutor Chat",
+    title: "Assessment Prep",
     description: "Ask about any concept",
-    path: "/tutor",
+    path: "/assessment-prep",
   },
 ];
 

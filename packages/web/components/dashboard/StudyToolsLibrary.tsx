@@ -33,9 +33,9 @@ interface Tool {
 const tools: Tool[] = [
   {
     icon: MessageSquare,
-    title: "AI Tutor",
+    title: "Assessment Prep",
     description: "Diagnose gaps, teach step by step, test understanding",
-    coursePath: "/tutor",
+    coursePath: "/assessment-prep",
   },
   {
     icon: Brain,

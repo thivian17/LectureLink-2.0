@@ -138,7 +138,7 @@ export default function DashboardPage() {
       ) : (
         <>
           {/* Timeline + Assessment Readiness side by side */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6 items-start">
             <AcademicCommandCenter
               timeline={timeline}
               stats={stats}

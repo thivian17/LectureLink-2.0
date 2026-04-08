@@ -306,3 +306,18 @@
   border-color: oklch(0.35 0.02 264);
   color: oklch(0.75 0.1 264);
 }
+
+/* ── Landing page hero animations ── */
+
+@keyframes ll-float-up {
+  0%   { transform: translateY(0);    opacity: 0; }
+  8%   { opacity: 0.6; }
+  60%  { opacity: 0.45; }
+  85%  { opacity: 0; }
+  100% { transform: translateY(-320px); opacity: 0; }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}

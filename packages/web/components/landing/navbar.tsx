@@ -70,12 +70,23 @@ export function Navbar({ activeLink }: NavbarProps) {
 
         {/* CTA + mobile toggle */}
         <div className="flex items-center gap-3">
-          <Button
-            asChild
-            className="hidden sm:inline-flex bg-primary text-primary-foreground rounded-lg px-5 py-2 text-sm font-semibold"
-          >
-            <Link href="/login">Try the Demo</Link>
-          </Button>
+          <div className="hidden sm:flex items-center gap-2">
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="text-sm font-medium"
+            >
+              <Link href="/login">Log In</Link>
+            </Button>
+            <Button
+              asChild
+              size="sm"
+              className="bg-primary text-primary-foreground rounded-lg px-4 text-sm font-semibold"
+            >
+              <Link href="/signup">Sign Up</Link>
+            </Button>
+          </div>
           <button
             className="md:hidden p-2 rounded-lg hover:bg-muted transition-colors"
             onClick={() => setMobileOpen(!mobileOpen)}
@@ -107,9 +118,14 @@ export function Navbar({ activeLink }: NavbarProps) {
               </Comp>
             );
           })}
-          <Button asChild className="w-full mt-2" size="sm">
-            <Link href="/login">Try the Demo</Link>
-          </Button>
+          <div className="flex flex-col gap-2 mt-2">
+            <Button asChild variant="outline" className="w-full" size="sm">
+              <Link href="/login" onClick={() => setMobileOpen(false)}>Log In</Link>
+            </Button>
+            <Button asChild className="w-full" size="sm">
+              <Link href="/signup" onClick={() => setMobileOpen(false)}>Sign Up</Link>
+            </Button>
+          </div>
         </div>
       )}
     </nav>

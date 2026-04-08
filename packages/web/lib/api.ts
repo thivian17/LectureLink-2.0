@@ -1591,6 +1591,15 @@ export async function getAssessmentReadinessV2(
   return resp.json();
 }
 
+export async function getCourseReadinessV2(
+  courseId: string,
+): Promise<AssessmentReadinessV2[]> {
+  const resp = await fetchWithAuth(
+    `${API_BASE}/api/dashboard/courses/${courseId}/readiness`,
+  );
+  return resp.json();
+}
+
 export async function getDashboardStats(): Promise<DashboardStats> {
   const resp = await fetchWithAuth(`${API_BASE}/api/dashboard/stats`);
   return resp.json();

@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
-import { SecondaryFeatures } from "@/components/landing/secondary-features";
 import { FloatingConcepts, TypewriterHeadline } from "@/components/landing/hero-animations";
-import { FeatureCardsAnimated } from "@/components/landing/feature-cards-animated";
+import { Feature197 } from "@/components/accordion-feature-section";
 import { PipelineAnimated } from "@/components/landing/pipeline-animated";
 import { ReadinessRingAnimated } from "@/components/landing/readiness-ring-animated";
 
@@ -129,15 +128,7 @@ export default function Home() {
               assessment.
             </p>
           </div>
-          <FeatureCardsAnimated features={FEATURES} />
-        </div>
-
-        {/* Tier 2: Secondary features */}
-        <div className="max-w-6xl mx-auto px-6 pb-24">
-          <p className="text-center text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-8">
-            Plus everything else you need
-          </p>
-          <SecondaryFeatures />
+          <Feature197 features={FEATURES} />
         </div>
       </section>
 

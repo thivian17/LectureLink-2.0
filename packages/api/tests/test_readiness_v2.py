@@ -611,11 +611,11 @@ async def test_quiz_attempts_contribute_to_signals():
         }],
         course=[{"name": "Math"}],
         links=[{"concept_id": "c1"}],
-        learning_events=[],
-        quiz_attempts=[
-            {"concept_id": "c1", "is_correct": True, "created_at": now_iso},
-            {"concept_id": "c1", "is_correct": False, "created_at": now_iso},
+        learning_events=[
+            {"concept_id": "c1", "is_correct": True, "created_at": now_iso, "event_type": "practice_test"},
+            {"concept_id": "c1", "is_correct": False, "created_at": now_iso, "event_type": "practice_test"},
         ],
+        quiz_attempts=[],
         concepts=[{"id": "c1", "title": "Algebra"}],
         learn_sessions=[],
         tutor_sessions=[],
@@ -647,7 +647,7 @@ async def test_effort_with_tutor_sessions():
         ],
         learn_sessions=[],
         tutor_sessions=[
-            {"id": "t1", "concept_id": "c1"},
+            {"id": "t1", "concepts_completed": [{"concept_id": "c1"}]},
         ],
     )
 

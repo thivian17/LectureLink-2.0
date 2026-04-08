@@ -20,6 +20,7 @@ from lecturelink_api.services.dashboard_actions import (
 from lecturelink_api.services.readiness_v2 import (
     compute_assessment_readiness,
     get_all_course_readiness,
+    get_course_assessment_readiness,
 )
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard-v2"])
@@ -58,6 +59,20 @@ async def courses(
     sb = get_authenticated_supabase(user, settings)
     result = await get_all_course_readiness(sb, user["id"])
     return DashboardCoursesResponse(courses=result)
+
+
+@router.get(
+    "/courses/{course_id}/readiness",
+    response_model=list[AssessmentReadinessV2],
+)
+async def course_readiness_v2(
+    course_id: str,
+    user: dict = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+):
+    """Get V2 readiness for all exam-type assessments in a course."""
+    sb = get_authenticated_supabase(user, settings)
+    return await get_course_assessment_readiness(sb, user["id"], course_id)
 
 
 @router.get("/readiness/{assessment_id}", response_model=AssessmentReadinessV2)

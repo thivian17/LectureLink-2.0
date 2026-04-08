@@ -124,35 +124,40 @@ export function QuizPreview() {
     { label: "D", text: "Level-order", selected: false },
   ];
   return (
-    <div style={{ fontFamily: font, background: "#fff", borderRadius: 16, border: `1px solid ${SLATE[200]}`, padding: 24, height: 380, display: "flex", flexDirection: "column" }}>
+    <div style={{ fontFamily: font, background: "#fff", borderRadius: 16, border: `1px solid ${SLATE[200]}`, padding: 20, height: 380, display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
         <span style={{ fontSize: 13, fontWeight: 600, color: SLATE[500] }}>Question 3 of 10</span>
         <span style={{ fontSize: 11, fontWeight: 600, color: BLUE, background: BLUE_LIGHT, padding: "3px 10px", borderRadius: 100 }}>Adaptive &middot; Medium</span>
       </div>
-      <div style={{ height: 4, borderRadius: 100, background: SLATE[100], marginBottom: 20, overflow: "hidden" }}>
+      <div style={{ height: 4, borderRadius: 100, background: SLATE[100], marginBottom: 14, overflow: "hidden" }}>
         <div style={{ height: "100%", width: "30%", borderRadius: 100, background: BLUE }} />
       </div>
-      <span style={{ fontSize: 11, color: SLATE[400], fontWeight: 500, marginBottom: 8 }}>Binary Search Trees</span>
-      <p style={{ fontSize: 15, fontWeight: 600, color: SLATE[800], lineHeight: 1.5, margin: "0 0 20px" }}>
+      <span style={{ fontSize: 11, color: SLATE[400], fontWeight: 500, marginBottom: 6 }}>Binary Search Trees</span>
+      <p style={{ fontSize: 14, fontWeight: 600, color: SLATE[800], lineHeight: 1.5, margin: "0 0 14px" }}>
         Which traversal algorithm visits the root node before its subtrees?
       </p>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {options.map(o => (
           <div key={o.label} style={{
-            display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
-            borderRadius: 12, border: `1.5px solid ${o.selected ? BLUE : SLATE[200]}`,
+            display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+            borderRadius: 10, border: `1.5px solid ${o.selected ? BLUE : SLATE[200]}`,
             background: o.selected ? BLUE_LIGHT : "#fff",
           }}>
             <div style={{
-              width: 22, height: 22, borderRadius: "50%", border: `2px solid ${o.selected ? BLUE : SLATE[300]}`,
+              width: 20, height: 20, borderRadius: "50%", border: `2px solid ${o.selected ? BLUE : SLATE[300]}`,
               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
               background: o.selected ? BLUE : "transparent",
             }}>
-              {o.selected && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff" }} />}
+              {o.selected && <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#fff" }} />}
             </div>
-            <span style={{ fontSize: 14, fontWeight: o.selected ? 600 : 400, color: o.selected ? BLUE : SLATE[700] }}>{o.text}</span>
+            <span style={{ fontSize: 13, fontWeight: o.selected ? 600 : 400, color: o.selected ? BLUE : SLATE[700] }}>{o.text}</span>
           </div>
         ))}
+      </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+        <div style={{ background: BLUE, color: "#fff", fontSize: 13, fontWeight: 600, padding: "8px 20px", borderRadius: 10 }}>
+          Check Answer
+        </div>
       </div>
     </div>
   );

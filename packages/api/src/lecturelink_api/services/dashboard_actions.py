@@ -551,13 +551,23 @@ async def get_weekly_stats(
     try:
         learn_result = (
             supabase.table("learn_sessions")
-            .select("duration_seconds")
+            .select("started_at, completed_at")
             .eq("user_id", user_id)
+            .eq("status", "completed")
             .gte("created_at", week_start_iso)
             .execute()
         )
         for s in learn_result.data or []:
-            study_minutes += (s.get("duration_seconds") or 0) // 60
+            started = s.get("started_at")
+            completed = s.get("completed_at")
+            if started and completed:
+                try:
+                    from datetime import datetime
+                    t0 = datetime.fromisoformat(str(started))
+                    t1 = datetime.fromisoformat(str(completed))
+                    study_minutes += max(0, int((t1 - t0).total_seconds())) // 60
+                except (ValueError, TypeError):
+                    pass
     except Exception:
         logger.debug("Failed to fetch learn session minutes", exc_info=True)
 

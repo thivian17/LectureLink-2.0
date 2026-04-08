@@ -420,10 +420,14 @@ class TestGetWeeklyStats:
     @pytest.mark.asyncio
     async def test_populated_stats(self):
         """User with streak, XP, sessions → all stats populated."""
+        # 20-minute learn session represented by started_at/completed_at
+        t0 = "2026-04-07T10:00:00+00:00"
+        t1 = "2026-04-07T10:20:00+00:00"
+
         sb = _make_supabase(
             streak=[{"current_streak": 5}],
             xp_events=[{"amount": 100}, {"amount": 50}],
-            learn_sessions=[{"duration_seconds": 1200}],  # 20 min
+            learn_sessions=[{"started_at": t0, "completed_at": t1}],  # 20 min
             tutor_sessions=[{"duration_seconds": 600}],   # 10 min
         )
 
@@ -434,7 +438,7 @@ class TestGetWeeklyStats:
             if name == "xp_events":
                 return _mock_chain([{"amount": 100}, {"amount": 50}])
             if name == "learn_sessions":
-                return _mock_chain([{"duration_seconds": 1200}])
+                return _mock_chain([{"started_at": t0, "completed_at": t1}])
             if name == "tutor_sessions":
                 return _mock_chain([{"duration_seconds": 600}])
             if name == "learning_events":

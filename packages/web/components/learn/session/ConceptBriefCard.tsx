@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BookOpen, Link2, Lightbulb, CheckCircle2, XCircle, FileText } from "lucide-react";
+import { BookOpen, Link2, CheckCircle2, XCircle, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -116,19 +116,6 @@ function ConceptBriefV1({
         </CardContent>
       </Card>
 
-      {/* Why it matters */}
-      <Card>
-        <CardContent className="p-4 space-y-2">
-          <div className="flex items-center gap-2 text-sm font-medium">
-            <Lightbulb className="h-4 w-4 text-amber-500" />
-            Why it matters
-          </div>
-          <MarkdownContent
-            content={concept.sections.why_it_matters}
-            className="text-sm text-muted-foreground prose prose-sm max-w-none dark:prose-invert"
-          />
-        </CardContent>
-      </Card>
 
       {/* Key relationship */}
       <Card>

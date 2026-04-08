@@ -292,20 +292,28 @@ async def _fetch_learning_events(
 async def _fetch_quiz_attempts(
     supabase, user_id: str, concept_ids: list[str],
 ) -> list[dict]:
-    """Fetch quiz_attempts for a user filtered to specific concepts."""
+    """Fetch quiz practice data for a user filtered to specific concepts.
+
+    quiz_attempts doesn't have concept_id directly — it lives on
+    quiz_questions.  Use learning_events (which records concept-level
+    quiz interactions) as the source of truth instead.
+    """
     if not concept_ids:
         return []
     try:
         result = (
-            supabase.table("quiz_attempts")
+            supabase.table("learning_events")
             .select("concept_id, is_correct, created_at")
             .eq("user_id", user_id)
             .in_("concept_id", concept_ids)
+            .in_("event_type", [
+                "practice_test", "power_quiz", "gut_check", "flash_review",
+            ])
             .execute()
         )
         return result.data or []
     except Exception:
-        logger.warning("Failed to fetch quiz_attempts", exc_info=True)
+        logger.warning("Failed to fetch quiz practice events", exc_info=True)
         return []
 
 
@@ -340,11 +348,11 @@ async def _fetch_completed_sessions(
     except Exception:
         logger.warning("Failed to fetch learn_sessions for effort", exc_info=True)
 
-    # tutor_sessions
+    # tutor_sessions (concepts are stored in the concepts_completed array)
     try:
         result = (
             supabase.table("tutor_sessions")
-            .select("id, concept_id")
+            .select("id, concepts_completed")
             .eq("user_id", user_id)
             .eq("course_id", course_id)
             .eq("status", "completed")
@@ -352,7 +360,14 @@ async def _fetch_completed_sessions(
             .execute()
         )
         for session in (result.data or []):
-            if session.get("concept_id") in concept_ids:
+            completed = session.get("concepts_completed") or []
+            session_concepts = set()
+            for c in completed:
+                if isinstance(c, dict):
+                    session_concepts.add(c.get("concept_id", c.get("id", "")))
+                elif isinstance(c, str):
+                    session_concepts.add(c)
+            if session_concepts & concept_ids:
                 count += 1
     except Exception:
         logger.warning("Failed to fetch tutor_sessions for effort", exc_info=True)
@@ -644,6 +659,40 @@ async def compute_course_readiness(
         recommended_action=recommended_action,
         assessment_count=len(exam_assessments),
     )
+
+
+async def get_course_assessment_readiness(
+    supabase, user_id: str, course_id: str,
+) -> list[AssessmentReadinessV2]:
+    """Return V2 readiness for every exam-type assessment in a course."""
+    try:
+        assessments_result = (
+            supabase.table("assessments")
+            .select("id, title, type, due_date")
+            .eq("course_id", course_id)
+            .execute()
+        )
+        assessments = assessments_result.data or []
+    except Exception:
+        logger.warning("Failed to fetch assessments for course %s", course_id, exc_info=True)
+        return []
+
+    exam_assessments = [
+        a for a in assessments
+        if a.get("type", "").lower() in EXAM_TYPES
+    ]
+
+    results: list[AssessmentReadinessV2] = []
+    for a in exam_assessments:
+        try:
+            result = await compute_assessment_readiness(supabase, user_id, a["id"])
+            results.append(result)
+        except Exception:
+            logger.warning("Failed to compute readiness for assessment %s", a["id"], exc_info=True)
+
+    # Sort by days_until_due ascending (most urgent first), nulls last
+    results.sort(key=lambda r: r.days_until_due if r.days_until_due is not None else 9999)
+    return results
 
 
 async def get_all_course_readiness(
