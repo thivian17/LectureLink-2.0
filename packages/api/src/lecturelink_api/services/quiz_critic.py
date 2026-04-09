@@ -64,7 +64,7 @@ async def critique_questions(
 
         chunk_text = (
             "\n".join([
-                f"[{c['chunk_id']}] {c['content'][:300]}"
+                f"[{c['id']}] {c['content'][:300]}"
                 for c in grounding
             ]) if grounding else "No source chunks available"
         )

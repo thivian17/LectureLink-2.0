@@ -29,7 +29,7 @@ def _make_plan(**overrides):
                 "category": "concept", "description": "Energy conservation",
             },
             "grounding_chunks": [
-                {"chunk_id": "chunk-1", "content": "Energy is conserved"},
+                {"id": "chunk-1", "content": "Energy is conserved"},
             ],
         }],
         "difficulty": "medium",

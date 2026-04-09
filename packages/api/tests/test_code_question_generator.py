@@ -53,7 +53,7 @@ def _make_plan(**overrides):
             },
             "grounding_chunks": [
                 {
-                    "chunk_id": "chunk-1",
+                    "id": "chunk-1",
                     "content": "Binary search divides the search interval in half",
                 },
             ],

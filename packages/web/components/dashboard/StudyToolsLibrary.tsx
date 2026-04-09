@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   GraduationCap,
   ClipboardCheck,
-  Target,
   MessageSquare,
   Search,
   Pencil,
@@ -53,13 +52,7 @@ const tools: Tool[] = [
     icon: Search,
     title: "Ask Your Lectures",
     description: "Answers sourced from your material with citations",
-    coursePath: "/search",
-  },
-  {
-    icon: Target,
-    title: "Exam Readiness",
-    description: "Coverage, Practice, Freshness & Effort signals per assessment",
-    coursePath: "/readiness",
+    coursePath: "/chat",
   },
   {
     icon: Pencil,
@@ -84,7 +77,7 @@ export function StudyToolsLibrary() {
   return (
     <section className="space-y-3">
       <h2 className="text-base font-semibold">Study Tools</h2>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {tools.map((tool) => {
           const Icon = tool.icon;
           const disabled = tool.comingSoon || courses.length === 0;

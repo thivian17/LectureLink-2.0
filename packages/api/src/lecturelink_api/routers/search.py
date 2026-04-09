@@ -63,7 +63,7 @@ async def search(
     for chunk in chunks:
         results.append(
             SearchResult(
-                chunk_id=chunk["chunk_id"],
+                chunk_id=chunk["id"],
                 lecture_id=chunk["lecture_id"],
                 lecture_title=chunk["lecture_title"],
                 content=chunk["content"],

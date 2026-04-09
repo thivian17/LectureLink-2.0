@@ -31,7 +31,7 @@ def _make_plan():
                     "id": "c1", "title": "T1", "category": "c",
                 },
                 "grounding_chunks": [
-                    {"chunk_id": "ch1", "content": "src"},
+                    {"id": "ch1", "content": "src"},
                 ],
             },
         ],
@@ -148,13 +148,13 @@ class TestQuizLoop:
                 {
                     "concept": {"id": "c1", "title": "T1", "category": "c"},
                     "grounding_chunks": [
-                        {"chunk_id": "ch1", "content": "src"},
+                        {"id": "ch1", "content": "src"},
                     ],
                 },
                 {
                     "concept": {"id": "c2", "title": "T2", "category": "c"},
                     "grounding_chunks": [
-                        {"chunk_id": "ch2", "content": "src"},
+                        {"id": "ch2", "content": "src"},
                     ],
                 },
             ],
@@ -205,13 +205,13 @@ class TestQuizLoop:
                 {
                     "concept": {"id": "c1", "title": "T1", "category": "c"},
                     "grounding_chunks": [
-                        {"chunk_id": "ch1", "content": "src"},
+                        {"id": "ch1", "content": "src"},
                     ],
                 },
                 {
                     "concept": {"id": "c2", "title": "T2", "category": "c"},
                     "grounding_chunks": [
-                        {"chunk_id": "ch2", "content": "src"},
+                        {"id": "ch2", "content": "src"},
                     ],
                 },
             ],

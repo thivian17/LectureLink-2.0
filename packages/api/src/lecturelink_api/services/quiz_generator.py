@@ -61,7 +61,7 @@ async def generate_questions(
         chunks = item["grounding_chunks"]
 
         chunk_text = "\n\n".join([
-            f"[Chunk ID: {c['chunk_id']}]\n{c['content']}"
+            f"[Chunk ID: {c['id']}]\n{c['content']}"
             for c in chunks
         ])
 

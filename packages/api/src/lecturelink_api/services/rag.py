@@ -118,7 +118,7 @@ Lecture Content:
                 chunk = chunks[idx - 1]  # 1-indexed
                 source_chunks.append(
                     {
-                        "chunk_id": chunk["chunk_id"],
+                        "chunk_id": chunk["id"],
                         "content": chunk["content"][:200],  # Preview only
                         "lecture_title": chunk["lecture_title"],
                         "start_time": chunk.get("start_time"),
@@ -131,7 +131,7 @@ Lecture Content:
         if not source_chunks:
             source_chunks = [
                 {
-                    "chunk_id": c["chunk_id"],
+                    "chunk_id": c["id"],
                     "content": c["content"][:200],
                     "lecture_title": c["lecture_title"],
                     "start_time": c.get("start_time"),
@@ -156,7 +156,7 @@ Lecture Content:
             "confidence": 0.5,
             "source_chunks": [
                 {
-                    "chunk_id": c["chunk_id"],
+                    "chunk_id": c["id"],
                     "content": c["content"][:200],
                     "lecture_title": c["lecture_title"],
                     "start_time": c.get("start_time"),

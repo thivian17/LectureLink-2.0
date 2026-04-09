@@ -126,12 +126,6 @@ const studyTools = [
     path: "/quizzes",
   },
   {
-    icon: Target,
-    title: "Assessment Prep",
-    description: "Targeted exam readiness",
-    path: "/readiness",
-  },
-  {
     icon: MessageSquare,
     title: "Assessment Prep",
     description: "Ask about any concept",

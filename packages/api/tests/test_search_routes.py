@@ -84,7 +84,7 @@ class TestSearch:
         course_id = str(uuid.uuid4())
         mock_chunks = [
             {
-                "chunk_id": str(uuid.uuid4()),
+                "id": str(uuid.uuid4()),
                 "lecture_id": str(uuid.uuid4()),
                 "lecture_title": "Lecture 1",
                 "content": "Thermodynamics is the study of heat and energy.",

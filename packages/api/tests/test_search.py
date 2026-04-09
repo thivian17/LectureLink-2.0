@@ -29,7 +29,7 @@ class TestSearchLectures:
 
         results = await search_lectures(supabase_mock, "course-1", "first law")
         assert len(results) == 1
-        assert results[0]["chunk_id"] == "chunk-1"
+        assert results[0]["id"] == "chunk-1"
         assert results[0]["lecture_title"] == "Lecture 5: Thermodynamics"
         assert results[0]["score"] == 0.85
 

@@ -25,7 +25,7 @@ def _make_plan():
         "concepts": [{
             "concept": {"id": "c1"},
             "grounding_chunks": [
-                {"chunk_id": "c1", "content": "Source material"},
+                {"id": "c1", "content": "Source material"},
             ],
         }],
         "difficulty": "medium",

@@ -32,7 +32,7 @@ async def search_lectures(
         user_id: For RLS verification
 
     Returns:
-        List of dicts with: chunk_id, lecture_id, lecture_title, content,
+        List of dicts with: id, lecture_id, lecture_title, content,
         start_time, end_time, slide_number, score, metadata
     """
     # 1. Generate query embedding
@@ -76,7 +76,7 @@ async def search_lectures(
     for r in result.data:
         chunks.append(
             {
-                "chunk_id": r.get("chunk_id", r.get("id")),
+                "id": r.get("id", r.get("chunk_id")),
                 "lecture_id": r["lecture_id"],
                 "lecture_title": title_map.get(r["lecture_id"], "Unknown"),
                 "content": r["content"],
