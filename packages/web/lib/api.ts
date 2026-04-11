@@ -496,6 +496,7 @@ export async function askQuestion(
   const resp = await fetchWithAuth(`${API_BASE}/api/qa`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(60_000),
     body: JSON.stringify({
       course_id: courseId,
       question,
@@ -1214,7 +1215,9 @@ export async function submitGutCheck(
       body: JSON.stringify({ concept_id: conceptId, answer_index: answerIndex }),
     },
   );
-  return resp.json();
+  const data = await resp.json();
+  console.log("[submitGutCheck] API response:", { conceptId, answerIndex, response: data });
+  return data;
 }
 
 export async function getPowerQuiz(
@@ -1223,7 +1226,9 @@ export async function getPowerQuiz(
   const resp = await fetchWithAuth(
     `${API_BASE}/api/learn/session/${sessionId}/quiz`,
   );
-  return resp.json();
+  const data = await resp.json();
+  console.log("[getPowerQuiz] API response:", { sessionId, questionCount: data.questions?.length ?? 0 });
+  return data;
 }
 
 export async function submitLearnQuizAnswer(
@@ -1541,6 +1546,7 @@ export async function sendDashboardChat(
   const resp = await fetchWithAuth(`${API_BASE}/api/dashboard/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(60_000),
     body: JSON.stringify({
       message,
       conversation_history: conversationHistory,

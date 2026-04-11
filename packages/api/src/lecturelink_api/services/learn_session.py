@@ -709,7 +709,10 @@ async def _try_reuse_power_quiz_questions(
         )
         candidates = result.data or []
     except Exception:
-        logger.debug("Failed to fetch reusable questions", exc_info=True)
+        logger.warning(
+            "Power quiz: failed to fetch reusable questions for course %s",
+            course_id, exc_info=True,
+        )
         return []
 
     if not candidates:
@@ -839,7 +842,10 @@ async def get_power_quiz(
                 )
                 title = (c_row.data or {}).get("title", "") or ""
             except Exception:
-                logger.debug("Failed to resolve concept title for %s", concept_id, exc_info=True)
+                logger.warning(
+                    "Power quiz: failed to resolve concept title for concept %s (course=%s)",
+                    concept_id, course_id, exc_info=True,
+                )
 
         # Try hybrid search first (only if we have a non-empty query)
         if title.strip():
@@ -851,7 +857,10 @@ async def get_power_quiz(
                     limit=3,
                 )
             except Exception:
-                logger.debug("Hybrid search failed for concept %s", title, exc_info=True)
+                logger.warning(
+                    "Power quiz: hybrid search failed for concept '%s' in course %s",
+                    title, course_id, exc_info=True,
+                )
 
         # Fallback: fetch chunks directly from the concept's lecture
         if not chunks and concept_id:
@@ -885,7 +894,10 @@ async def get_power_quiz(
                             )
                             lec_title = lec.data.get("title", "") if lec.data else ""
                         except Exception:
-                            logger.debug("Failed to resolve lecture title for %s", lecture_id, exc_info=True)
+                            logger.warning(
+                                "Power quiz: failed to resolve lecture title for lecture %s (course=%s)",
+                                lecture_id, course_id, exc_info=True,
+                            )
                         chunks.append({
                             "chunk_id": row["id"],
                             "lecture_id": row["lecture_id"],
@@ -897,7 +909,10 @@ async def get_power_quiz(
                             "metadata": row.get("metadata", {}),
                         })
             except Exception:
-                logger.debug("Direct chunk fallback failed for concept %s", concept_id, exc_info=True)
+                logger.warning(
+                    "Power quiz: direct chunk fallback failed for concept %s (course=%s)",
+                    concept_id, course_id, exc_info=True,
+                )
 
         if chunks:
             all_chunks.extend(chunks)
@@ -940,7 +955,15 @@ async def get_power_quiz(
                         "metadata": row.get("metadata", {}),
                     })
         except Exception:
-            logger.debug("Course-wide chunk fallback failed", exc_info=True)
+            logger.warning(
+                "Power quiz: course-wide chunk fallback failed for course %s",
+                course_id, exc_info=True,
+            )
+
+    logger.info(
+        "Power quiz chunk gathering: %d chunks from %d concepts (course=%s, session=%s)",
+        len(all_chunks), len(concept_info), course_id, session_id,
+    )
 
     # --- Try reusing existing questions before Gemini call ---
     concept_ids = [c["concept_id"] for c in concept_info if c.get("concept_id")]
@@ -1031,12 +1054,29 @@ async def get_power_quiz(
             if result.data:
                 q["_stored_question_id"] = result.data[0]["id"]
         except Exception:
-            logger.debug("Failed to persist power quiz question", exc_info=True)
+            logger.warning(
+                "Power quiz: failed to persist generated question (course=%s, session=%s)",
+                course_id, session_id, exc_info=True,
+            )
 
     # Merge reused + generated, shuffle
     all_quiz_questions = reused_questions + generated_questions
     random.shuffle(all_quiz_questions)
     questions = all_quiz_questions[:num_questions]
+
+    logger.info(
+        "Power quiz: merged %d questions (reused=%d, generated=%d) for session %s",
+        len(questions), len(reused_questions), len(generated_questions), session_id,
+    )
+
+    if not questions:
+        logger.error(
+            "Power quiz: ZERO questions produced for session %s (course=%s). "
+            "Reused: %d, Generated: %d, Chunks found: %d, Concepts: %d",
+            session_id, course_id,
+            len(reused_questions), len(generated_questions),
+            len(all_chunks), len(concept_info),
+        )
 
     # Store quiz data in session
     quiz_id = str(uuid.uuid4())

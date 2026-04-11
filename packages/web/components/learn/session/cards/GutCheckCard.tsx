@@ -16,7 +16,11 @@ interface GutCheckCardProps {
 
 export function GutCheckCard({ card, sessionId, conceptId, onInteraction }: GutCheckCardProps) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [result, setResult] = useState<{ correct: boolean; explanation: string } | null>(null);
+  const [result, setResult] = useState<{
+    correct: boolean;
+    explanation: string;
+    clarification?: string | null;
+  } | null>(null);
 
   async function handleSelect(index: number) {
     if (selectedIndex !== null) return;
@@ -26,14 +30,18 @@ export function GutCheckCard({ card, sessionId, conceptId, onInteraction }: GutC
       const apiResult = await submitGutCheck(sessionId, conceptId, index);
       setResult({
         correct: apiResult.correct,
-        explanation: card.explanation ?? "",
+        explanation: apiResult.explanation || card.explanation || "",
+        clarification: apiResult.clarification ?? null,
       });
       onInteraction(apiResult.xp_earned);
-    } catch {
-      const isCorrect = index === card.correct_index;
+    } catch (err) {
+      console.error("[GutCheckCard] API call failed, falling back to local grading:", err);
+      const correctIndex = Number(card.correct_index);
+      const isCorrect = index === correctIndex;
       setResult({
         correct: isCorrect,
         explanation: card.explanation ?? "",
+        clarification: isCorrect ? null : "Review the study card for more details.",
       });
       onInteraction(isCorrect ? 10 : 0);
     }
@@ -91,6 +99,11 @@ export function GutCheckCard({ card, sessionId, conceptId, onInteraction }: GutC
               )}
             </div>
             <p className="text-muted-foreground">{result.explanation}</p>
+            {result.clarification && (
+              <p className="text-muted-foreground mt-2 pt-2 border-t border-red-200">
+                {result.clarification}
+              </p>
+            )}
           </div>
         )}
       </CardContent>

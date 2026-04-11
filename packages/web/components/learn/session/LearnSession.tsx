@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { X } from "lucide-react";
+import { X, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -61,6 +62,7 @@ export function LearnSession({ courseId, initialTargetAssessmentId, initialTarge
 
   // Power quiz state
   const [quizQuestions, setQuizQuestions] = useState<PowerQuizQuestion[]>([]);
+  const [quizLoading, setQuizLoading] = useState(false);
 
   // Celebration state
   const [celebrationData, setCelebrationData] = useState<LearnSessionComplete | null>(null);
@@ -162,11 +164,16 @@ export function LearnSession({ courseId, initialTargetAssessmentId, initialTarge
 
   async function loadQuiz() {
     if (!sessionId) return;
+    setQuizLoading(true);
     try {
       const data = await getPowerQuiz(sessionId);
-      setQuizQuestions(data.questions);
-    } catch {
+      setQuizQuestions(data.questions || []);
+    } catch (err) {
+      console.error("[LearnSession] Failed to load power quiz:", err);
+      setQuizQuestions([]);
       toast.error("Failed to load quiz");
+    } finally {
+      setQuizLoading(false);
     }
   }
 
@@ -293,15 +300,28 @@ export function LearnSession({ courseId, initialTargetAssessmentId, initialTarge
             questions={quizQuestions}
             onComplete={handleQuizComplete}
           />
-        ) : (
-          <div className="text-center py-12 max-w-md mx-auto space-y-4">
-            <p className="text-muted-foreground">
-              No quiz questions available for this session.
-            </p>
-            <Button onClick={handleQuizComplete}>
-              Finish Session
-            </Button>
+        ) : quizLoading ? (
+          <div className="flex flex-col items-center justify-center py-12 space-y-3">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+            <p className="text-sm text-muted-foreground">Generating quiz questions...</p>
           </div>
+        ) : (
+          <Card className="max-w-md mx-auto">
+            <CardContent className="p-6 text-center space-y-4">
+              <div className="flex justify-center">
+                <CheckCircle2 className="h-10 w-10 text-green-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg">Great study session!</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  The quiz couldn&apos;t be generated for this session, but your concept review is complete.
+                </p>
+              </div>
+              <Button onClick={handleQuizComplete} className="w-full">
+                Complete Session
+              </Button>
+            </CardContent>
+          </Card>
         )
       )}
 

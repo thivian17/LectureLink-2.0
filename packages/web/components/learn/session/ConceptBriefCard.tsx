@@ -78,17 +78,19 @@ function ConceptBriefV1({
       const result = await submitGutCheck(sessionId, concept.concept_id, index);
       setGutCheckResult({
         correct: result.correct,
-        explanation: concept.gut_check.explanation,
-        clarification: null,
+        explanation: result.explanation || concept.gut_check.explanation,
+        clarification: result.clarification ?? null,
       });
       setXpAmount(result.xp_earned);
       setXpTrigger((t) => t + 1);
-    } catch {
-      const isCorrect = index === concept.gut_check.correct_index;
+    } catch (err) {
+      console.error("[GutCheck] API call failed, falling back to local grading:", err);
+      const correctIndex = Number(concept.gut_check.correct_index);
+      const isCorrect = index === correctIndex;
       setGutCheckResult({
         correct: isCorrect,
-        explanation: concept.gut_check.explanation,
-        clarification: null,
+        explanation: concept.gut_check.explanation ?? "",
+        clarification: isCorrect ? null : "Review the concept brief above for more details.",
       });
     }
   }
@@ -204,7 +206,9 @@ function ConceptBriefV1({
               </div>
               <p className="text-muted-foreground">{gutCheckResult.explanation}</p>
               {gutCheckResult.clarification && (
-                <p className="mt-2 text-muted-foreground italic">{gutCheckResult.clarification}</p>
+                <p className="text-muted-foreground mt-2 pt-2 border-t border-red-200">
+                  {gutCheckResult.clarification}
+                </p>
               )}
             </div>
           )}

@@ -177,14 +177,31 @@ export default function ChatPage() {
       setLoading(true);
 
       try {
-        const res = await askQuestion(courseId, trimmed);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const res: any = await askQuestion(courseId, trimmed);
+
+        // Backend returns source_chunks / follow_up_suggestions;
+        // map to the frontend QACitation shape.
+        const rawChunks: Array<Record<string, unknown>> =
+          res.citations ?? res.source_chunks ?? [];
+        const citations: QACitation[] = rawChunks.map((c) => ({
+          id: String(c.chunk_id ?? c.id ?? crypto.randomUUID()),
+          lecture_id: String(c.lecture_id ?? ""),
+          lecture_title: String(c.lecture_title ?? ""),
+          timestamp_seconds: (c.start_time as number) ?? null,
+          slide_number: (c.slide_number as number) ?? null,
+          content_preview: String(c.content ?? c.content_preview ?? ""),
+        }));
+
+        const followUps: string[] =
+          res.follow_ups ?? res.follow_up_suggestions ?? [];
 
         const assistantMsg: Message = {
           id: crypto.randomUUID(),
           role: "assistant",
           content: res.answer,
-          citations: res.citations,
-          followUps: res.follow_ups,
+          citations,
+          followUps,
           confidence: res.confidence,
         };
 

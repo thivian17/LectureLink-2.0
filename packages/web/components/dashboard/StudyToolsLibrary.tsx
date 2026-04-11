@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   GraduationCap,
   ClipboardCheck,
-  MessageSquare,
+  Target,
   Search,
   Pencil,
   Brain,
@@ -31,9 +31,9 @@ interface Tool {
 
 const tools: Tool[] = [
   {
-    icon: MessageSquare,
+    icon: Target,
     title: "Assessment Prep",
-    description: "Diagnose gaps, teach step by step, test understanding",
+    description: "Select an assessment and choose your study mode",
     coursePath: "/assessment-prep",
   },
   {
@@ -53,6 +53,12 @@ const tools: Tool[] = [
     title: "Ask Your Lectures",
     description: "Answers sourced from your material with citations",
     coursePath: "/chat",
+  },
+  {
+    icon: GraduationCap,
+    title: "AI Tutor Chat",
+    description: "Chat with an AI tutor about your lecture content",
+    coursePath: "/tutor",
   },
   {
     icon: Pencil,
