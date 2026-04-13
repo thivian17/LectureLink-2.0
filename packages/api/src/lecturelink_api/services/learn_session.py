@@ -979,6 +979,24 @@ async def get_power_quiz(
                 rq["concept_title"] = ci.get("title", "")
                 break
 
+    # Attach source citation from concept chunks for reused questions
+    for rq in reused_questions:
+        if not rq.get("_source_citation"):
+            rq_concept_id = rq.get("concept_id", "")
+            for ci in concept_info:
+                if ci["concept_id"] == rq_concept_id and ci.get("chunks"):
+                    chunk = ci["chunks"][0]
+                    lecture_title = chunk.get("lecture_title", "")
+                    start_time = chunk.get("start_time")
+                    if lecture_title:
+                        if start_time is not None:
+                            minutes = int(start_time) // 60
+                            seconds = int(start_time) % 60
+                            rq["_source_citation"] = f"{lecture_title}, {minutes}:{seconds:02d}"
+                        else:
+                            rq["_source_citation"] = lecture_title
+                    break
+
     remaining_needed = num_questions - len(reused_questions)
 
     # If we still have no lecture content, return reused questions only
@@ -1026,6 +1044,23 @@ async def get_power_quiz(
             num_questions=remaining_needed,
             title_to_id=title_to_id,
         )
+
+        # Attach source citation from concept chunks for generated questions
+        for gq in generated_questions:
+            q_concept_id = gq.get("concept_id", "")
+            for ci in concept_info:
+                if ci["concept_id"] == q_concept_id and ci.get("chunks"):
+                    chunk = ci["chunks"][0]
+                    lecture_title = chunk.get("lecture_title", "")
+                    start_time = chunk.get("start_time")
+                    if lecture_title:
+                        if start_time is not None:
+                            minutes = int(start_time) // 60
+                            seconds = int(start_time) % 60
+                            gq["_source_citation"] = f"{lecture_title}, {minutes}:{seconds:02d}"
+                        else:
+                            gq["_source_citation"] = lecture_title
+                    break
 
     # --- Persist newly generated questions to quiz_questions ---
     for q in generated_questions:
@@ -1176,8 +1211,17 @@ async def submit_power_quiz_answer(
         xp_earned = 0
 
     # Build source citation
-    source_citation = ""
+    source_citation = question.get("_source_citation", "")
     explanation = question.get("_explanation", "")
+    if not explanation.strip():
+        concept_title = question.get("concept_title", "this concept")
+        if is_correct:
+            explanation = f"Correct! The answer is {correct_answer_text}."
+        else:
+            explanation = (
+                f"The correct answer is {correct_answer_text}. "
+                f"Review {concept_title} for more details."
+            )
 
     # Record result
     quiz_results = session_data.get("quiz_results", [])
@@ -1219,6 +1263,7 @@ async def submit_power_quiz_answer(
     return {
         "correct": is_correct,
         "correct_answer": correct_answer_text,
+        "correct_index": correct_index,
         "explanation": explanation,
         "source_citation": source_citation,
         "xp_earned": xp_earned,

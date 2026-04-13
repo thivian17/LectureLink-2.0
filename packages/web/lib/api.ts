@@ -544,12 +544,15 @@ export async function generateQuiz(
     coding_only?: boolean;
   },
 ): Promise<{ quiz_id: string; status: "generating" }> {
+  console.log("[generateQuiz] Request:", { courseId, options });
   const resp = await fetchWithAuth(`${API_BASE}/api/quizzes/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ course_id: courseId, ...options }),
   });
-  return resp.json();
+  const data = await resp.json();
+  console.log("[generateQuiz] Response:", data);
+  return data;
 }
 
 export async function getQuizGenerationStatus(
@@ -558,7 +561,9 @@ export async function getQuizGenerationStatus(
   const resp = await fetchWithAuth(
     `${API_BASE}/api/quizzes/${quizId}/status`,
   );
-  return resp.json();
+  const data = await resp.json();
+  console.log("[getQuizGenerationStatus] Poll:", data);
+  return data;
 }
 
 export async function submitQuiz(

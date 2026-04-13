@@ -21,6 +21,7 @@ export function PowerQuiz({ sessionId, questions, onComplete }: PowerQuizProps) 
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [result, setResult] = useState<QuizAnswerResult | null>(null);
   const [combo, setCombo] = useState(0);
+  const [maxCombo, setMaxCombo] = useState(0);
   const [xpAmount, setXpAmount] = useState(0);
   const [xpTrigger, setXpTrigger] = useState(0);
   const startTime = useRef(0);
@@ -45,14 +46,42 @@ export function PowerQuiz({ sessionId, questions, onComplete }: PowerQuizProps) 
   }, [currentIndex]);
 
   if (showingSummary) {
+    const accuracy = quizStats.total > 0
+      ? Math.round((quizStats.correct / quizStats.total) * 100)
+      : 0;
+
     return (
-      <div className="max-w-lg mx-auto text-center py-12 space-y-4 animate-in fade-in zoom-in-95 duration-300">
-        <div className="text-5xl">🎯</div>
-        <h3 className="text-xl font-bold">Quiz Complete!</h3>
-        <p className="text-2xl font-bold text-primary">
-          {quizStats.correct}/{quizStats.total} correct
-        </p>
-        <p className="text-sm text-muted-foreground">+{quizStats.xpTotal} XP earned</p>
+      <div className="max-w-lg mx-auto text-center py-8 space-y-5 animate-in fade-in zoom-in-95 duration-300">
+        <div className="text-5xl">
+          {accuracy >= 80 ? "🎯" : accuracy >= 50 ? "💪" : "📚"}
+        </div>
+        <h3 className="text-xl font-bold">Quiz complete!</h3>
+        <div className="space-y-1">
+          <p className="text-3xl font-bold text-primary">
+            {quizStats.correct}/{quizStats.total}
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {accuracy}% accuracy
+          </p>
+        </div>
+        <div className="flex justify-center gap-6 text-sm text-muted-foreground">
+          <div>
+            <p className="text-lg font-semibold text-emerald-500">+{quizStats.xpTotal}</p>
+            <p>XP earned</p>
+          </div>
+          {maxCombo > 0 && (
+            <div>
+              <p className="text-lg font-semibold text-orange-500">🔥 x{maxCombo}</p>
+              <p>Best combo</p>
+            </div>
+          )}
+        </div>
+        <button
+          onClick={onComplete}
+          className="w-full rounded-lg bg-primary text-primary-foreground py-2.5 text-sm font-medium hover:bg-primary/90 transition-colors mt-4"
+        >
+          Continue
+        </button>
       </div>
     );
   }
@@ -72,6 +101,7 @@ export function PowerQuiz({ sessionId, questions, onComplete }: PowerQuizProps) 
       const res = await submitLearnQuizAnswer(sessionId, question.question_id, index, timeMs);
       setResult(res);
       setCombo(res.combo_count);
+      setMaxCombo((prev) => Math.max(prev, res.combo_count));
       setXpAmount(res.xp_earned);
       setXpTrigger((t) => t + 1);
       setQuizStats((prev) => ({
@@ -79,15 +109,30 @@ export function PowerQuiz({ sessionId, questions, onComplete }: PowerQuizProps) 
         total: prev.total + 1,
         xpTotal: prev.xpTotal + res.xp_earned,
       }));
-    } catch {
-      setResult(null);
+    } catch (err) {
+      console.error("[PowerQuiz] Answer submission failed:", err);
+      // Create a fallback result so the user isn't stuck
+      setResult({
+        correct: false,
+        correct_answer: "",
+        correct_index: -1,
+        explanation: "Unable to verify your answer. Moving on to the next question.",
+        source_citation: "",
+        xp_earned: 0,
+        combo_count: 0,
+        combo_multiplier: 1,
+      });
+      setCombo(0); // Break combo on error
+      setQuizStats((prev) => ({
+        ...prev,
+        total: prev.total + 1,
+      }));
     }
   }
 
   function handleNext() {
     if (currentIndex >= questions.length - 1) {
       setShowingSummary(true);
-      setTimeout(() => onComplete(), 2500);
       return;
     }
     setCurrentIndex((i) => i + 1);
@@ -143,7 +188,12 @@ export function PowerQuiz({ sessionId, questions, onComplete }: PowerQuizProps) 
               {question.options.map((option, i) => {
                 const isSelected = selectedAnswer === i;
                 const showResult = result !== null;
-                const isCorrectOption = showResult && result.correct_answer === option;
+                const isCorrectOption = showResult && (
+                  // Prefer index-based matching (robust)
+                  (result.correct_index !== undefined && result.correct_index >= 0 && result.correct_index === i) ||
+                  // Fall back to string matching
+                  (result.correct_index === undefined && result.correct_answer === option)
+                );
 
                 return (
                   <button
@@ -173,13 +223,17 @@ export function PowerQuiz({ sessionId, questions, onComplete }: PowerQuizProps) 
               <div
                 className={cn(
                   "rounded-lg p-3 text-sm transition-all duration-300",
-                  result.correct
-                    ? "bg-green-50 border border-green-200"
-                    : "bg-red-50 border border-red-200",
+                  result.correct_index === -1
+                    ? "bg-amber-50 border border-amber-200" // API error state
+                    : result.correct
+                      ? "bg-green-50 border border-green-200"
+                      : "bg-red-50 border border-red-200",
                 )}
               >
                 <div className="flex items-center gap-1.5 mb-1 font-medium">
-                  {result.correct ? (
+                  {result.correct_index === -1 ? (
+                    <><span className="h-4 w-4 text-amber-600">⚠</span> Connection error</>
+                  ) : result.correct ? (
                     <><CheckCircle2 className="h-4 w-4 text-green-600" /> Correct!</>
                   ) : (
                     <><XCircle className="h-4 w-4 text-red-600" /> Incorrect</>

@@ -74,14 +74,6 @@ function ItemRow({ item }: { item: TimelineItem }) {
     );
   }
 
-  if (item.item_type === "practice_quiz") {
-    return (
-      <Link href={`/dashboard/courses/${item.course_id}/quizzes`}>
-        {content}
-      </Link>
-    );
-  }
-
   return content;
 }
 

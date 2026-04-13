@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Navbar } from "@/components/landing/navbar";
@@ -17,7 +16,7 @@ const FEATURES = [
     id: 1,
     title: "AI Tutor",
     description:
-      "One-on-one study sessions that diagnose your knowledge gaps, teach concepts step by step, and test your understanding \u2014 all pulled from your actual lecture content.",
+      "Like office hours, but available at 2am. It knows your lectures, finds your weak spots, and walks you through them \u2014 using your professor\u2019s examples, not generic textbook content.",
   },
   {
     id: 2,
@@ -71,16 +70,16 @@ export default function Home() {
             variant="secondary"
             className="px-4 py-1.5 text-sm font-medium"
           >
-            <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-            AI-Powered Study Platform
+            Used by students at Schulich School of Business
           </Badge>
 
           <TypewriterHeadline />
 
           <p className="max-w-2xl mx-auto text-lg text-muted-foreground leading-relaxed">
-            Upload your syllabus and lectures. LectureLink learns your course,
-            tracks what you&apos;ve mastered, and tells you exactly what to focus
-            on before every exam.
+            Upload your syllabus and lecture recordings. LectureLink processes
+            every slide and minute of audio, maps concepts to your upcoming
+            assessments, and builds a study plan ranked by what you&apos;re most
+            likely to get wrong.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -111,9 +110,15 @@ export default function Home() {
 
       {/* Social proof */}
       <section className="py-8 px-6 border-y border-border bg-muted/30">
-        <p className="text-center text-sm text-muted-foreground">
-          Built for students, by a student &mdash; processing lecture audio, slides, and syllabi into personalized study plans
-        </p>
+        <figure className="max-w-2xl mx-auto text-center">
+          <blockquote className="text-sm italic text-muted-foreground leading-relaxed">
+            &ldquo;It told me exactly which topics I was weakest on before my final.
+            I stopped guessing and started studying what actually mattered.&rdquo;
+          </blockquote>
+          <figcaption className="mt-2 text-xs text-muted-foreground/70">
+            &mdash; BBA student, Schulich School of Business
+          </figcaption>
+        </figure>
       </section>
 
       {/* Features — Accordion with interactive mockups */}
@@ -121,11 +126,11 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-6 py-24">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-[800] tracking-tight">
-              Everything you need to study smarter
+              One platform for every stage of exam prep
             </h2>
             <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-              Six core features that work together to keep you prepared for every
-              assessment.
+              From the day you get your syllabus to the night before your final &mdash;
+              LectureLink covers the full cycle.
             </p>
           </div>
           <Feature197 features={FEATURES} />
@@ -137,7 +142,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-[800] tracking-tight">
-              From lecture recording to study-ready
+              What happens after you hit upload
             </h2>
           </div>
           <PipelineAnimated />
@@ -148,9 +153,14 @@ export default function Home() {
       <section className="py-24 px-6">
         <div className="max-w-2xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-4xl font-[800] tracking-tight">See your readiness in real time</h2>
+            <h2 className="text-4xl font-[800] tracking-tight">
+              Know where you stand before your professor does
+            </h2>
             <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-              Four independent signals combine into a single score, updated every time you study.
+              Your readiness score updates every time you study, quiz yourself, or review.
+              Four signals &mdash; what you&apos;ve covered, how you&apos;ve practiced,
+              how recently, and how much effort you&apos;ve put in &mdash; combine into
+              one number you can actually trust.
             </p>
           </div>
           <ReadinessRingAnimated />
@@ -161,11 +171,11 @@ export default function Home() {
       <section className="py-24 px-6 bg-muted">
         <div className="max-w-2xl mx-auto text-center space-y-6">
           <h2 className="text-4xl font-[800] tracking-tight">
-            See it in action
+            See it with real data
           </h2>
           <p className="text-muted-foreground">
-            Explore a pre-loaded CS course with real lectures, quizzes, and
-            study progress &mdash; no account needed.
+            We loaded a full CS course so you can explore real lectures, take quizzes,
+            and watch your readiness score move. No signup, no fake data.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             <Button

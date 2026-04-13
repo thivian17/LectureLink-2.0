@@ -39,6 +39,39 @@ def _difficulty_float(val) -> float:
     return DIFFICULTY_TO_FLOAT.get(str(val).lower(), 0.5)
 
 
+def _update_quiz_stage(supabase, quiz_id: str, stage: str) -> None:
+    """Update the generation stage for progress tracking."""
+    try:
+        (
+            supabase.table("quizzes")
+            .update({"generation_stage": stage})
+            .eq("id", quiz_id)
+            .execute()
+        )
+    except Exception:
+        logger.debug(
+            "Failed to update quiz %s stage to %s", quiz_id, stage, exc_info=True
+        )
+
+
+def _mark_quiz_failed(supabase, quiz_id: str, error_msg: str) -> None:
+    """Mark a quiz as failed and persist the underlying error message."""
+    try:
+        (
+            supabase.table("quizzes")
+            .update({
+                "status": "failed",
+                "error_message": (error_msg or "")[:500],
+            })
+            .eq("id", quiz_id)
+            .execute()
+        )
+    except Exception as update_err:
+        logger.error(
+            "Failed to update quiz %s error status: %s", quiz_id, update_err
+        )
+
+
 async def run_quiz_generation_async(
     supabase_url: str,
     supabase_key: str,
@@ -151,6 +184,8 @@ async def _generate_quiz_async(
         from .quiz_loop import run_quiz_generation_loop
         from .quiz_planner import plan_quiz
 
+        _update_quiz_stage(supabase, quiz_id, "planning")
+
         # 1. Plan quiz (select concepts + retrieve grounding)
         try:
             quiz_plan = await plan_quiz(
@@ -162,22 +197,35 @@ async def _generate_quiz_async(
                 num_questions=num_questions,
                 difficulty=difficulty if difficulty != "mixed" else "medium",
             )
-        except ValueError:
-            # Fallback: use simple search if no concepts exist yet
+        except ValueError as e:
+            # Fallback: use simple search if no concepts/grounding exist yet
             logger.info(
-                "Quiz %s: No concepts found, using simple generation",
-                quiz_id,
+                "Quiz %s: plan_quiz failed (%s), trying simple generation",
+                quiz_id, e,
             )
-            await _generate_simple(
-                supabase, quiz_id, course_id, user_id,
-                target_assessment_id, lecture_ids,
-                num_questions, difficulty,
-                include_coding=include_coding,
-                coding_ratio=coding_ratio,
-                coding_language=coding_language,
-                coding_only=coding_only,
-            )
+            try:
+                await _generate_simple(
+                    supabase, quiz_id, course_id, user_id,
+                    target_assessment_id, lecture_ids,
+                    num_questions, difficulty,
+                    include_coding=include_coding,
+                    coding_ratio=coding_ratio,
+                    coding_language=coding_language,
+                    coding_only=coding_only,
+                )
+            except Exception as simple_err:
+                logger.exception(
+                    "Quiz %s: simple generation also failed: %s",
+                    quiz_id, simple_err,
+                )
+                _mark_quiz_failed(
+                    supabase,
+                    quiz_id,
+                    f"Planning failed: {e}. Fallback also failed: {simple_err}",
+                )
             return
+
+        _update_quiz_stage(supabase, quiz_id, "generating_questions")
 
         # 2. Determine question counts and type distribution
         from .code_question_generator import generate_coding_questions
@@ -229,19 +277,20 @@ async def _generate_quiz_async(
         else:
             questions = regular_questions
 
+        _update_quiz_stage(supabase, quiz_id, "reviewing_quality")
+
         # Re-index after merging
         for i, q in enumerate(questions):
             q["question_index"] = i
 
         if not questions:
-            (
-                supabase.table("quizzes")
-                .update({"status": "failed"})
-                .eq("id", quiz_id)
-                .execute()
-            )
             logger.error(
                 "Quiz %s: No questions survived critic loop", quiz_id
+            )
+            _mark_quiz_failed(
+                supabase,
+                quiz_id,
+                "No questions survived critic loop — quality bar not met",
             )
             return
 
@@ -323,17 +372,7 @@ async def _generate_quiz_async(
 
     except Exception as e:
         logger.exception("Quiz generation failed for %s: %s", quiz_id, e)
-        try:
-            (
-                supabase.table("quizzes")
-                .update({"status": "failed"})
-                .eq("id", quiz_id)
-                .execute()
-            )
-        except Exception as update_err:
-            logger.error(
-                "Failed to update quiz error status: %s", update_err
-            )
+        _mark_quiz_failed(supabase, quiz_id, str(e))
 
 
 async def _generate_simple(
@@ -356,6 +395,8 @@ async def _generate_simple(
     """
     from .genai_client import get_genai_client
     from .search import format_chunks_for_context, search_lectures
+
+    _update_quiz_stage(supabase, quiz_id, "planning")
 
     client = get_genai_client()
     assessment_context = ""
@@ -385,13 +426,18 @@ async def _generate_simple(
     )
 
     if not chunks:
-        (
-            supabase.table("quizzes")
-            .update({"status": "failed"})
-            .eq("id", quiz_id)
-            .execute()
+        logger.error(
+            "Quiz %s: _generate_simple found no lecture chunks for course %s",
+            quiz_id, course_id,
+        )
+        _mark_quiz_failed(
+            supabase,
+            quiz_id,
+            "No lecture content found for this course — upload lectures first",
         )
         return
+
+    _update_quiz_stage(supabase, quiz_id, "generating_questions")
 
     context = format_chunks_for_context(chunks, max_tokens=8000)
 
@@ -527,12 +573,26 @@ Output as JSON array of question objects."""
             "code_metadata": q.get("code_metadata"),
         })
 
-    if question_rows:
-        (
-            supabase.table("quiz_questions")
-            .insert(question_rows)
-            .execute()
+    if not question_rows:
+        logger.error(
+            "Quiz %s: _generate_simple produced 0 questions (course=%s). "
+            "Regular: %d parsed, Coding: %d parsed.",
+            quiz_id, course_id, len(regular_questions), len(coding_questions),
         )
+        _mark_quiz_failed(
+            supabase,
+            quiz_id,
+            "Question generation produced no parseable output. Try again.",
+        )
+        return
+
+    _update_quiz_stage(supabase, quiz_id, "reviewing_quality")
+
+    (
+        supabase.table("quiz_questions")
+        .insert(question_rows)
+        .execute()
+    )
 
     (
         supabase.table("quizzes")

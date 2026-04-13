@@ -93,13 +93,17 @@ export function FloatingConcepts() {
 export function TypewriterHeadline() {
   const [line1, setLine1] = useState("");
   const [line2, setLine2] = useState("");
+  const [line3, setLine3] = useState("");
   const [showCursor2, setShowCursor2] = useState(false);
+  const [showCursor3, setShowCursor3] = useState(false);
 
   useEffect(() => {
-    const L1 = "Know what to study.";
-    const L2 = "Know when to study it.";
+    const L1 = "Your lectures, analyzed.";
+    const L2 = "Your gaps, exposed.";
+    const L3 = "Your exam, handled.";
     let i = 0;
     let j = 0;
+    let k = 0;
     let t: ReturnType<typeof setTimeout>;
 
     function typeLine1() {
@@ -120,12 +124,28 @@ export function TypewriterHeadline() {
         j++;
         setLine2(L2.slice(0, j));
         t = setTimeout(typeLine2, 52);
+      } else {
+        t = setTimeout(() => {
+          setShowCursor2(false);
+          setShowCursor3(true);
+          typeLine3();
+        }, 500);
+      }
+    }
+
+    function typeLine3() {
+      if (k < L3.length) {
+        k++;
+        setLine3(L3.slice(0, k));
+        t = setTimeout(typeLine3, 80);
       }
     }
 
     t = setTimeout(typeLine1, 400);
     return () => clearTimeout(t);
   }, []);
+
+  const L3_COLOR_START = 11; // index where "handled." begins in "Your exam, handled."
 
   return (
     <h1 className="text-5xl sm:text-6xl lg:text-7xl font-[800] tracking-tight leading-[1.08]">
@@ -136,12 +156,27 @@ export function TypewriterHeadline() {
         )}
       </span>
       <br />
-      <span className="text-primary">
+      <span>
         {showCursor2 && line2.length === 0 && (
           <span className="inline-block w-[2px] h-[0.85em] bg-primary align-middle mr-0.5 animate-[blink_0.8s_step-end_infinite]" />
         )}
         {line2}
-        {line2.length > 0 && (
+        {line2.length > 0 && !showCursor3 && (
+          <span className="inline-block w-[2px] h-[0.85em] bg-primary align-middle ml-0.5 animate-[blink_0.8s_step-end_infinite]" />
+        )}
+      </span>
+      <br />
+      <span>
+        {showCursor3 && line3.length === 0 && (
+          <span className="inline-block w-[2px] h-[0.85em] bg-primary align-middle mr-0.5 animate-[blink_0.8s_step-end_infinite]" />
+        )}
+        {line3.slice(0, Math.min(line3.length, L3_COLOR_START))}
+        {line3.length > L3_COLOR_START && (
+          <span className="text-primary font-[800]">
+            {line3.slice(L3_COLOR_START)}
+          </span>
+        )}
+        {line3.length > 0 && (
           <span className="inline-block w-[2px] h-[0.85em] bg-primary align-middle ml-0.5 animate-[blink_0.8s_step-end_infinite]" />
         )}
       </span>

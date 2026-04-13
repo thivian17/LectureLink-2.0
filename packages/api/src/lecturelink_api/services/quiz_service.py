@@ -210,6 +210,29 @@ def check_answer(question: dict, student_answer: str) -> bool:
             ):
                 return True
 
+        # Strategy 4: Substring containment (student text within correct or vice versa)
+        # This handles "A. Energy is conserved" vs "Energy is conserved"
+        if len(student) > 3:  # Avoid false positives on very short answers
+            for opt in options:
+                text = opt.get("text", "") if isinstance(opt, dict) else str(opt)
+                if (
+                    student.lower().strip() == text.lower().strip()
+                    or (len(text) > 3 and student.lower().strip() in text.lower().strip())
+                ):
+                    # Check if this option is the correct one
+                    label = opt.get("label", "") if isinstance(opt, dict) else ""
+                    if label.upper() == correct.upper():
+                        return True
+                    if isinstance(opt, dict) and opt.get("is_correct"):
+                        return True
+
+        # Strategy 5: Direct text comparison after stripping label prefix
+        # Handles "A. Energy is conserved" vs "Energy is conserved"
+        if len(correct) > 2 and correct[1] in ".)" and correct[0].upper() in "ABCDEFGH":
+            correct_text = correct[2:].strip()
+            if student.lower() == correct_text.lower():
+                return True
+
         return False
 
     elif qtype == "true_false":

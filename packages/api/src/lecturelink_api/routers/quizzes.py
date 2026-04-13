@@ -334,7 +334,7 @@ async def get_quiz_status(
 
     result = (
         sb.table("quizzes")
-        .select("id, status, question_count")
+        .select("id, status, question_count, generation_stage, error_message")
         .eq("id", quiz_id)
         .eq("user_id", user["id"])
         .execute()
@@ -347,8 +347,13 @@ async def get_quiz_status(
     quiz = result.data[0]
     quiz_status = quiz["status"]
 
-    # Map status to a generation stage for the frontend progress UI
-    if quiz_status == "generating":
+    # Use real generation_stage from Track A if available
+    generation_stage = quiz.get("generation_stage")
+
+    # Legacy mapping for backward compatibility
+    if generation_stage:
+        stage = generation_stage
+    elif quiz_status == "generating":
         stage = "planning"
     elif quiz_status == "ready":
         stage = "ready"
@@ -357,11 +362,17 @@ async def get_quiz_status(
     else:
         stage = None
 
+    # Use real error message if stored, else generic fallback
+    error_message = None
+    if quiz_status == "failed":
+        error_message = quiz.get("error_message") or "Practice test generation failed. Please try again."
+
     return {
         "quiz_id": quiz["id"],
         "status": quiz_status,
         "stage": stage,
-        "error_message": "Quiz generation failed. Please try again." if quiz_status == "failed" else None,
+        "generation_stage": generation_stage,
+        "error_message": error_message,
     }
 
 

@@ -10,9 +10,7 @@ import { Card } from "@/components/ui/card";
 import { AcademicCommandCenter } from "@/components/dashboard/AcademicCommandCenter";
 import { BestNextActions } from "@/components/dashboard/BestNextActions";
 import { CourseIntelligenceGrid } from "@/components/dashboard/CourseIntelligenceGrid";
-import { AssessmentReadinessSection } from "@/components/dashboard/AssessmentReadinessSection";
 import { PriorityConceptsWidget } from "@/components/dashboard/PriorityConceptsWidget";
-import { StudyToolsLibrary } from "@/components/dashboard/StudyToolsLibrary";
 import { ProcessingBanner } from "@/components/dashboard/ProcessingBanner";
 import {
   getCourses,
@@ -137,15 +135,11 @@ export default function DashboardPage() {
         </Card>
       ) : (
         <>
-          {/* Timeline + Assessment Readiness side by side */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-6 items-start">
-            <AcademicCommandCenter
-              timeline={timeline}
-              stats={stats}
-              loading={loading}
-            />
-            <AssessmentReadinessSection courses={courseData} loading={loading} />
-          </div>
+          <AcademicCommandCenter
+            timeline={timeline}
+            stats={stats}
+            loading={loading}
+          />
           <BestNextActions actions={actions} loading={loading} />
           {priorityConcepts && (
             <PriorityConceptsWidget
@@ -159,7 +153,6 @@ export default function DashboardPage() {
             />
           )}
           <CourseIntelligenceGrid courses={courseData} loading={loading} />
-          <StudyToolsLibrary />
         </>
       )}
     </div>

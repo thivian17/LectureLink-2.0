@@ -195,6 +195,7 @@ export interface QuizGenerationStatus {
   status: QuizStatus;
   stage: string | null;
   error_message: string | null;
+  generation_stage?: string | null;
 }
 
 // Coding question metadata (from quiz_questions.code_metadata)
@@ -798,6 +799,7 @@ export interface PowerQuizQuestion {
 export interface QuizAnswerResult {
   correct: boolean;
   correct_answer: string;
+  correct_index?: number;
   explanation: string;
   source_citation: string;
   xp_earned: number;

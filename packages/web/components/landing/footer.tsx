@@ -30,7 +30,7 @@ export function Footer() {
             </svg>
             GitHub
           </a>
-          <span>Built by Thivian</span>
+          <span>Built by Thivian. Proud Canadian. 🇨🇦</span>
         </div>
       </div>
     </footer>

@@ -148,16 +148,70 @@ async def plan_quiz(
             concept_title=concept.get("title", ""),
         )
 
+        # Fallback: hybrid search using concept title when the deterministic
+        # path returned nothing. Concepts created before chunk linking ran
+        # often have empty source_chunk_ids and would otherwise be dropped.
+        if not chunks and concept.get("title", "").strip():
+            try:
+                from .search import search_lectures
+                search_results = await search_lectures(
+                    supabase=supabase,
+                    course_id=course_id,
+                    query=concept["title"],
+                    limit=3,
+                )
+                chunks = [
+                    {
+                        "id": r.get("id") or r.get("chunk_id", ""),
+                        "content": r.get("content", ""),
+                        "lecture_id": r.get("lecture_id", ""),
+                        "lecture_title": r.get("lecture_title", ""),
+                        "start_time": r.get("start_time"),
+                        "end_time": r.get("end_time"),
+                        "slide_number": r.get("slide_number"),
+                        "metadata": r.get("metadata", {}),
+                    }
+                    for r in search_results
+                    if r.get("content")
+                ]
+                if chunks:
+                    logger.info(
+                        "Quiz plan: hybrid search fallback found %d chunks for concept %s",
+                        len(chunks), concept.get("title", concept["id"]),
+                    )
+            except Exception:
+                logger.warning(
+                    "Hybrid search fallback failed for concept %s",
+                    concept.get("title", concept["id"]), exc_info=True,
+                )
+
         quiz_plan.append({
             "concept": concept,
             "grounding_chunks": chunks,
         })
 
     # Remove concepts with no grounding chunks
-    quiz_plan = [qp for qp in quiz_plan if qp["grounding_chunks"]]
+    concepts_with_chunks = [qp for qp in quiz_plan if qp["grounding_chunks"]]
+    concepts_without_chunks = [
+        qp["concept"].get("title", qp["concept"]["id"])
+        for qp in quiz_plan
+        if not qp["grounding_chunks"]
+    ]
+
+    if concepts_without_chunks:
+        logger.warning(
+            "Quiz plan: %d/%d concepts had no grounding chunks: %s",
+            len(concepts_without_chunks), len(quiz_plan),
+            ", ".join(concepts_without_chunks[:5]),
+        )
+
+    quiz_plan = concepts_with_chunks
 
     if not quiz_plan:
-        raise ValueError("Could not find grounding chunks for any concepts")
+        raise ValueError(
+            f"Could not find grounding chunks for any of {len(selected)} concepts. "
+            f"Tried: {', '.join(c.get('title', c['id']) for c in selected[:5])}"
+        )
 
     logger.info(
         "Quiz plan: %d concepts with grounding, difficulty=%s",

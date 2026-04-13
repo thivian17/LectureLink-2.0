@@ -9,9 +9,7 @@ import {
   ArrowLeft,
   BookOpen,
   CalendarDays,
-  ClipboardCheck,
   GraduationCap,
-  MessageSquare,
   MoreHorizontal,
   Pencil,
   Scale,
@@ -53,9 +51,7 @@ import { AssessmentCalendar } from "@/components/assessment-calendar";
 import type { CalendarAssessment } from "@/components/assessment-calendar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LectureList } from "@/components/lectures/lecture-list";
-import { QuizList } from "@/components/quiz/QuizList";
 import { SearchPageClient } from "@/components/search/search-page-client";
-import { FloatingQAButton } from "@/components/chat/floating-qa-button";
 import {
   deleteCourse,
   deleteAssessment,
@@ -118,18 +114,6 @@ const studyTools = [
     title: "Learn Session",
     description: "AI-guided study sessions",
     path: "/learn",
-  },
-  {
-    icon: ClipboardCheck,
-    title: "Practice Tests",
-    description: "Test your knowledge",
-    path: "/quizzes",
-  },
-  {
-    icon: MessageSquare,
-    title: "Assessment Prep",
-    description: "Ask about any concept",
-    path: "/assessment-prep",
   },
 ];
 
@@ -517,7 +501,6 @@ export function CourseDetail({
         </DialogContent>
       </Dialog>
 
-      <FloatingQAButton courseId={course.id} />
     </div>
   );
 }
