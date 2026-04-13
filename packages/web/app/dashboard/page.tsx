@@ -141,8 +141,10 @@ export default function DashboardPage() {
             stats={stats}
             loading={loading}
           />
-          <AssessmentReadinessSection courses={courseData} loading={loading} />
-          <BestNextActions actions={actions} loading={loading} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+            <BestNextActions actions={actions} loading={loading} />
+            <AssessmentReadinessSection courses={courseData} loading={loading} />
+          </div>
           {priorityConcepts && (
             <PriorityConceptsWidget
               concepts={priorityConcepts.concepts}
