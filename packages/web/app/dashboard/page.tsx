@@ -8,6 +8,7 @@ import { Plus, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { AcademicCommandCenter } from "@/components/dashboard/AcademicCommandCenter";
+import { AssessmentReadinessSection } from "@/components/dashboard/AssessmentReadinessSection";
 import { BestNextActions } from "@/components/dashboard/BestNextActions";
 import { CourseIntelligenceGrid } from "@/components/dashboard/CourseIntelligenceGrid";
 import { PriorityConceptsWidget } from "@/components/dashboard/PriorityConceptsWidget";
@@ -140,6 +141,7 @@ export default function DashboardPage() {
             stats={stats}
             loading={loading}
           />
+          <AssessmentReadinessSection courses={courseData} loading={loading} />
           <BestNextActions actions={actions} loading={loading} />
           {priorityConcepts && (
             <PriorityConceptsWidget
